@@ -332,6 +332,8 @@ export class ConurbanoScene extends Scene {
     // las primeras del archivo son las del barrio original (con las quietas de los negocios); las demás ya vienen salteadas por todo el mapa
     this._gCur = 0; this.gente = 0; this.genteMax = Math.min(GENTE_MAX, NG); this.genteFija = !!GENTE_FIJA;
     this.sumarGente(Math.min(GENTE_INICIAL, this.genteMax), false);
+    // ?prueba=x,y[,prop];x,y… pone props fijos donde se pida (para revisar a mano el orden de dibujo)
+    if (Q.get('prueba')) for (const t of Q.get('prueba').split(';')) { const [x, y, f] = t.split(','); if (f === 'p') Persona.spawn({ x: +x, y: +y, quieta: 1 }); else Prop.spawn({ x: +x, y: +y, f: f || 'u_farola', r: 1 }); }
     let first = null;
     for (const c of w.cars) {
       if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, color: 'burnt', fijo: 1 });

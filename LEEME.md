@@ -9,6 +9,7 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 - **En tu compu:** `python3 servir.py` y abrí `http://localhost:8000/`.
 - **Publicado:** subí la carpeta entera a cualquier hosting estático con HTTPS (por ejemplo GitHub Pages). `weed-sw.js` pone los encabezados: la primera visita recarga una vez sola.
 - `?gente=N` fija la cantidad de gente (si no, se ajusta sola).
+- `?prueba=x,y;x,y,p;x,y,u_cono` pone faroles (o la prop que digas, o `p` = una persona quieta) en esas coordenadas de mundo, para revisar a mano el orden de dibujo.
 - `?debug` en la URL abre el panel de WeedJS (rendimiento por worker, entidades, capas, etc.).
 
 ## Controles
