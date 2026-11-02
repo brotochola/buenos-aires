@@ -19,7 +19,7 @@ const Q = new URLSearchParams(typeof globalThis.location?.search === 'string' ? 
 const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
 const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
 const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
-const GENTE_MAX = GENTE_FIJA || (MOVIL ? 14000 : 23000);
+const GENTE_MAX = GENTE_FIJA ? GENTE_FIJA + 50 : (MOVIL ? 14000 : 23000);   // pool (con algo de margen para pruebas)
 const GENTE_INICIAL = GENTE_FIJA || (MOVIL ? (HC >= 8 ? 6000 : 3500) : 10000);
 const PED_FIELDS = Array.from({ length: NPED }, (_, i) => 'peaton' + i);
 const CAR_SHEETS = ['red', 'white', 'black', 'blue', 'yellow', 'poli', 'burnt'];
@@ -40,13 +40,13 @@ export class AutoComp extends Component {
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
+// La entidad sólo lleva el colisionador y la luz de la ventana. El dibujo va en franjas verticales (Decoration), cada una
+// con su y de orden en la base de la pared de esa columna: así el ySort sabe qué tapa a qué aunque la casa esté girada.
 export class Casa extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, SpriteRenderer, LightEmitter];
+  static components = [RigidBody, Collider, LightEmitter];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
-    this.setSprite('obj' + c.o, c.a, 0);
-    this.spriteRenderer.anchorX = c.ax; this.spriteRenderer.anchorY = c.ay;
     if (c.col) {
       const p = c.col; let area = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; area += a[0] * b[1] - b[0] * a[1]; }
       const pts = area >= 0 ? p : p.slice().reverse(), flat = [];
@@ -58,6 +58,15 @@ export class Casa extends GameObject {
     const L = this.lightEmitter, on = c.k === 'house' && rng() < .4;
     L.lightColor = rng() < .8 ? 0xffd9a0 : 0xbfd4ff; L.height = 30; L.hasGlowSprite = 0;
     L.lightIntensity = on ? 220 + rng() * 260 : 0; L.active = on ? 1 : 0;
+  }
+}
+// una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
+// piezas de 64 px como decoraciones, que se ordenan con la y del padre pero se recortan cada una por su propio centro
+export class Franja extends GameObject {
+  static components = [];
+  onSpawned(c = {}) {
+    const p = c.p || [];
+    for (let j = 0; j < p.length; j++) this.addDecoration(c.t + j, p[j][0], p[j][1], 1, 1, 0, { anchorX: .5, anchorY: .5 });
   }
 }
 // sombra de cada casa al piso: un polígono convexo en una capa de mallas
@@ -258,9 +267,10 @@ export class ConurbanoScene extends Scene {
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
-    decoration: { maxDecorations: 9000 },
+    decoration: { maxDecorations: META.nPiezas + 6500 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
-    preRender: { startFadingDecorationsAtZoom: .3, hideDecorationsAtZoom: .15 },
+    // las casas son decoraciones: que no se desvanezcan al alejar
+    preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
       enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 192,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
@@ -290,7 +300,7 @@ export class ConurbanoScene extends Scene {
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
   ];
-  static entities = [[Casa, 700], [SombraCasa, 700], [Prop, 1100], [Persona, GENTE_MAX], [AutoIA, 160], [AutoEstacionado, 260], [Chatarra, 40], [AutoJugador, 1]];
+  static entities = [[Casa, 700], [SombraCasa, 700], [Franja, META.nFranjas + 16], [Prop, 1100], [Persona, GENTE_MAX], [AutoIA, 160], [AutoEstacionado, 260], [Chatarra, 40], [AutoJugador, 1]];
 
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
@@ -305,8 +315,10 @@ export class ConurbanoScene extends Scene {
     L.updateTexture('noiseT', PisoData.noise); L.updateTexture('segs', PisoData.segs);
     // ---- objetos
     const w = await (await fetch('data/world.json')).json();
-    for (const h of w.houses) { Casa.spawn({ x: h.x, y: h.y, o: h.o, a: h.a, ax: h.ax, ay: h.ay, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
     const { Decoration } = WEED;
+    for (const h of w.houses) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+      const fr = w.franjas[h.a], tex = 'obj' + h.o + '_' + h.a + '_';
+      for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2] }); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anchors[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });

@@ -16,6 +16,7 @@ window.bake = (opts) => {
   const r = R3.rng(SEED ^ 0x5bd1e995), C = CFG.v;
   const F = opts.frames;                                    // frames del atlas v4 (props, sombras, colectivo)
   const round1 = (v) => Math.round(v * 10) / 10;
+  const TOL_FRANJA = opts.tolFranja || 8;                   // px: cuánto puede variar la base de la pared dentro de una franja
 
   // ---------- ocupación (nada se pisa)
   const occ = new Set(), OC = .4;
@@ -255,7 +256,38 @@ window.bake = (opts) => {
     for (const cs of built.sc.casters) { const zb = cs.c[2] - cs.h[2]; if (zb > .3) continue;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const px = cs.c[0] + sx * cs.h[0] * cs.ax[0][0] + sy * cs.h[1] * cs.ax[1][0], py = cs.c[1] + sx * cs.h[0] * cs.ax[0][1] + sy * cs.h[1] * cs.ax[1][1];
         if (py < fy - 1e-6) { fy = py; foot = [px, py]; } } }
-    rendered.push({ e, crop, ax: res.ax - x0, ay: res.ay - y0, w, h, casters, area: w * h, foot });
+    // franjas verticales para el ySort: en la proyección oblicua la altura sólo sube en pantalla, así que cada columna
+    // del sprite es un pedazo fijo de piso y su profundidad es la base de la pared ahí (el frente de las cajas apoyadas).
+    const cax = res.ax - x0, cay = res.ay - y0, base = new Float32Array(w).fill(NaN), top = new Int32Array(w).fill(-1), bot = new Int32Array(w).fill(-1);
+    for (const cs of built.sc.casters) { const zb = cs.c[2] - cs.h[2]; if (zb > .3) continue;
+      const q = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => { const px = cs.c[0] + sx * cs.h[0] * cs.ax[0][0] + sy * cs.h[1] * cs.ax[1][0], py = cs.c[1] + sx * cs.h[0] * cs.ax[0][1] + sy * cs.h[1] * cs.ax[1][1];
+        return [cax + (px + K * py) * SF, cay - py * SYN * SF]; });
+      for (let c = 0; c < w; c++) { const xc = c + .5; let yb = -Infinity;
+        for (let k = 0; k < 4; k++) { const a = q[k], b = q[(k + 1) & 3]; if ((xc < a[0]) === (xc < b[0])) continue; yb = Math.max(yb, a[1] + (b[1] - a[1]) * (xc - a[0]) / (b[0] - a[0])); }
+        if (yb > -Infinity && !(base[c] >= yb)) base[c] = yb; } }
+    for (let c = 0; c < w; c++) for (let y = 0; y < h; y++) if (d[((y + y0) * cv.width + c + x0) * 4 + 3] > 8) { if (top[c] < 0) top[c] = y; bot[c] = y; }
+    { let last = NaN; for (let c = 0; c < w; c++) if (isNaN(base[c])) base[c] = last; else last = base[c];       // aleros y voladizos: la columna de al lado
+      last = NaN; for (let c = w - 1; c >= 0; c--) if (isNaN(base[c])) base[c] = last; else last = base[c];
+      for (let c = 0; c < w; c++) if (isNaN(base[c])) base[c] = h; }
+    // Cada franja se corta además en piezas de 64 px de alto: WeedJS recorta las decoraciones por un solo punto, y con piezas
+    // chicas ese punto nunca queda lejos de lo que se ve (si no, al hacer zoom las paredes altas desaparecen en el borde).
+    // Todo se pisa 1 px con lo vecino: con filtrado lineal y posiciones con decimales, los bordes justos dejan una raya.
+    const PIEZA = 64, ANCHO = 64, opaco = (c, y) => d[((y + y0) * cv.width + c + x0) * 4 + 3] > 8;
+    const strips = []; let c0 = -1, lo = 0, hi = 0;
+    const cerrar = (c1) => { const a = Math.max(0, c0 - 1), z = Math.min(w, c1 + 1); let t = 1e9, b2 = -1;
+      for (let c = a; c < z; c++) if (top[c] >= 0) { t = Math.min(t, top[c]); b2 = Math.max(b2, bot[c]); }
+      if (b2 >= 0) { const pieces = [];
+        for (let r0 = t; r0 <= b2; r0 += PIEZA) { const pa = Math.max(t, r0 - 1), pz = Math.min(b2 + 1, r0 + PIEZA + 1); let any = false;
+          for (let y = pa; y < pz && !any; y++) for (let c = a; c < z; c++) if (opaco(c, y)) { any = true; break; }
+          if (any) pieces.push({ t: pa, h: pz - pa }); }
+        strips.push({ x: a, w: z - a, g: (lo + hi) / 2, pieces }); }
+      c0 = -1; };
+    for (let c = 0; c <= w; c++) {
+      if (c === w || top[c] < 0) { if (c0 >= 0) cerrar(c); continue; }
+      if (c0 < 0) { c0 = c; lo = hi = base[c]; continue; }
+      const nlo = Math.min(lo, base[c]), nhi = Math.max(hi, base[c]);
+      if (nhi - nlo > TOL_FRANJA || c - c0 >= ANCHO) { cerrar(c); c0 = c; lo = hi = base[c]; } else { lo = nlo; hi = nhi; } }
+    rendered.push({ e, crop, ax: cax, ay: cay, w, h, casters, area: w * h, foot, strips });
   }
   // ---------- hojas de sprites (estantes, máx. 2048 de ancho, 200 animaciones por hoja)
   const sheets = []; let cur = null;
@@ -269,12 +301,18 @@ window.bake = (opts) => {
   const sheetOut = sheets.map((sh, si) => {
     const Hs = sh.y + sh.rowH, cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, Hs); const g = cv.getContext("2d");
     const frames = {}, animations = {};
-    for (const it of sh.items) { g.drawImage(it.crop, it.sx, it.sy); const nm = "o" + it.e.id;
-      frames[nm] = { frame: { x: it.sx, y: it.sy, w: it.w, h: it.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: it.w, h: it.h }, sourceSize: { w: it.w, h: it.h } };
-      animations[nm] = [nm]; }
+    for (const it of sh.items) { g.drawImage(it.crop, it.sx, it.sy);
+      it.strips.forEach((s, k) => s.pieces.forEach((q, j) => { const nm = "o" + it.e.id + "_" + k + "_" + j;
+        frames[nm] = { frame: { x: it.sx + s.x, y: it.sy + q.t, w: s.w, h: q.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: s.w, h: q.h }, sourceSize: { w: s.w, h: q.h } };
+        animations[nm] = [nm]; })); }
     return { name: "obj" + si, png: cv.toDataURL("image/png"), json: JSON.stringify({ frames, animations, meta: { image: "obj" + si + ".png", size: { w: 2048, h: cv.height }, scale: 1 } }) };
   });
   const byId = new Map(rendered.map(it => [it.e.id, it]));
+  // franjas de cada sprite del catálogo, relativas al pie: [dx (borde izquierdo), dy (base de la pared = y de orden),
+  // piezas: [[cx, cy], ...] = centro de cada pieza respecto del borde izquierdo y la base]
+  const franjas = {}, r2 = (v) => Math.round(v * 100) / 100;
+  for (const it of rendered) { const axF = it.ax + (it.foot[0] + K * it.foot[1]) * SF, ayF = it.ay - it.foot[1] * SYN * SF;
+    franjas["o" + it.e.id] = it.strips.map(s => [r2(s.x - axF), r2(s.g - ayF), s.pieces.map(q => [r2(s.w / 2), r2(q.t + q.h / 2 - s.g)])]); }
   // ---------- instancias: posición del pie (esquina más al frente en pantalla) y ancla del sprite
   const SUN = R3.SUN;
   for (const o of objs) {
@@ -298,10 +336,10 @@ window.bake = (opts) => {
   for (const n of used) { const f = F[n]; pframes[n] = { frame: { x: f.x, y: f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } }; panims[n] = [n]; anchors[n] = [f.ox / f.w, f.oy / f.h]; }
   const area = rendered.reduce((a, b) => a + b.area, 0);
   return {
-    meta: { seed: SEED, MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, NS, CELL, pedTargets: targets.length, sheets: sheetOut.length, anchors, PXM },
-    world: { houses, props, cars, people, cables }, sheets: sheetOut, props: JSON.stringify({ frames: pframes, animations: panims, meta: { image: "props.png", scale: 1 } }), flow,
+    meta: { nFranjas: houses.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas: houses.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0), seed: SEED, MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, NS, CELL, pedTargets: targets.length, sheets: sheetOut.length, anchors, PXM },
+    world: { houses, props, cars, people, cables, franjas }, sheets: sheetOut, props: JSON.stringify({ frames: pframes, animations: panims, meta: { image: "props.png", scale: 1 } }), flow,
     ground: { cellA: b64(cellA), cellB: b64(cellB), wealth: b64(wealth), noise: b64(noise), segs: b64(segs) },
-    stats: { byType: entries.reduce((m, e) => (m[e.spec.t] = (m[e.spec.t] || 0) + 1, m), {}), areaByType: rendered.reduce((m, it) => (m[it.e.spec.t] = (m[it.e.spec.t] || 0) + it.area, m), {}), catalog: entries.length, instances: objs.length, areaPx: area, props: props.length, cars: cars.length, people: people.length, cables: cables.length, segs: NS, lots: W.lots.length, ms: Math.round(performance.now() - t0) },
+    stats: { franjas: rendered.reduce((a, b) => a + b.strips.length, 0), piezas: rendered.reduce((a, b) => a + b.strips.reduce((x, s) => x + s.pieces.length, 0), 0), byType: entries.reduce((m, e) => (m[e.spec.t] = (m[e.spec.t] || 0) + 1, m), {}), areaByType: rendered.reduce((m, it) => (m[it.e.spec.t] = (m[it.e.spec.t] || 0) + it.area, m), {}), catalog: entries.length, instances: objs.length, areaPx: area, props: props.length, cars: cars.length, people: people.length, cables: cables.length, segs: NS, lots: W.lots.length, ms: Math.round(performance.now() - t0) },
   };
   function b64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(s); }
 };
