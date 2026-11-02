@@ -20,7 +20,7 @@
 <body>
 <div id="hud"><b>BARRIO · CONURBANO</b> <span class="m">WeedJS</span>
   <div class="m">arrastrar / WASD: mover · rueda o pellizco: zoom · V: manejar (WASD, espacio frena)</div>
-  <button id="bV">🚗 Manejar</button><button id="bM">−</button><button id="bP">+</button><span id="st" class="m"></span>
+  <button id="bV">🚗 Manejar</button><button id="bN">🌗 Hora</button><button id="bM">−</button><button id="bP">+</button><span id="st" class="m"></span>
   <div id="err"></div></div>
 <div id="load"><b style="color:#f2c14e">Armando el barrio…</b><div class="bar"><i id="lbar"></i></div><div class="m" id="lst">iniciando</div><div class="m" id="liso"></div></div>
 <div id="pad"><div><button data-k="a">◀</button><button data-k="d">▶</button></div><div><button data-k=" ">■</button><button data-k="s">▼</button><button data-k="w">▲</button></div></div>
@@ -46,6 +46,7 @@
     const touch = matchMedia('(pointer: coarse)').matches;
     const ui = () => { const d = sc() && sc().driving; $('bV').classList.toggle('on', !!d); $('pad').style.display = d && touch ? 'flex' : 'none'; };
     $('bV').onclick = () => { sc().setDriving(!sc().driving); ui(); };
+    $('bN').onclick = () => { const h = sc().nextTime(); $('bN').textContent = (h > 7 && h < 18 ? '☀️ ' : '🌙 ') + Math.floor(h) + ' h'; };
     $('bM').onclick = () => sc().zoomBy(1 / 1.4); $('bP').onclick = () => sc().zoomBy(1.4);
     addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'v') setTimeout(ui, 50); });
     // botones táctiles: se convierten en teclas para el motor

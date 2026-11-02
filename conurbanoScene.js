@@ -8,7 +8,7 @@
 import { META } from './meta.js';
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
-  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, SpriteSheetRegistry, enums, rng, dot2 } = WEED;
+  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.pedTargets, PXM = META.PXM;
@@ -33,7 +33,7 @@ export class AutoComp extends Component {
 // ---------- casas, tapiales y postes (sprites horneados con R3)
 export class Casa extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, SpriteRenderer];
+  static components = [RigidBody, Collider, SpriteRenderer, LightEmitter];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     this.setSprite('obj' + c.o, c.a, 0);
@@ -45,6 +45,10 @@ export class Casa extends GameObject {
       if (!this.collider.makePolygon(flat)) { this.collider.shapeType = ShapeType.Circle; this.collider.radius = 6; }
     } else { this.collider.shapeType = ShapeType.Circle; this.collider.radius = c.r || 3; }
     this.collider.visualRange = 260;
+    // luz de las ventanas: de día se pierde en la luz del sol, de noche ilumina la vereda (como la House de predatorScene)
+    const L = this.lightEmitter, on = c.k === 'house' && rng() < .4;
+    L.lightColor = rng() < .8 ? 0xffd9a0 : 0xbfd4ff; L.height = 30; L.hasGlowSprite = 0;
+    L.lightIntensity = on ? 220 + rng() * 260 : 0; L.active = on ? 1 : 0;
   }
 }
 // sombra de cada casa al piso: un polígono convexo en una capa de mallas
@@ -61,7 +65,7 @@ export class SombraCasa extends GameObject {
 // árboles, faroles, semáforos, contenedores… (lo que frena un auto); lo demás va como Decoration
 export class Prop extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, SpriteRenderer];
+  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, LightEmitter];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     this.setSprite('props', c.f, 0);
@@ -69,6 +73,16 @@ export class Prop extends GameObject {
     if (c.fl) this.setScale(-1, 1);
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(1.5, c.r);
     this.collider.visualRange = 200;
+    this.shadowCaster.heightMultiplier = c.f.startsWith('utree_') ? 1 : .8;
+    const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1];
+    if (c.f.startsWith('u_farol')) {          // farol: charco de luz en la vereda + brillo en la lámpara
+      L.lightColor = c.f === 'u_farol_doble' ? 0xfff0d0 : 0xffc880; L.height = 0; L.glowHeightOffset = top * .92;
+      L.lightIntensity = c.f === 'u_farol_doble' ? 2600 : 1800; L.hasGlowSprite = .55; L.active = 1;
+      this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
+    } else if (c.f === 'u_semaforo') {
+      L.lightColor = rng() < .5 ? 0xff3b30 : 0x36d96b; L.height = 0; L.glowHeightOffset = top * .8;
+      L.lightIntensity = 120; L.hasGlowSprite = .9; L.active = 1;
+    } else { L.lightIntensity = 0; L.active = 0; }
   }
 }
 
@@ -78,7 +92,7 @@ const DIRN = ['up', 'left', 'down', 'right'], WALK = DIRN.map(d => 'walk_' + d),
 export class Persona extends GameObject {
   static deriveSpeed = true;
   static tickInterval = 2;
-  static components = [RigidBody, Collider, SpriteRenderer, PersonaComp];
+  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, PersonaComp];
   onSpawned(c = {}) {
     this.setSpritesheet('lpc' + ((rng() * NLPC) | 0));
     this.setAnimation('idle_down');
@@ -89,7 +103,7 @@ export class Persona extends GameObject {
     this.collider.radius = 4.5; this.collider.visualRange = 80;
     const p = this.personaComp;
     p.campo = (rng() * NPED) | 0; p.quieta = c.quieta ? 1 : 0; p.estado = 0; p.timer = rng() * 4; p.vel = 17 + rng() * 9; p.cara = 2;
-    this.addDecoration('props_sh_person', 0, 0, 1, 1, -1, { anchorX: META.anchors.sh_person[0], anchorY: META.anchors.sh_person[1], alpha: .55 });
+    this.shadowCaster.heightMultiplier = 1.2;
     this._anim = -1;
   }
   tick(dtRatio, dt) {
@@ -134,7 +148,7 @@ function angleKeys(sheet) {
 }
 export class Auto extends GameObject {
   static deriveSpeed = true;
-  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, AutoComp];
+  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, ShadowCaster, LightEmitter, AutoComp];
   onSpawned(c = {}) {
     this._sheet = 'auto_' + (c.color || 'red');
     this.setSpritesheet(this._sheet); this.setAnimation('0');
@@ -148,7 +162,9 @@ export class Auto extends GameObject {
     this.setFixedRotation(0);
     this.rotation = c.rot || 0;
     A.active = 1;
-    this.addDecoration('props_sh_car_h', 0, 0, 1, 1, -1, { anchorX: META.anchors.sh_car_h[0], anchorY: META.anchors.sh_car_h[1], alpha: .5, inheritParentRotation: true });
+    this.shadowCaster.heightMultiplier = .55;
+    const L = this.lightEmitter, lit = !!c.faros;
+    L.lightColor = 0xfff2d6; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = lit ? 500 : 0; L.active = lit ? 1 : 0;
     this._frame();
   }
   onDespawned() { this.autoComp.active = 0; }
@@ -236,7 +252,14 @@ export class ConurbanoScene extends Scene {
     decoration: { maxDecorations: 9000 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     preRender: { startFadingDecorationsAtZoom: .3, hideDecorationsAtZoom: .15 },
-    lighting: { enabled: false },
+    lighting: {
+      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 192,
+      shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
+      resolution: .25, shadowResolution: .25,
+      // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
+      sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .3, startHour: 17.5,
+        dayCycle: { enabled: true, speed: 1, dayDurationMinutes: 8 } },
+    },
     navigation: { enabled: true, cellSize: 64 },
     layers: {
       piso: { zIndex: .5, shader: {
@@ -273,10 +296,10 @@ export class ConurbanoScene extends Scene {
     L.updateTexture('noiseT', PisoData.noise); L.updateTexture('segs', PisoData.segs);
     // ---- objetos
     const w = await (await fetch('data/world.json')).json();
-    for (const h of w.houses) { Casa.spawn({ x: h.x, y: h.y, o: h.o, a: h.a, ax: h.ax, ay: h.ay, col: h.col, r: h.r }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
+    for (const h of w.houses) { Casa.spawn({ x: h.x, y: h.y, o: h.o, a: h.a, ax: h.ax, ay: h.ay, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
     const { Decoration } = WEED;
     for (const p of w.props) {
-      if (p.sh) { const a = META.anchors[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
+      if (p.sh && !(p.r > 0)) { const a = META.anchors[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
       else { const a = META.anchors[p.f]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -1 : 1 }); }
     }
@@ -286,15 +309,17 @@ export class ConurbanoScene extends Scene {
     let first = null;
     for (const c of w.cars) {
       if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, color: 'burnt', fijo: 1 });
-      else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c }); if (!first) first = c; }
+      else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c, faros: 1 }); if (!first) first = c; }
       else AutoEstacionado.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c });
     }
     // tu auto: arranca en el centro del mapa, en el carril del primer auto con IA más cercano
     let best = first, bd = 1e18; for (const c of w.cars) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
-    if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, color: 'red', drive: 300 }); this._spawnCar = best; }
+    if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, color: 'red', drive: 300, faros: 1 }); this._spawnCar = best; }
     this.focusX = best ? best.x : META.WW / 2; this.focusY = best ? best.y : META.WH / 2;
   }
 
+  // salta a la próxima hora: mediodía, atardecer, noche, amanecer
+  nextTime() { const hs = [12, 18.6, 22, 6.2], h = Sun.hour || 12; let n = hs.find(x => x > h + .1); if (n == null) n = hs[0]; Sun.setTimeOfDay(n); return n; }
   create() {
     Camera.setFree(false);
     Camera.setZoom(1); Camera.centerOn(this.focusX, this.focusY);
@@ -307,6 +332,9 @@ export class ConurbanoScene extends Scene {
 
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
   update(dtRatio = 1) {
+    // las sombras horneadas (casas, calcos) se desvanecen con el sol
+    const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
+    if (Ls && Math.abs(Ls.alpha - si) > .02) Ls.alpha = si; if (Ld && Math.abs(Ld.alpha - si) > .02) Ld.alpha = si;
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
     const z = Camera.zoom || 1;

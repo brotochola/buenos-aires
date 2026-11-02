@@ -17,6 +17,7 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 | Mover la cámara | arrastrar, WASD o flechas |
 | Zoom | rueda, pellizco, o los botones − + |
 | Manejar | V o el botón 🚗 (WASD / flechas; espacio frena). En el celu aparecen botones. |
+| Cambiar la hora | botón 🌗 (salta a mediodía, atardecer, noche y amanecer) |
 
 ## Cómo está armado
 
@@ -28,6 +29,7 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
   - Los que andan solos siguen el flowfield `calles`, que apunta a lo largo de cada carril (mano derecha) y tira hacia su centro. Frenan si tienen gente o autos adelante.
   - Los estacionados se pueden empujar.
   - El cuadro de los 48 ángulos se elige "desaplastando" la y de la pantalla.
+- **Luz y sombras (como `predatorScene`):** `config.lighting` con sol y ciclo de día de 8 minutos (arranca a las 17:30). Gente, autos, árboles y postes tienen `ShadowCaster`, así que proyectan sombra del sol y de las luces cercanas. Tienen `LightEmitter` los faroles (con brillo), los semáforos, algunas ventanas de casas y los faros de los autos en movimiento. Las sombras horneadas de las casas se apagan de noche.
 - **Árboles, faroles y semáforos** son entidades con colisionador. El mobiliario chico, las sombras de los props y los cables son `Decoration`; los cables van en una capa propia por encima de todo.
 
 ## Re-hornear (otro barrio)
