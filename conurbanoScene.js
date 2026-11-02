@@ -3,7 +3,7 @@
 // Todo lo horneado sale de weedbake/run_bake.js: catálogo de casas (R3), posiciones, flowfields y datos del piso.
 //   piso       -> capa worldRect con un shader que pinta calles/veredas/patios en la GPU (shaders/piso.frag)
 //   casas      -> entidades estáticas con su sprite horneado + colisionador poligonal + sombra (malla)
-//   gente      -> 2000 personas LPC siguiendo flowfields estáticos con costos (cruzan, no caminan por la calle)
+//   gente      -> miles de personas LPC (se ajusta sola a lo que aguante el aparato) siguiendo flowfields estáticos con costos (cruzan, no caminan por la calle)
 //   autos      -> Box2D (patrón de carScene/littleCity), IA por el flowfield de carriles; V para manejar
 import { META } from './meta.js';
 
@@ -12,6 +12,15 @@ const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, Colli
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.pedTargets, PXM = META.PXM;
+
+// ---------- cuánta gente. ?gente=N la fija; si no, arranca según el aparato y se ajusta sola mirando los fps de los workers
+// (data/gente.bin trae ~23 000 lugares en las veredas, horneados con herramientas/hornear_gente.js)
+const Q = new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
+const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
+const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
+const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
+const GENTE_MAX = GENTE_FIJA || (MOVIL ? 14000 : 23000);
+const GENTE_INICIAL = GENTE_FIJA || (MOVIL ? (HC >= 8 ? 6000 : 3500) : 10000);
 const PED_FIELDS = Array.from({ length: NPED }, (_, i) => 'peaton' + i);
 const CAR_SHEETS = ['red', 'white', 'black', 'blue', 'yellow', 'poli', 'burnt'];
 const LPC_EXCLUDE = ['spellcast', 'thrust', 'slash', 'shoot', 'jump', 'sit', 'emote', 'run', 'combat', '1h_slash', '1h_halfslash']
@@ -100,7 +109,7 @@ export class Persona extends GameObject {
     this.setFixedRotation(1);
     this.spriteRenderer.anchorX = .5; this.spriteRenderer.anchorY = .93;
     const s = .56 + rng() * .08; this.setScale(s, s);
-    this.collider.radius = 4.5; this.collider.visualRange = 80;
+    this.collider.radius = 4.5; this.collider.visualRange = 52;
     const p = this.personaComp;
     p.campo = (rng() * NPED) | 0; p.quieta = c.quieta ? 1 : 0; p.estado = 0; p.timer = rng() * 4; p.vel = 17 + rng() * 9; p.cara = 2;
     this.shadowCaster.heightMultiplier = 1.2;
@@ -245,9 +254,9 @@ const PACK = typeof globalThis.location?.search === 'string' && new URLSearchPar
 export class ConurbanoScene extends Scene {
   static config = {
     worldWidth: META.WW, worldHeight: META.WH, seed: 7,
-    spatial: { cellSize: 64, maxNeighbors: 96, maxEntitiesPerCell: 128, numberOfSpatialWorkers: 1 },
-    logic: { numberOfLogicWorkers: 2, staggeredUpdates: true },
-    physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 32768 },
+    spatial: { cellSize: 64, maxNeighbors: 48, maxEntitiesPerCell: 192, numberOfSpatialWorkers: HC >= 6 ? 2 : 1 },
+    logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
+    physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
     decoration: { maxDecorations: 9000 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
@@ -281,7 +290,7 @@ export class ConurbanoScene extends Scene {
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
   ];
-  static entities = [[Casa, 700], [SombraCasa, 700], [Prop, 1100], [Persona, 2100], [AutoIA, 160], [AutoEstacionado, 260], [Chatarra, 40], [AutoJugador, 1]];
+  static entities = [[Casa, 700], [SombraCasa, 700], [Prop, 1100], [Persona, GENTE_MAX], [AutoIA, 160], [AutoEstacionado, 260], [Chatarra, 40], [AutoJugador, 1]];
 
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
@@ -305,7 +314,12 @@ export class ConurbanoScene extends Scene {
     }
     for (const c of w.cables) { const dx = c[2] - c[0], dy = c[3] - c[1], L2 = Math.hypot(dx, dy);
       Decoration.spawn({ x: c[0], y: c[1], texture: '_white', anchorX: 0, anchorY: .5, scaleX: L2 / 8, scaleY: 1 / 8, rotation: Math.atan2(dy, dx), tint: 0x17171b, alpha: .85, layer: 'cables' }); }
-    for (const p of w.people) Persona.spawn({ x: p[0], y: p[1], quieta: p[2] });
+    const g = new Uint16Array(await (await fetch('data/gente.bin')).arrayBuffer()), NG = g.length >> 1;
+    this._gx = new Float32Array(NG); this._gy = new Float32Array(NG); this._gq = new Uint8Array(NG);
+    for (let i = 0; i < NG; i++) { this._gx[i] = g[i * 2] / 2; this._gy[i] = (g[i * 2 + 1] & 0x7fff) / 2; this._gq[i] = g[i * 2 + 1] >> 15; }
+    // las primeras del archivo son las del barrio original (con las quietas de los negocios); las demás ya vienen salteadas por todo el mapa
+    this._gCur = 0; this.gente = 0; this.genteMax = Math.min(GENTE_MAX, NG); this.genteFija = !!GENTE_FIJA;
+    this.sumarGente(Math.min(GENTE_INICIAL, this.genteMax), false);
     let first = null;
     for (const c of w.cars) {
       if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, color: 'burnt', fijo: 1 });
@@ -316,6 +330,56 @@ export class ConurbanoScene extends Scene {
     let best = first, bd = 1e18; for (const c of w.cars) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
     if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, color: 'red', drive: 300, faros: 1 }); this._spawnCar = best; }
     this.focusX = best ? best.x : META.WW / 2; this.focusY = best ? best.y : META.WH / 2;
+  }
+
+  // ---------- cantidad de gente: altas y bajas fuera de cámara para que no se note
+  sumarGente(n, fueraDeCamara = true) {
+    const NG = this._gx.length; let hechos = 0;
+    for (let tries = 0; hechos < n && tries < n * 4 && this.gente < this.genteMax; tries++) {
+      const k = this._gCur; this._gCur = (this._gCur + 1) % NG;
+      const x = this._gx[k], y = this._gy[k];
+      if (fueraDeCamara && Camera.isOnScreen(x, y, 120)) continue;
+      if (Persona.spawn({ x, y, quieta: this._gq[k] })) { this.gente++; hechos++; }
+    }
+    return hechos;
+  }
+  quitarGente(n) {
+    const A = Transform.active, X = Transform.x, Y = Transform.y; let hechos = 0;
+    for (let i = Persona.startIndex + Persona.poolSize - 1; i >= Persona.startIndex && hechos < n; i--) {
+      if (A[i] !== 1 || Camera.isOnScreen(X[i], Y[i], 120)) continue;
+      if (Persona.despawn(i)) { this.gente--; hechos++; }
+    }
+    return hechos;
+  }
+  // fps reales: el peor entre el render y los workers (espacial, física, lógica, preRender), promediando cada uno en una ventana
+  // de 2 s (las lecturas sueltas saltan mucho). El hilo principal casi no trabaja, así que su fps no dice nada.
+  medirFps() {
+    const fr = this.views && this.views.frameRate; if (!fr) return;
+    if (!this._fIdx) { const S = this.config.spatial.numberOfSpatialWorkers, L = this.numberOfLogicWorkers, idx = [S];
+      if (!Q.has('ignorarRender')) idx.push(S + 1);
+      for (let i = 0; i < S; i++) idx.push(i); for (let i = 0; i <= L; i++) idx.push(S + 3 + i);
+      this._fIdx = idx; this._fSum = new Float64Array(idx.length); this._fN = new Uint32Array(idx.length); }
+    for (let k = 0; k < this._fIdx.length; k++) { const f = fr[this._fIdx[k] * 16]; if (f > 1) { this._fSum[k] += Math.min(f, 70); this._fN[k]++; } }
+  }
+  cerrarVentana() {
+    let m = 1e9; if (this._fSum) for (let k = 0; k < this._fSum.length; k++) { if (this._fN[k]) m = Math.min(m, this._fSum[k] / this._fN[k]); this._fSum[k] = 0; this._fN[k] = 0; }
+    return m < 1e9 ? m : (this.mainFPS || 60);
+  }
+  // se ajusta durante el primer minuto: sube de a 10 % mientras sobre, baja de a 12 % si no da; después sólo baja si se arrastra
+  afinarGente() {
+    const t = performance.now(); if (!this._gT0) { this._gT0 = t; this._gT = t + 3000; }
+    if (t < this._gIgn) { this.cerrarVentana(); return; }          // recién cambió la cantidad: esperar a que se asiente
+    this.medirFps(); if (t < this._gT) return; this._gT = t + 2000;
+    this.fps = this.cerrarVentana();
+    if (this.genteFija || this._quieto) return;
+    // si sacar gente no mejoró nada, el cuello de botella es otro (la GPU con la luz, por ejemplo): devolverla y dejar de tocar
+    if (this._antes) { const a = this._antes; this._antes = null;
+      if (this.fps < a.fps + 3) { this.sumarGente(a.gente - this.gente); this._quieto = true; return; } }
+    const temprano = t - this._gT0 < 75000;
+    if (this.fps < (temprano ? 46 : 36) && this.gente > 600) { this._antes = { fps: this.fps, gente: this.gente };
+      this.quitarGente(Math.max(150, this.gente * .12 | 0)); this._techo = this.gente; this._gIgn = t + 1000; this._gT = t + 3000; }
+    else if (temprano && this.fps > 55 && this.gente < this.genteMax && !(this._techo && this.gente >= this._techo * .92)) {
+      this.sumarGente(Math.max(200, this.gente * .1 | 0)); this._gIgn = t + 1000; this._gT = t + 3000; }
   }
 
   // salta a la próxima hora: mediodía, atardecer, noche, amanecer
@@ -332,6 +396,7 @@ export class ConurbanoScene extends Scene {
 
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
   update(dtRatio = 1) {
+    this.afinarGente();
     // las sombras horneadas (casas, calcos) se desvanecen con el sol
     const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
     if (Ls && Math.abs(Ls.alpha - si) > .02) Ls.alpha = si; if (Ld && Math.abs(Ld.alpha - si) > .02) Ld.alpha = si;

@@ -52,7 +52,7 @@
     // botones táctiles: se convierten en teclas para el motor
     for (const b of document.querySelectorAll('#pad button')) { const k = b.dataset.k, ev = (t) => window.dispatchEvent(new KeyboardEvent(t, { key: k, bubbles: true }));
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); ev('keydown'); }); for (const t of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(t, () => ev('keyup')); }
-    setInterval(() => { const s = sc(); $('st').textContent = s && s.mainFPS ? ' ' + Math.round(s.mainFPS) + ' fps' : ''; ui(); }, 500);
+    setInterval(() => { const s = sc(); $('st').textContent = s ? ' ' + (s.gente || 0).toLocaleString('es-AR') + ' personas · ' + Math.round(s.fps || s.mainFPS || 0) + ' fps' : ''; ui(); }, 500);
   } catch (e) { console.error(e); $('err').textContent = 'Error: ' + e.message; }
 </script>
 </body></html>
