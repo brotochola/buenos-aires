@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Barrio Conurbano · WeedJS</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #28301f; font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #eee; }
+  #hud { position: fixed; left: calc(10px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); z-index: 10; background: rgba(20, 22, 28, .82);
+    border-radius: 8px; padding: 8px 10px; max-width: min(560px, calc(100vw - 20px)); box-sizing: border-box; }
+  #hud b { color: #f2c14e; } #hud .m { color: #9aa0aa; font-size: 12px; margin-top: 4px; }
+  #hud button, #pad button { font: inherit; background: #2d313b; color: #eee; border: 1px solid #444b57; border-radius: 6px; padding: 7px 10px; margin: 6px 4px 0 0; }
+  #hud button.on { background: #f2c14e; color: #222; }
+  #pad { position: fixed; inset: auto 0 calc(14px + env(safe-area-inset-bottom)) 0; display: none; justify-content: space-between; padding: 0 14px; z-index: 10; pointer-events: none; }
+  #pad div { display: flex; gap: 12px; pointer-events: auto; } #pad button { width: 64px; height: 64px; border-radius: 50%; font-size: 22px; opacity: .85; touch-action: none; }
+  #err { color: #ff8a80; white-space: pre-wrap; }
+  body.dbg #hud { top: calc(44px + env(safe-area-inset-top)); }
+</style></head>
+<body>
+<div id="hud"><b>BARRIO · CONURBANO</b> <span class="m">WeedJS</span>
+  <div class="m">arrastrar / WASD: mover · rueda o pellizco: zoom · V: manejar (WASD, espacio frena)</div>
+  <button id="bV">🚗 Manejar</button><button id="bM">−</button><button id="bP">+</button><span id="st" class="m"></span>
+  <div id="err"></div></div>
+<div id="pad"><div><button data-k="a">◀</button><button data-k="d">▶</button></div><div><button data-k=" ">■</button><button data-k="s">▼</button><button data-k="w">▲</button></div></div>
+<script type="module">
+  import WEED from './weed/weed.bundle.esm.min.js';
+  const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search);
+  if (q.has('debug')) document.body.classList.add('dbg');
+  try {
+    const game = new WEED.GameEngine({ debug: q.has('debug'), autoResize: true });
+    await game.loadScene(new URL('./conurbanoScene.js', import.meta.url).href);
+    const sc = () => window.__conurbano;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const ui = () => { const d = sc() && sc().driving; $('bV').classList.toggle('on', !!d); $('pad').style.display = d && touch ? 'flex' : 'none'; };
+    $('bV').onclick = () => { sc().setDriving(!sc().driving); ui(); };
+    $('bM').onclick = () => sc().zoomBy(1 / 1.4); $('bP').onclick = () => sc().zoomBy(1.4);
+    addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'v') setTimeout(ui, 50); });
+    // botones táctiles: se convierten en teclas para el motor
+    for (const b of document.querySelectorAll('#pad button')) { const k = b.dataset.k, ev = (t) => window.dispatchEvent(new KeyboardEvent(t, { key: k, bubbles: true }));
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); ev('keydown'); }); for (const t of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(t, () => ev('keyup')); }
+    setInterval(() => { const s = sc(); $('st').textContent = s && s.mainFPS ? ' ' + Math.round(s.mainFPS) + ' fps' : ''; ui(); }, 500);
+  } catch (e) { console.error(e); $('err').textContent = 'Error: ' + e.message; }
+</script>
+</body></html>
