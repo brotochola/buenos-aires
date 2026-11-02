@@ -224,6 +224,7 @@ for (let i = 0; i < NLPC; i++) SHEETS['lpc' + i] = { json: 'img/lpc/civil1.json'
 for (const c of CAR_SHEETS) SHEETS['auto_' + c] = { json: 'img/cars/' + c + '.json', png: 'img/cars/' + c + '.png' };
 const FLOW = { calles: 'data/ff_calles.json' }; PED_FIELDS.forEach(n => FLOW[n] = 'data/ff_' + n + '.json');
 const f32 = (v) => ({ value: v, type: 'f32' });
+const PACK = typeof globalThis.location?.search === 'string' && new URLSearchParams(globalThis.location.search).has('empaquetar');
 
 export class ConurbanoScene extends Scene {
   static config = {
@@ -249,7 +250,9 @@ export class ConurbanoScene extends Scene {
       cables: { zIndex: 3.5, ySorting: false, maxItems: 4000 },
     },
   };
-  static assets = { spritesheets: SHEETS, flowfields: FLOW };
+  // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
+  // (con ?empaquetar en la URL se arma en el navegador, para volver a hornearlo después de cambiar los sprites)
+  static assets = { ...(PACK ? {} : { bigAtlas: { json: 'img/baked/bigAtlas.json', png: 'img/baked/bigAtlas.png' } }), spritesheets: SHEETS, flowfields: FLOW };
   static sharedResources = [
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],

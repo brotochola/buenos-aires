@@ -37,7 +37,7 @@ npm i playwright && npx playwright install chromium
 node herramientas/run_bake.js 12345      # 12345 = semilla
 ```
 
-Regenera `img/obj*`, `img/props.json`, `data/*` y `meta.js`. El tamaño del mapa (480 × 340 m) y el tope del catálogo (200 casas) están en `run_bake.js`.
+Regenera `img/obj*`, `img/props.json`, `data/*` y `meta.js`. Después volvé a hornear el atlas de sprites (el celu lo baja listo en vez de armarlo al arrancar): con `python3 servir.py` corriendo, `node herramientas/hornear_atlas.js`. El tamaño del mapa (480 × 340 m) y el tope del catálogo (200 casas) están en `run_bake.js`.
 
 ## Límites conocidos
 
