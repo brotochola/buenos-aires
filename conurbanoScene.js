@@ -8,6 +8,8 @@
 // ---------- el barrio exportado por el editor (carpeta barrio/). meta.js es chico: lo importan todos los hilos.
 // META.atlas lo pone herramientas/hornear_atlas.js cuando hay atlas pre-horneado en barrio/atlas/ (si no, el juego lo arma al cargar)
 import { META } from './barrio/meta.js';
+// autos: modelos, colores y medidas que hornea herramientas/hornear_autos.js (img/autos/)
+import { AUTOS, CHATARRA } from './img/autos/autos.js';
 const BARRIO = new URL('./barrio/', import.meta.url).href;
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
@@ -28,7 +30,18 @@ const GENTE_MAX = GENTE_FIJA ? GENTE_FIJA + 50 : (MOVIL ? 14000 : 23000);   // p
 const GENTE_INICIAL = GENTE_FIJA || (MOVIL ? (HC >= 8 ? 6000 : 3500) : 10000);
 // campos que sigue la gente: los destinos del editor + "veredas" (vuelta manzana). Cada tanto cambian de campo.
 const PED_FIELDS = Array.from({ length: NPED }, (_, i) => 'peaton' + i).concat(['veredas']), NCAMPOS = PED_FIELDS.length;
-const CAR_SHEETS = ['red', 'white', 'black', 'blue', 'yellow', 'poli', 'burnt'];
+// qué tan común es cada modelo (p). rico/pobre: más en zonas ricas o pobres. solo: 'm' sólo circulando, 'e' sólo estacionado.
+// min: cuántos circulan como mínimo (los especiales no dependen de la suerte). drive: empuje (los pesados arrancan más lento).
+// El patrullero sale del color 'poli' del editor y la chatarra de 'burnt'.
+const MODELOS = {
+  hatch: { p: 16, pobre: 1 }, sedan: { p: 13 }, pickup: { p: 9 }, utilitario: { p: 6 }, compacto: { p: 6 }, suv: { p: 5, rico: 1 },
+  rural: { p: 4, pobre: 1 }, monovolumen: { p: 4 }, micro: { p: 3, pobre: 1 }, taxi: { p: 3 }, jeep: { p: 2 }, coupe: { p: 2 },
+  lujo: { p: 2, rico: 1 }, deportivo: { p: 1.5, rico: 1 }, muscle: { p: 1 }, superauto: { p: .5, rico: 1 }, limusina: { p: .5, rico: 1 },
+  camion: { p: 3.5, min: 2, drive: 300 }, volcador: { p: 2, min: 2, solo: 'm', drive: 270 }, colectivo: { p: 2.5, min: 4, solo: 'm', drive: 270 },
+  ambulancia: { p: 1, min: 2, solo: 'm' }, casarodante: { p: 1, solo: 'e' },
+};
+// colores del editor -> colores de las hojas (si el modelo tiene ese color, se usa; si no, uno de los suyos)
+const COLOR_EDITOR = { red: 'rojo', white: 'blanco', black: 'negro', blue: 'azul', yellow: 'amarillo' };
 const LPC_EXCLUDE = ['spellcast', 'thrust', 'slash', 'shoot', 'jump', 'sit', 'emote', 'run', 'combat', '1h_slash', '1h_halfslash']
   .flatMap(a => ['up', 'left', 'down', 'right'].map(d => `${a}_${d}`)).concat(['hurt', 'climb']);
 
@@ -43,6 +56,7 @@ export class PersonaComp extends Component {
 export class AutoComp extends Component {
   static ARRAY_SCHEMA = { active: Uint8Array, driveForce: Float32Array, lateralFriction: Float32Array, turnTorque: Float32Array, minSteerSpeed: Float32Array,
     minSteerFactor: Float32Array, maxSteerSpeed: Float32Array, lastKey: Int16Array,
+    hl: Float32Array, hw: Float32Array,   // medio largo y medio ancho del colisionador (px): la IA y la gente miran el tamaño de cada vehículo
     // estado de la IA: en componentes (no en campos del objeto), porque una entidad puede pasar de un worker de lógica a otro
     sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array };
 }
@@ -167,7 +181,7 @@ export class Persona extends GameObject {
           if (_w.x !== 0 || _w.y !== 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!AutoComp.active[j] || !Transform.active[j]) continue;
             const cvx = RigidBody.vx[j], cvy = RigidBody.vy[j], cs2 = cvx * cvx + cvy * cvy; if (cs2 < 400) continue;
             const dx = this.x - Transform.x[j], dy = this.y - Transform.y[j], d2 = dx * dx + dy * dy; if (d2 > 26000) continue;
-            if (dx * cvx + dy * cvy > 0 || d2 < 900) { espera = true; break; } }     // se acerca, o está encima
+            const encima = AutoComp.hl[j] + 2; if (dx * cvx + dy * cvy > 0 || d2 < encima * encima) { espera = true; break; } }     // se acerca, o está encima
           const sp = espera ? 0 : P.vel[i];
           this.addAcceleration((_v.x * sp - vx) * 6, (_v.y * sp - vy) * 6);
         }
@@ -176,7 +190,7 @@ export class Persona extends GameObject {
       let sx = 0, sy = 0; const mx = this.x, my = this.y;
       for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j]) continue;
         const dx = mx - Transform.x[j], dy = my - Transform.y[j], d2 = dx * dx + dy * dy;
-        if (AutoComp.active[j]) { if (d2 < 2500 && d2 > 1) { const f = (2500 - d2) / 2500; sx += dx / Math.sqrt(d2) * f * 3; sy += dy / Math.sqrt(d2) * f * 3; } continue; }
+        if (AutoComp.active[j]) { const ra = AutoComp.hl[j] + 22, r2 = ra * ra; if (d2 < r2 && d2 > 1) { const f = (r2 - d2) / r2; sx += dx / Math.sqrt(d2) * f * 3; sy += dy / Math.sqrt(d2) * f * 3; } continue; }
         if (d2 < 100 && d2 > .01) { const f = (100 - d2) / 100; sx += dx / Math.sqrt(d2) * f; sy += dy / Math.sqrt(d2) * f; } }
       if (sx || sy) this.addAcceleration(sx * 120, sy * 120);
     }
@@ -188,7 +202,7 @@ export class Persona extends GameObject {
   }
 }
 
-// ---------- autos (Box2D, patrón de carScene; el cuadro del sprite "desaplasta" la y de la pantalla)
+// ---------- autos (Box2D, patrón de carScene; el cuadro del sprite sale del rumbo de pantalla)
 const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
 const _keys = new Map(), _keys0 = [];
 function angleKeys(sheet) {
@@ -201,12 +215,14 @@ export class Auto extends GameObject {
   static deriveSpeed = true;
   static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, ShadowCaster, LightEmitter, AutoComp];
   onSpawned(c = {}) {
-    this.setSpritesheet('auto_' + (c.color || 'red')); this.setAnimation('0');
-    this.spriteRenderer.anchorX = .5; this.spriteRenderer.anchorY = .62;
+    // cada cuadro de las hojas está centrado en el punto donde el vehículo apoya en el piso
+    this.setSpritesheet('auto_' + (c.hoja || 'hatch_rojo')); this.setAnimation('0');
+    this.spriteRenderer.anchorX = .5; this.spriteRenderer.anchorY = .5;
     this.spriteRenderer.inheritTransformRotation = 0; this.spriteRenderer.spriteRotation = 0;
     const A = this.autoComp;
     A.driveForce = c.drive ?? 340; A.lateralFriction = 8; A.turnTorque = 10; A.minSteerSpeed = 8; A.minSteerFactor = .5; A.maxSteerSpeed = 140; A.lastKey = -1;
-    this.collider.shapeType = ShapeType.Box; this.collider.width = 4.4 * PXM; this.collider.height = 1.8 * PXM; this.collider.radius = 0;
+    const largo = (c.largo || 4.4) * PXM, ancho = (c.ancho || 1.8) * PXM; A.hl = largo / 2; A.hw = ancho / 2;
+    this.collider.shapeType = ShapeType.Box; this.collider.width = largo; this.collider.height = ancho; this.collider.radius = 0;
     this.collider.friction = .3; this.collider.visualRange = 160;
     this.rigidBody.static = c.fijo ? 1 : 0; this.rigidBody.linearDamping = 1; this.rigidBody.angularDamping = 3;
     this.setFixedRotation(0);
@@ -272,8 +288,9 @@ export class AutoIA extends Auto {
     let brake = 0, steer = 0;
     if (A.libre[i] <= 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
       const isCar = AutoComp.active[j] === 1, isPerson = !isCar && PersonaComp.vel[j] > 0; if (!isCar && !isPerson) continue;
-      const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? 95 : 70;
-      if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? 22 : 16; if (as > corr) continue;
+      // alcance y ancho del carril según el tamaño de los dos (con dos autos chicos, ~95 y ~22 px)
+      const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? A.hl[i] + A.hl[j] + 35 : A.hl[i] + 40;
+      if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? A.hw[i] + A.hw[j] - 2 : A.hw[i] + 4; if (as > corr) continue;
       const u = (1 - ahead / reach) * (.4 + .6 * (1 - as / corr)); if (u > brake) brake = u; steer += (side >= 0 ? -1 : 1) * u; }
     if (brake > 0) { turn = Math.max(-1, Math.min(1, turn * (1 - brake * .6) + Math.max(-1, Math.min(1, steer)) * .8)); fwd *= 1 - brake;
       if (brake > .6) { const k = 1 - (brake - .6) * .25; RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; } }   // frena, no da marcha atrás
@@ -295,13 +312,69 @@ export class AutoJugador extends Auto {
   }
 }
 
+// ---------- qué vehículo es cada auto del barrio. El editor da lugar, rumbo, si circula y un color ('poli' = patrullero, 'burnt' = chatarra).
+// El modelo sale por peso y por la riqueza de la zona. Uno más largo que el lugar del editor (4,6 × 1,8 m) queda sólo si su caja
+// no pisa a otro auto o a un prop con colisionador que la caja del editor no pisaba (en px de mundo, como los colisionadores de Box2D).
+function riqueza(x, y) {
+  const wy = META.MH - y / (META.SF * META.SYN), wx = x / META.SF - META.K * wy;
+  return PisoData.wealth[Math.max(0, Math.min(META.HG - 1, (wy / 10) | 0)) * META.WG + Math.max(0, Math.min(META.WG - 1, (wx / 10) | 0))] / 255;
+}
+// dos cajas orientadas { x, y, c, s (cos/sin del rumbo), hl, hw }: ¿se pisan? (ejes separadores)
+function sePisan(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  for (const [nx, ny] of [[a.c, a.s], [-a.s, a.c], [b.c, b.s], [-b.s, b.c]]) {
+    const ra = a.hl * Math.abs(nx * a.c + ny * a.s) + a.hw * Math.abs(ny * a.c - nx * a.s), rb = b.hl * Math.abs(nx * b.c + ny * b.s) + b.hw * Math.abs(ny * b.c - nx * b.s);
+    if (Math.abs(dx * nx + dy * ny) >= ra + rb) return false;
+  }
+  return true;
+}
+function elegirModelos(autos, props) {
+  const PX = META.PXM, M = .3 * PX, CELDA = 160, grilla = new Map(), cajas = [], LUGAR = { hl: 2.3 * PX + M, hw: .9 * PX + M / 2 };
+  const agregar = (b) => { const k = Math.floor(b.x / CELDA) * 4096 + Math.floor(b.y / CELDA); let l = grilla.get(k); if (!l) grilla.set(k, l = []); l.push(cajas.length); cajas.push(b); };
+  for (const c of autos) agregar({ x: c.x, y: c.y, c: Math.cos(c.rot || 0), s: Math.sin(c.rot || 0), hl: 2.3 * PX, hw: .9 * PX });
+  for (const p of props) if (p.r > 0) agregar({ x: p.x, y: p.y, c: 1, s: 0, hl: p.r, hw: p.r });
+  const entra = (i, hl, hw) => {
+    const a = cajas[i], b = { x: a.x, y: a.y, c: a.c, s: a.s, hl: hl + M, hw: hw + M / 2 }, l = { x: a.x, y: a.y, c: a.c, s: a.s, hl: LUGAR.hl, hw: LUGAR.hw };
+    if (b.hl <= l.hl && b.hw <= l.hw) return true;
+    const cx = Math.floor(a.x / CELDA), cy = Math.floor(a.y / CELDA);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gy = cy - 1; gy <= cy + 1; gy++)
+      for (const j of grilla.get(gx * 4096 + gy) || []) if (j !== i && sePisan(b, cajas[j]) && !sePisan(l, cajas[j])) return false;
+    return true;
+  };
+  const hoja = (m, c) => { const cs = AUTOS[m].colores; if (!cs) return m; const ce = COLOR_EDITOR[c]; return m + '_' + (cs.includes(ce) ? ce : cs[(rng() * cs.length) | 0]); };
+  const chatarras = Object.keys(CHATARRA), elegido = [];
+  // primero los mínimos: autos circulando al azar donde el modelo entre
+  const libres = []; autos.forEach((c, i) => { if (c.m && c.c !== 'burnt' && c.c !== 'poli') libres.push(i); });
+  for (let k = libres.length - 1; k > 0; k--) { const j = (rng() * (k + 1)) | 0, t = libres[k]; libres[k] = libres[j]; libres[j] = t; }
+  for (const [m, o] of Object.entries(MODELOS)) for (let k = 0, n = 0; k < libres.length && n < (o.min || 0); k++) {
+    const i = libres[k], d = AUTOS[m]; if (elegido[i] || !entra(i, d.largo * PX / 2, d.ancho * PX / 2)) continue;
+    elegido[i] = m; cajas[i].hl = d.largo * PX / 2; cajas[i].hw = d.ancho * PX / 2; n++;
+  }
+  return autos.map((c, i) => {
+    if (c.c === 'burnt') { const h = chatarras[(rng() * chatarras.length) | 0], d = CHATARRA[h]; return { hoja: h, largo: d.largo, ancho: Math.min(d.ancho, 1.9) }; }
+    let m = c.c === 'poli' ? 'policia' : elegido[i] || null;
+    if (!m) {
+      const rq = riqueza(c.x, c.y), cand = Object.keys(MODELOS).filter(k => !MODELOS[k].solo || MODELOS[k].solo === (c.m ? 'm' : 'e'));
+      const peso = cand.map(k => { const o = MODELOS[k]; return o.p * (o.rico ? .2 + 2.5 * rq : o.pobre ? 1.5 - rq : 1); });
+      while (cand.length && !m) {
+        let t = rng() * peso.reduce((a, b) => a + b, 0), k = 0; while (k < cand.length - 1 && (t -= peso[k]) > 0) k++;
+        const d = AUTOS[cand[k]]; if (entra(i, d.largo * PX / 2, d.ancho * PX / 2)) m = cand[k]; else { cand.splice(k, 1); peso.splice(k, 1); }
+      }
+      m = m || 'hatch';
+    }
+    const d = AUTOS[m]; cajas[i].hl = d.largo * PX / 2; cajas[i].hw = d.ancho * PX / 2;
+    return { hoja: hoja(m, c.c), largo: d.largo, ancho: d.ancho, drive: MODELOS[m]?.drive };
+  });
+}
+
 // ---------- escena
 const SHEETS = {};
 for (let i = 0; i < META.hojasCasas; i++) SHEETS['casas' + i] = { json: BARRIO + 'img/casas' + i + '.json', png: BARRIO + 'img/casas' + i + '.png' };
 SHEETS.props = { json: BARRIO + 'img/props.json', png: BARRIO + 'img/props.png' };
 SHEETS.arboles = { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles.png' };
 for (let i = 0; i < NLPC; i++) SHEETS['lpc' + i] = { json: 'img/lpc/civil1.json', png: 'img/lpc/c' + i + '.png', excludeAnimations: LPC_EXCLUDE };
-for (const c of CAR_SHEETS) SHEETS['auto_' + c] = { json: 'img/cars/' + c + '.json', png: 'img/cars/' + c + '.png' };
+for (const [m, a] of Object.entries(AUTOS)) for (const c of a.colores || ['']) { const h = c ? m + '_' + c : m; SHEETS['auto_' + h] = { json: 'img/autos/' + h + '.json', png: 'img/autos/' + h + '.png' }; }
+for (const h in CHATARRA) SHEETS['auto_' + h] = { json: 'img/autos/' + h + '.json', png: 'img/autos/' + h + '.png' };
 const FLOW = { calles: BARRIO + 'ff_calles.json' }; PED_FIELDS.forEach(n => FLOW[n] = BARRIO + 'ff_' + n + '.json');
 const f32 = (v) => ({ value: v, type: 'f32' });
 const PACK = typeof globalThis.location?.search === 'string' && new URLSearchParams(globalThis.location.search).has('empaquetar');
@@ -310,7 +383,8 @@ export class ConurbanoScene extends Scene {
   static config = {
     worldWidth: META.WW, worldHeight: META.WH, seed: 7,
     // atlas de hasta 8192×4096 (128 MB de video): casas con más detalle + personajes + autos
-    assets: { maxAtlasWidth: 8192, maxAtlasHeight: 4096 },
+    // margen de 1 px entre sprites (con filtrado lineal y sin mipmaps alcanza): con 2 px los 51 juegos de autos no dejan lugar para más casas
+    assets: { maxAtlasWidth: 8192, maxAtlasHeight: 4096, atlasPadding: 1 },
     spatial: { cellSize: 64, maxNeighbors: 48, maxEntitiesPerCell: 192, numberOfSpatialWorkers: HC >= 6 ? 2 : 1 },
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
@@ -388,14 +462,16 @@ export class ConurbanoScene extends Scene {
     // ?prueba=x,y[,prop];x,y… pone props fijos donde se pida (para revisar a mano el orden de dibujo)
     if (Q.get('prueba')) for (const t of Q.get('prueba').split(';')) { const [x, y, f] = t.split(','); if (f === 'p') Persona.spawn({ x: +x, y: +y, quieta: 1 }); else Prop.spawn({ x: +x, y: +y, f: f || 'u_farola', r: 1 }); }
     let first = null;
-    for (const c of w.autos) {
-      if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, color: 'burnt', fijo: 1 });
-      else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c, faros: 1 }); if (!first) first = c; }
-      else AutoEstacionado.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c });
-    }
+    const modelos = elegirModelos(w.autos, w.props);
+    w.autos.forEach((c, i) => {
+      const md = modelos[i];
+      if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, ...md, fijo: 1 });
+      else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, ...md, faros: 1 }); if (!first) first = c; }
+      else AutoEstacionado.spawn({ x: c.x, y: c.y, rot: c.rot, ...md });
+    });
     // tu auto: arranca en el centro del mapa, en el carril del primer auto con IA más cercano
     let best = first, bd = 1e18; for (const c of w.autos) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
-    if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, color: 'red', drive: 300, faros: 1 }); this._spawnCar = best; }
+    if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, hoja: 'hatch_rojo', largo: AUTOS.hatch.largo, ancho: AUTOS.hatch.ancho, drive: 300, faros: 1 }); this._spawnCar = best; }
     this.focusX = best ? best.x : META.WW / 2; this.focusY = best ? best.y : META.WH / 2;
   }
 
