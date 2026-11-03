@@ -263,11 +263,14 @@ export class AutoEstacionado extends Auto {}
 export class Chatarra extends Auto {}
 
 // IA: sigue el flowfield de carriles (mano derecha), frena por gente y autos adelante (patrón de littleCity)
-const _probe = [[0, 0], [24, 0], [-24, 0], [0, 12], [0, -12], [24, 12], [24, -12], [-24, 12], [-24, -12], [48, 0], [-48, 0], [0, 24], [0, -24]];
+const _probe = [[0, 0], [0, 8], [0, -8], [16, 0], [-16, 0], [0, 16], [0, -16], [24, 0], [-24, 0], [24, 12], [24, -12], [-24, 12], [-24, -12], [0, 24], [0, -24], [48, 0], [-48, 0], [36, 24], [-36, 24], [36, -24], [-36, -24]];
 export class AutoIA extends Auto {
   onSpawned(c = {}) { super.onSpawned(c); const A = this.autoComp, rot = c.rot || 0;
     A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; }
-  _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v); if (_v.x * _v.x + _v.y * _v.y >= .01) return true; } return false; }
+  // el carril bajo el auto; si el auto se salió (cortó una esquina, se subió a la vereda), el carril más cercano de alrededor
+  // y un empujón hacia él, así vuelve a la calle en vez de seguir paralelo por la vereda
+  _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v);
+      if (_v.x * _v.x + _v.y * _v.y >= .01) { if (k) { const ox = _probe[k][0], oy = _probe[k][1], l = Math.hypot(ox, oy), m = Math.hypot(_v.x, _v.y); _v.x = _v.x / m + ox / l * 1.3; _v.y = _v.y / m + oy / l * 1.3; } return true; } } return false; }
   tick(dtRatio, dt) {
     super.tick();
     const i = this.index;
