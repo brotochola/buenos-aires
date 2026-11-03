@@ -8,7 +8,9 @@
 import { META } from './meta.js';
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
-  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
+  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
+// todas las luces del barrio: blanco amarillento de ciudad (~3000 K)
+const LUZ = 0xffdcaa;
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.pedTargets, PXM = META.PXM;
@@ -56,7 +58,7 @@ export class Casa extends GameObject {
     this.collider.visualRange = 260;
     // luz de las ventanas: de día se pierde en la luz del sol, de noche ilumina la vereda (como la House de predatorScene)
     const L = this.lightEmitter, on = c.k === 'house' && rng() < .4;
-    L.lightColor = rng() < .8 ? 0xffd9a0 : 0xbfd4ff; L.height = 30; L.hasGlowSprite = 0;
+    L.lightColor = LUZ; L.height = 30; L.hasGlowSprite = 0;
     L.lightIntensity = on ? 220 + rng() * 260 : 0; L.active = on ? 1 : 0;
   }
 }
@@ -94,13 +96,14 @@ export class Prop extends GameObject {
     this.shadowCaster.heightMultiplier = c.f.startsWith('utree_') ? 1 : .8;
     const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1];
     if (c.f.startsWith('u_farol')) {          // farol: charco de luz en la vereda + brillo en la lámpara
-      L.lightColor = c.f === 'u_farol_doble' ? 0xfff0d0 : 0xffc880; L.height = 0; L.glowHeightOffset = top * .92;
+      L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * .92;
       L.lightIntensity = c.f === 'u_farol_doble' ? 2600 : 1800; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
-    } else if (c.f === 'u_semaforo') {
-      L.lightColor = rng() < .5 ? 0xff3b30 : 0x36d96b; L.height = 0; L.glowHeightOffset = top * .8;
-      L.lightIntensity = 120; L.hasGlowSprite = .9; L.active = 1;
-    } else { L.lightIntensity = 0; L.active = 0; }
+    } else {
+      L.lightIntensity = 0; L.active = 0;
+      // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva)
+      if (c.f === 'u_semaforo') { const rojo = rng() < .5; this.addDecoration('_lightGradient', 0, -top * (rojo ? .87 : .7), .35, .35, 0, { tint: rojo ? 0xff3b30 : 0x36d96b, alpha: .85, anchorX: .5, anchorY: .5, layer: 'brillos' }); }
+    }
   }
 }
 
@@ -182,7 +185,7 @@ export class Auto extends GameObject {
     A.active = 1;
     this.shadowCaster.heightMultiplier = .55;
     const L = this.lightEmitter, lit = !!c.faros;
-    L.lightColor = 0xfff2d6; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = lit ? 500 : 0; L.active = lit ? 1 : 0;
+    L.lightColor = LUZ; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = lit ? 500 : 0; L.active = lit ? 1 : 0;
     this._frame();
   }
   onDespawned() { this.autoComp.active = 0; }
@@ -199,14 +202,16 @@ export class Auto extends GameObject {
       RigidBody.angularAccel[i] += turn * AutoComp.turnTorque[i] * f * (sp >= 0 ? 1 : -1); } }
     if (fwd || turn) RigidBody.sleeping[i] = 0;
   }
-  // rumbo en pantalla -> rumbo "real" (y desaplastada) -> el más cercano de los 48 cuadros
+  // los 48 cuadros están dibujados en ángulos de pantalla (como en carScene): el rumbo de pantalla va directo,
+  // y no cambia de cuadro hasta pasar la mitad del paso (sin titileo)
   _frame() {
-    const i = this.index, c = Transform.rotC ? Transform.rotC[i] : 1, s = (Transform.rotS ? Transform.rotS[i] : 0) / META.SYN, l = Math.hypot(c, s) || 1;
+    const i = this.index, c = Transform.rotC ? Transform.rotC[i] : 1, s = Transform.rotS ? Transform.rotS[i] : 0;
     const ks = angleKeys(this._sheet); if (!ks.length) return;
-    let best = 0, bd = -2; for (let k = 0; k < ks.length; k++) { const d = (c * ks[k].c + s * ks[k].s) / l; if (d > bd) { bd = d; best = k; } }
-    if (AutoComp.lastKey[i] !== best) { AutoComp.lastKey[i] = best; this.setAnimation(ks[best].n); }
+    const last = AutoComp.lastKey[i]; if (last >= 0 && c * ks[last].c + s * ks[last].s >= Math.cos(Math.PI / ks.length)) return;
+    let best = 0, bd = -2; for (let k = 0; k < ks.length; k++) { const d = c * ks[k].c + s * ks[k].s; if (d > bd) { bd = d; best = k; } }
+    if (last !== best) { AutoComp.lastKey[i] = best; this.setAnimation(ks[best].n); }
   }
-  tick() { if (!Transform.active[this.index]) return; this._friction(); if (RigidBody.speed[this.index] > 2 || AutoComp.lastKey[this.index] < 0) this._frame(); }
+  tick() { if (!Transform.active[this.index]) return; this._friction(); this._frame(); }
 }
 export class AutoEstacionado extends Auto {}
 export class Chatarra extends Auto {}
@@ -214,24 +219,33 @@ export class Chatarra extends Auto {}
 // IA: sigue el flowfield de carriles (mano derecha), frena por gente y autos adelante (patrón de littleCity)
 const _probe = [[0, 0], [24, 0], [-24, 0], [0, 12], [0, -12], [24, 12], [24, -12], [-24, 12], [-24, -12], [48, 0], [-48, 0], [0, 24], [0, -24]];
 export class AutoIA extends Auto {
-  onSpawned(c = {}) { super.onSpawned(c); this._lx = Math.cos(c.rot || 0); this._ly = Math.sin(c.rot || 0); this._stuck = 0; }
+  onSpawned(c = {}) { super.onSpawned(c); this._lx = Math.cos(c.rot || 0); this._ly = Math.sin(c.rot || 0); this._stuck = 0; this._libre = 0; this._parado = 0; this._sx = c.x; this._sy = c.y; this._sr = c.rot || 0; }
   _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v); if (_v.x * _v.x + _v.y * _v.y >= .01) return true; } return false; }
   tick(dtRatio, dt) {
     super.tick();
     const i = this.index;
-    if (this._sample(this.x, this.y)) { this._lx = _v.x; this._ly = _v.y; } else { _v.x = this._lx; _v.y = this._ly; }
+    const dts = (dt || 16) / 1000;
+    if (this.x < 0 || this.y < 0 || this.x > META.WW || this.y > META.WH) { _v.x = META.WW / 2 - this.x; _v.y = META.WH / 2 - this.y; }   // se fue del mapa: volver
+    else if (this._sample(this.x, this.y)) { this._lx = _v.x; this._ly = _v.y; } else { _v.x = this._lx; _v.y = this._ly; }
     const l2 = _v.x * _v.x + _v.y * _v.y; if (l2 < .01) return;
     const inv = 1 / Math.sqrt(l2), nx = _v.x * inv, ny = _v.y * inv, fx = this.forwardX, fy = this.forwardY;
     const cross = fx * ny - fy * nx, align = fx * nx + fy * ny;
-    let turn = Math.max(-1, Math.min(1, cross * 2.5)) * .9, fwd = align > .2 ? .5 : RigidBody.speed[i] > 40 ? 0 : .45;
+    let turn = Math.max(-1, Math.min(1, cross * 2)) * .8, fwd = align > .15 ? .5 : RigidBody.speed[i] < 30 ? .25 : 0;   // desalineado: sólo avanza despacito para poder girar
     // ¿alguien adelante en el carril?
+    // trabado más de 5 s (dos autos que se frenan mutuamente en un cruce): 3 s sin mirar a los demás
+    if (RigidBody.speed[i] < 10) { this._stuck += dts; this._parado += dts; if (this._stuck > 5) { this._stuck = 0; this._libre = 3; } } else { this._stuck = 0; this._parado = 0; }
+    // parado más de 12 s (se metió en un lote, quedó contra un poste): fuera de cámara, vuelve a su carril de salida
+    if (this._parado > 12 && !this.isOnScreen) { this._parado = 0; this.x = this._sx; this.y = this._sy; this.rotation = this._sr;
+      RigidBody.vx[i] = 0; RigidBody.vy[i] = 0; this._lx = Math.cos(this._sr); this._ly = Math.sin(this._sr); return; }
+    if (this._libre > 0) this._libre -= dts;
     let brake = 0, steer = 0;
-    for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
+    if (this._libre <= 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
       const isCar = AutoComp.active[j] === 1, isPerson = !isCar && PersonaComp.vel[j] > 0; if (!isCar && !isPerson) continue;
       const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? 95 : 70;
       if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? 22 : 16; if (as > corr) continue;
       const u = (1 - ahead / reach) * (.4 + .6 * (1 - as / corr)); if (u > brake) brake = u; steer += (side >= 0 ? -1 : 1) * u; }
-    if (brake > 0) { turn = Math.max(-1, Math.min(1, turn * (1 - brake * .6) + Math.max(-1, Math.min(1, steer)) * .8)); fwd = brake > .8 ? -.35 : fwd * (1 - brake); }
+    if (brake > 0) { turn = Math.max(-1, Math.min(1, turn * (1 - brake * .6) + Math.max(-1, Math.min(1, steer)) * .8)); fwd *= 1 - brake;
+      if (brake > .6) { const k = 1 - (brake - .6) * .25; RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; } }   // frena, no da marcha atrás
     this.applyForces(fwd, turn);
   }
 }
@@ -290,6 +304,7 @@ export class ConurbanoScene extends Scene {
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
       sombras: { zIndex: 1.6, ySorting: false, maxItems: 3000 },
       cables: { zIndex: 3.5, ySorting: false, maxItems: 4000 },
+      brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, ySorting: false, maxItems: 1000 },
     },
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
