@@ -29,7 +29,7 @@
   const CAT = (n) => n.startsWith("utree_") || n.startsWith("arbol_") ? "trees" : n.startsWith("veh_") || n.startsWith("wreck_") ? "vehicles" : "props";
 
   // ---------- estado del mundo
-  let W, SEED = (Math.random() * 1e9) | 0;
+  let W, SEED = +new URLSearchParams(location.search).get("semilla") || ((Math.random() * 1e9) | 0);   // ?semilla=N abre ese barrio
   let houses = [], chunks = new Map(), sprites = [], colliders = [], dyn = [], bakeTimes = [], yawDeps = [];
   let phys = null, city = null, player = null, driving = false;
   const crowd = Crowd({ F, CFG }), traffic = Traffic({ pl, V2, CFG, crowd });

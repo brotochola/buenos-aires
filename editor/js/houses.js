@@ -315,8 +315,16 @@ const Houses = (() => {
     }
     if (kind === "obra") { for (const xc of [.15, W - .3]) for (let k = 0; k < 3; k++) sc.box(xc + k * .06, y0 + .05, zr + .3, xc + k * .06 + .03, y0 + .08, zr + 1.3 + k * .15, { front: [150, 78, 46], right: [110, 56, 36], left: [120, 60, 40], cast: false });
       if (r() < .7) { const b = new Tex(1, .5, spec.seed + 70); b.hueco(); const bx = r.uniform(.2, Math.max(.3, W - 1.3)); sc.box(bx, y0 - 1, 0, bx + 1, y0 - .4, .5, { front: b, top: [208, 120, 80], right: [160, 90, 60], left: [170, 96, 64] }); } }
-    if (kind === "villa" && storeys >= 2) { const sx = r.pick([W - 1, .1]);
-      for (let k = 0; k < 10; k++) { const zz = k * GF / 10; sc.box(sx, y0 - .95, zz, sx + .9, y0 - .05, zz + .18, { front: [168, 166, 160], top: [186, 184, 178], right: [130, 128, 124], left: [140, 138, 134] }); } }
+    // escalera de material al primer piso, contra el frente: sube de costado, peldaño a peldaño, con baranda de caño
+    if (kind === "villa" && storeys >= 2 && W >= 4.2) { const n = 11, run = Math.min(3, W - 1.2) / n, dir = r() < .5 ? 1 : -1, xs = dir > 0 ? .3 : W - .3, zs = GF / n;
+      const conc = new Tex(.3, GF, spec.seed + 71); conc.concrete([170, 168, 160], 1.4);
+      for (let k = 0; k < n; k++) { const a = xs + dir * k * run, b = a + dir * run, x0 = Math.min(a, b), x1 = Math.max(a, b);
+        sc.box(x0, y0 - .9, 0, x1, y0, (k + 1) * zs, { front: conc, top: [190, 188, 182], right: [138, 136, 130], left: [150, 148, 142] }); }
+      const xe = xs + dir * n * run; sc.box(Math.min(xe, xe + dir * .9), y0 - .9, GF - .15, Math.max(xe, xe + dir * .9), y0, GF, { front: [176, 174, 168], top: [190, 188, 182], right: [138, 136, 130], left: [150, 148, 142] });
+      // baranda: postes en el borde de afuera
+      for (let k = 0; k <= n; k += 3) { const x = xs + dir * k * run; sc.box(x - .02, y0 - .9, k * zs, x + .02, y0 - .86, k * zs + .9, { front: [40, 40, 44], right: [30, 30, 34], left: [34, 34, 38], cast: false }); }
+      const L = Math.hypot(n * run, GF), bt = new Tex(L, .06, spec.seed + 72, [40, 40, 44]);
+      sc.quad([xs, y0 - .88, .9], [dir * n * run, 0, GF], [0, 0, -.06], bt, { both: true }); }
     if (r() < .3 && kind !== "obra") ac(sc, r.uniform(.2, Math.max(.3, W - 1.1)), y0, shop ? 3.3 : 2.45, spec.seed + 80);
     if (r() < .35 && !shop && kind !== "chalet") plant(sc, r.uniform(.2, Math.max(.3, W - .6)), y0 - .45, 0, spec.seed + 81, true);
     if (r() < .6) clothes(sc, .3, W - .3, y0 + D + 1.6, 1.85, spec.seed + 99);      // ropa en el patio de atrás
