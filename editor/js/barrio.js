@@ -184,7 +184,7 @@ const Barrio = (() => {
         put("u_parada", p[0], p[1]);
         if (F.u_banco && rx() < .6) { const b = at(s, t + 2.6, side * (s.hw + 1.3)), q = at(s, t + 2.6, 0); if (W.classify(b[0], b[1])?.k === "walk") put("u_banco", b[0], b[1], { face: [b[0] - q[0], b[1] - q[1]] }); } }
       if (s.type !== "ave" && s.sw > 1) {
-        const side = rx() < .5 ? 1 : -1, phi = Math.atan2(s.dir[1], s.dir[0]), phiQ = qa(phi), luz = s.mat !== "asf" ? 1 : 0, pts = [], feet = [];
+        const side = rx() < .5 ? 1 : -1, phi = Math.atan2(s.dir[1], s.dir[0]), phiQ = qa(phi), luz = s.mat === "tierra" || s.mat === "roto" ? 1 : 0, pts = [], feet = [];
         for (let t = rx.uni(3, 10); t < s.len - 2; t += rx.uni(24, 32)) {
           const p = at(s, t, side * (s.hw + .3)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || !claim(p[0], p[1], .25)) continue;
           addObj("poste", { t: "poste", a: aIdx(phi), l: luz }, null, p[0], p[1], phiQ, null, null); feet.push(p);

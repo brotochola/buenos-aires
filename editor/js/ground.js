@@ -31,6 +31,10 @@ const Ground = (() => {
   // --- materiales (ix, iy en px de mundo a 18 px/m; u, v coords locales en m cuando aplica)
   function asphalt(ix, iy) { const v = .86 + .3 * (S(N.c, ix >> 2, iy >> 2) - .5) + .16 * (S(N.a, ix, iy) - .5) + .14 * (S(N.g, ix, iy) - .5); const sp = S(N.g, ix * 7, iy * 3);
     if (sp > .95) set(118, 116, 112); else set(70 * v, 71 * v, 76 * v); }
+  // adoquines de granito (calles viejas de Flores y Caballito): hileras a lo ancho, juntas oscuras, cada piedra con su tono
+  function adoquin(u, v, ix, iy) { const bw = .3, bh = .2, row = Math.floor(v / bh), uu = u + (row & 1) * bw * .5, cu = Math.floor(uu / bw), lu = uu / bw - cu, lv = v / bh - row;
+    const h = hash(cu * 13 + 5, row * 7 + 11); if (lu < .13 || lv < .17) { const f = .9 + .2 * S(N.g, ix, iy); return set(58 * f, 56 * f, 54 * f); }
+    const f = (1 + (.5 - lv) * .14 - (lu - .5) * .06) * (.94 + .1 * S(N.a, ix, iy)); set((96 + 36 * h) * f, (98 + 30 * h) * f, (104 + 18 * h) * f); }
   function grass(ix, iy, dry = 0) { const t = .45 + (S(N.a, ix, iy) - .5) * .7 + (S(N.b, ix, iy) - .5) * .3 + (S(N.g, ix, iy) - .5) * .35; ramp(GR, t);
     if (dry > 0) { const d = Math.min(1, Math.max(0, (S(N.c, ix, iy) - .55) * 3)) * dry; set(cr + (150 - cr) * d, cg + (140 - cg) * d * .6, cb + (80 - cb) * d); }
     if (S(N.g, ix * 3, iy * 5) > .965) set(176, 204, 120); }
@@ -95,7 +99,7 @@ const Ground = (() => {
       if (s.type === "ave" && ad < s.med) { if (s.med - ad < .15) return set(214, 210, 200); return grass(ix, iy, .3); }
       if (s.type === "ave" && ad < s.med + .12) return set(150, 148, 142);
       if (s.sw > 0 && edge < .4) { const f = .95 + .08 * S(N.g, ix, iy); return set(160 * f, 158 * f, 152 * f); }     // cordón cuneta
-      asphalt(ix, iy);
+      if (s.mat === "adoquin") adoquin(c.t, ad, ix, iy); else asphalt(ix, iy);
       if (s.mat === "roto") {
         const ph = S(N.c, ix + 300, iy + 120), pb = S(N.b, ix + 13, iy + 77);
         if (ph > .7 && pb > .45) return ph > .76 && pb > .6 ? set(80 + 40 * S(N.g, ix, iy), 96 + 30 * S(N.g, ix, iy), 104) : dirt(ix, iy);

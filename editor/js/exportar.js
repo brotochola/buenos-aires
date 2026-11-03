@@ -165,7 +165,7 @@ const Exportar = (() => {
     // ---------- 7. piso (shader de WeedJS)
     progreso("piso", .86); await espera();
     const GC = .5, CW = Math.ceil(MW / GC), CHh = Math.ceil(MH / GC), cellA = new Uint8Array(CW * CHh * 4), cellB = new Uint8Array(CW * CHh * 4);
-    const TYPE = { ave: 0, calle: 1, pasaje: 2, pasillo: 3 }, MAT = { asf: 0, roto: 1, tierra: 2, pasillo: 3 };
+    const TYPE = { ave: 0, calle: 1, pasaje: 2, pasillo: 3 }, MAT = { asf: 0, roto: 1, tierra: 2, pasillo: 3, adoquin: 4 };
     const VER = { tierra: 1, vain: 2, gris: 3, roja: 3, cem: 4, pasto: 5 }, PAT = { pasto: 1, tierra: 2, yuyo: 3, roja: 4, cem: 5 };
     const NS = W.segs.length, segs = new Uint8Array(NS * 48), ENC = { pos: [20, 100], unit: [1, 32767.5], len: [0, 100], w: [0, 1000], int: [0, 1] };
     W.segs.forEach((s, k) => { s._gid = k; const cr = s.cross.slice(0, 8); while (cr.length < 8) cr.push(null);

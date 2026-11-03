@@ -137,6 +137,7 @@ const World = (() => {
       else mat = w < .28 ? pickW(r, [["tierra", 6 * C.tierra], ["roto", 3.5], ["asf", .6]]) : w < .52 ? pickW(r, [["asf", 4.5], ["roto", 4], ["tierra", 1.4 * C.tierra]]) : pickW(r, [["asf", 8.5], ["roto", 1.5]]);
       if (type === "pasaje" && mat === "asf" && r() < .4) mat = w < .5 ? "tierra" : "roto";
       if (extra.tierra) mat = "tierra";
+      else if (type === "calle" && mat !== "tierra" && w > .34 && r() < .38 * (C.adoquines ?? 1)) mat = "adoquin";      // calles de adoquines, como en Flores
       const hw = { ave: C.avenida / 2, calle: C.calle / 2 * (extra.ancha ? 1.25 : 1), pasaje: C.pasaje / 2, pasillo: C.pasillo / 2 }[type];
       let sw = { ave: C.vereda * 1.45, calle: C.vereda * (w < .3 ? .8 : 1), pasaje: C.vereda * (w < .4 ? .45 : .56), pasillo: 0 }[type];
       if (mat === "tierra" && type !== "pasillo") sw = Math.max(sw, extra.tierra ? 1.6 : 2.6);
@@ -187,7 +188,7 @@ const World = (() => {
       if (o.id <= s.id || s.type === "pasillo" || o.type === "pasillo") continue;
       const p = segInter(s, o); if (!p) continue;
       inters.push({ s, o, p });
-      const crossOn = (a, b) => { if ((a.mat === "asf" && a.w > .42 && b.type !== "pasaje" || a.type === "ave") && b.type !== "pasillo") { const t = ((p[0] - a.a[0]) * a.dir[0] + (p[1] - a.a[1]) * a.dir[1]); const cl = b.hw + b.sw + 1.4; a.cross.push(t - cl, t + cl); } };
+      const crossOn = (a, b) => { if (((a.mat === "asf" || a.mat === "adoquin") && a.w > .42 && b.type !== "pasaje" || a.type === "ave") && b.type !== "pasillo") { const t = ((p[0] - a.a[0]) * a.dir[0] + (p[1] - a.a[1]) * a.dir[1]); const cl = b.hw + b.sw + 1.4; a.cross.push(t - cl, t + cl); } };
       crossOn(s, o); crossOn(o, s);
     }
 

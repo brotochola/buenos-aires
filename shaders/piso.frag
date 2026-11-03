@@ -30,6 +30,13 @@ vec3 asphalt(int ix, int iy) {
   float v = .86 + .3 * (NC(ix >> 2, iy >> 2) - .5) + .16 * (NA(ix, iy) - .5) + .14 * (NG(ix, iy) - .5);
   if (NG(ix * 7, iy * 3) > .95) return vec3(118, 116, 112); return vec3(70, 71, 76) * v;
 }
+vec3 adoquin(float u, float v, int ix, int iy) {   // adoquines de granito: hileras a lo ancho, juntas oscuras
+  float bw = .3, bh = .2, row = floor(v / bh), uu = u + fmod_(row, 2.0) * bw * .5, cu = floor(uu / bw), lu = uu / bw - cu, lv = v / bh - row;
+  float h = hash2(int(cu) * 13 + 5, int(row) * 7 + 11);
+  if (lu < .13 || lv < .17) return vec3(58, 56, 54) * (.9 + .2 * NG(ix, iy));
+  float f = (1.0 + (.5 - lv) * .14 - (lu - .5) * .06) * (.94 + .1 * NA(ix, iy));
+  return vec3(96.0 + 36.0 * h, 98.0 + 30.0 * h, 104.0 + 18.0 * h) * f;
+}
 vec3 grass(int ix, int iy, float dry) {
   float t = .45 + (NA(ix, iy) - .5) * .7 + (NB(ix, iy) - .5) * .3 + (NG(ix, iy) - .5) * .35;
   vec3 c = ramp5(vec3(46, 80, 40), vec3(62, 102, 48), vec3(80, 126, 58), vec3(102, 150, 70), vec3(132, 174, 86), t);
@@ -122,7 +129,7 @@ vec3 pixel(float wx, float wy) {
     if (s.type == 0 && ad < s.med) { if (s.med - ad < .15) return vec3(214, 210, 200); return grass(ix, iy, .3); }
     if (s.type == 0 && ad < s.med + .12) return vec3(150, 148, 142);
     if (s.sw > 0.0 && edge < .4) { float f = .95 + .08 * NG(ix, iy); return vec3(160, 158, 152) * f; }
-    vec3 col = asphalt(ix, iy);
+    vec3 col = s.mat == 4 ? adoquin(rt, ad, ix, iy) : asphalt(ix, iy);
     if (s.mat == 1) {
       float ph = NC(ix + 300, iy + 120), pb = NB(ix + 13, iy + 77);
       if (ph > .7 && pb > .45) return ph > .76 && pb > .6 ? vec3(80.0 + 40.0 * NG(ix, iy), 96.0 + 30.0 * NG(ix, iy), 104) : dirt(ix, iy);
