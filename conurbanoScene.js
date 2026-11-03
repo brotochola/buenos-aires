@@ -76,6 +76,11 @@ export class Casa extends GameObject {
       if (!this.collider.makePolygon(flat)) { this.collider.shapeType = ShapeType.Circle; this.collider.radius = 6; }
     } else { this.collider.shapeType = ShapeType.Circle; this.collider.radius = c.r || 3; }
     this.collider.visualRange = 260;
+    // las piezas del dibujo cuelgan de la casa (WeedJS ≥ ff32c939): cada franja vertical del sprite se ordena en la base de su
+    // pared (sortOffsetY = base de la franja − y de la casa) y cada pieza se recorta por su propio centro
+    if (c.fr) { const e = c.e || 1;
+      for (let k = 0; k < c.fr.length; k++) { const [fx, fy, p] = c.fr[k];
+        for (let j = 0; j < p.length; j++) this.addDecoration(c.t + k + '_' + j, fx + p[j][0], fy + p[j][1], e, e, j, { anchorX: .5, anchorY: .5, sortOffsetY: fy }); } }
     // las casas no alumbran; los postes de madera con lámpara (calles de tierra y villas) sí
     const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
     L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
@@ -84,14 +89,6 @@ export class Casa extends GameObject {
 }
 // una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
 // piezas de 64 px como decoraciones, que se ordenan con la y del padre pero se recortan cada una por su propio centro
-export class Franja extends GameObject {
-  static components = [];
-  onSpawned(c = {}) {
-    const p = c.p || [];
-    const e = c.e || 1;   // las casas vienen dibujadas con más detalle: se muestran a esta escala
-    for (let j = 0; j < p.length; j++) this.addDecoration(c.t + j, p[j][0], p[j][1], e, e, 0, { anchorX: .5, anchorY: .5 });
-  }
-}
 // sombra de cada casa al piso: un polígono convexo en una capa de mallas
 export class SombraCasa extends GameObject {
   static isStatic = true;
@@ -392,7 +389,7 @@ export class ConurbanoScene extends Scene {
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
-    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + META.nProps + META.nCables + 3000, maxAttachedDecorationsPerEntity: 32 },
+    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + META.nProps + META.nCables + 3000, maxAttachedDecorationsPerEntity: 255 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
@@ -426,7 +423,7 @@ export class ConurbanoScene extends Scene {
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
   ];
-  static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Franja, META.nFranjas + 16], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1]];
+  static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1]];
 
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
@@ -442,9 +439,8 @@ export class ConurbanoScene extends Scene {
     // ---- objetos
     const w = await (await fetch(BARRIO + 'mundo.json')).json();
     const { Decoration } = WEED;
-    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
-      const fr = w.franjas[h.a], tex = 'casas' + h.o + '_' + h.a + '_';
-      for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2], e: META.escalaCasas || 1 }); }
+    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
+      if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
