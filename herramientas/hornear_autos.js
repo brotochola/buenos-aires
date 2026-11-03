@@ -1,6 +1,9 @@
 // Hornea las hojas de autos del juego (img/autos/) desde el paquete "TopDown Vehicles" v1.17 de MinZiin (CC BY 4.0, https://minzinn.itch.io/).
 // node herramientas/hornear_autos.js ["D:/temp/TopDown Vehicles v1.17"]
 // De cada vehículo y color toma sólo los 48 cuadros quietos (SEPARATED/*All*): uno por rumbo de pantalla, cada 7,5°. La chatarra trae 8 (cada 45°).
+// Guarda sólo los que miran a la derecha (de 270° a 90°, 25 de 48): el juego dibuja los de la izquierda espejando (rumbo 180° - a).
+// El espejo se ve igual que el cuadro del paquete, y además WeedJS guarda una fila por cuadro del atlas en una textura de 3 × N:
+// el atlas entero tiene que tener menos cuadros que el alto máximo de textura (8192 en muchas GPUs y en Chromium headless).
 // Cada cuadro se guarda centrado en el punto donde el vehículo apoya en el piso, así el ancla (0,5, 0,5) no salta de un cuadro a otro.
 // (WeedJS ancla sobre el rectángulo del cuadro e ignora sourceSize; al armar el atlas recorta lo transparente, así que centrar no ocupa más atlas.)
 // Escribe img/autos/<hoja>.png|json y img/autos/autos.js (largo y ancho de cada modelo, lo importan todos los hilos).
@@ -106,10 +109,12 @@ function huella(cajas, paso) {
   return { a, b, Q: Math.round(Q) };
 }
 
-// ---------- una hoja: cuadros centrados en el apoyo (x = mitad del cuadro del paquete, y = Q), en filas
+// ---------- una hoja: cuadros centrados en el apoyo (x = mitad del cuadro del paquete, y = Q), en filas.
+// La huella se mide con todos los cuadros; a la hoja van los que miran a la derecha (cos ≥ 0). El espejo gira alrededor de x = P.
 function hornear(hoja, archivos, paso) {
   const ims = archivos.map(readPng), cajas = ims.map(bbox), { a, b, Q } = huella(cajas, paso), P = ims[0].w / 2;
-  const fr = ims.map((im, k) => { const c = cajas[k], hx = Math.max(P - c.x0, c.x1 - P), hy = Math.max(Q - c.y0, c.y1 - Q); return { im, k, sx: P - hx, sy: Q - hy, w: hx * 2, h: hy * 2 }; });
+  const fr = ims.map((im, k) => { const c = cajas[k], hx = Math.max(P - c.x0, c.x1 - P), hy = Math.max(Q - c.y0, c.y1 - Q); return { im, k, sx: P - hx, sy: Q - hy, w: hx * 2, h: hy * 2 }; })
+    .filter(f => Math.cos(f.k * paso * Math.PI / 180) > -1e-6);
   const G = 2, ancho = Math.ceil(Math.sqrt(fr.reduce((s, f) => s + (f.w + G) * (f.h + G), 0)) * 1.15);
   let x = 0, y = 0, fila = 0, W = 0;
   for (const f of fr.slice().sort((p, q) => q.h - p.h)) { if (x + f.w > ancho) { x = 0; y += fila + G; fila = 0; } f.x = x; f.y = y; x += f.w + G; fila = Math.max(fila, f.h); W = Math.max(W, x); }
@@ -145,9 +150,10 @@ for (const [m, [carpeta, colores]] of Object.entries(MODELOS)) {
 for (const [h, carpeta] of Object.entries(CHATARRA)) { const r = hornear(h, pngs(path.join(PACK, 'Wreckage', carpeta), 8), 45); chatarra[h] = { largo: r.largo, ancho: r.ancho }; total += r.px; }
 fs.writeFileSync(path.join(OUT, 'autos.js'), `// generado por herramientas/hornear_autos.js — no editar a mano
 // "TopDown Vehicles" v1.17 de MinZiin (https://minzinn.itch.io/), licencia CC BY 4.0.
-// Huella en el piso en metros. Hojas: img/autos/<modelo>_<color> (o <modelo> si viene en un solo color), 48 rumbos de pantalla cada 7,5°;
-// la chatarra, 8 rumbos cada 45°. Cada cuadro está centrado en el punto de apoyo: ancla (0,5, 0,5).
+// Huella en el piso en metros. Hojas: img/autos/<modelo>_<color> (o <modelo> si viene en un solo color), rumbos de pantalla cada 7,5°
+// (la chatarra, cada 45°), sólo los que miran a la derecha: los otros se dibujan espejados. Cada cuadro está centrado en el punto de apoyo: ancla (0,5, 0,5).
 export const AUTOS = ${JSON.stringify(autos)};
 export const CHATARRA = ${JSON.stringify(chatarra)};
 `);
-console.log(Object.keys(autos).length + ' modelos, ' + Object.keys(chatarra).length + ' chatarras, hojas: ' + (total / 1e6).toFixed(1) + ' Mpx');
+const hojas = Object.values(autos).reduce((s, a) => s + (a.colores ? a.colores.length : 1), 0), cuadros = hojas * 25 + Object.keys(chatarra).length * 5;
+console.log(Object.keys(autos).length + ' modelos en ' + hojas + ' hojas, ' + Object.keys(chatarra).length + ' chatarras: ' + cuadros + ' cuadros en el atlas, ' + (total / 1e6).toFixed(1) + ' Mpx de hojas');

@@ -207,8 +207,11 @@ const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
 const _keys = new Map(), _keys0 = [];
 function angleKeys(sheet) {
   let k = _keys.get(sheet); if (k) return k;
-  const names = SpriteSheetRegistry.getAnimationNames(sheet) || [];
-  k = names.map(n => ({ n, a: parseFloat(n) * Math.PI / 180 })).filter(o => !isNaN(o.a)).map(o => ({ n: o.n, c: Math.cos(o.a), s: Math.sin(o.a) }));
+  const names = SpriteSheetRegistry.getAnimationNames(sheet) || [], base = names.map(n => ({ n, a: parseFloat(n), f: 0 })).filter(o => !isNaN(o.a));
+  // las hojas sólo traen los rumbos que miran a la derecha: los que faltan son esos mismos espejados (rumbo 180° - a)
+  const hay = new Set(base.map(o => (o.a % 360 + 360) % 360)), todos = base.slice();
+  for (const o of base) { const m = ((180 - o.a) % 360 + 360) % 360; if (!hay.has(m)) { hay.add(m); todos.push({ n: o.n, a: m, f: 1 }); } }
+  k = todos.map(o => ({ n: o.n, c: Math.cos(o.a * Math.PI / 180), s: Math.sin(o.a * Math.PI / 180), f: o.f }));
   _keys.set(sheet, k); return k;
 }
 export class Auto extends GameObject {
@@ -247,14 +250,14 @@ export class Auto extends GameObject {
       RigidBody.angularAccel[i] += turn * AutoComp.turnTorque[i] * f * (sp >= 0 ? 1 : -1); } }
     if (fwd || turn) RigidBody.sleeping[i] = 0;
   }
-  // los 48 cuadros están dibujados en ángulos de pantalla (como en carScene): el rumbo de pantalla va directo,
-  // y no cambia de cuadro hasta pasar la mitad del paso (sin titileo)
+  // los 48 rumbos están dibujados en ángulos de pantalla (como en carScene): el rumbo de pantalla va directo,
+  // y no cambia de cuadro hasta pasar la mitad del paso (sin titileo). Los que miran a la izquierda son espejos (flipX).
   _frame() {
     const i = this.index, c = Transform.rotC ? Transform.rotC[i] : 1, s = Transform.rotS ? Transform.rotS[i] : 0;
     const sid = SpriteRenderer.spritesheetId[i], ks = sid ? angleKeys(SpriteSheetRegistry.getSpritesheetName(sid)) : _keys0; if (!ks.length) return;
     const last = AutoComp.lastKey[i]; if (last >= 0 && c * ks[last].c + s * ks[last].s >= Math.cos(Math.PI / ks.length)) return;
     let best = 0, bd = -2; for (let k = 0; k < ks.length; k++) { const d = c * ks[k].c + s * ks[k].s; if (d > bd) { bd = d; best = k; } }
-    if (last !== best) { AutoComp.lastKey[i] = best; this.setAnimation(ks[best].n); }
+    if (last !== best) { AutoComp.lastKey[i] = best; this.setAnimation(ks[best].n); this.flipX = ks[best].f === 1; }
   }
   tick() { if (!Transform.active[this.index]) return; this._friction(); this._frame(); }
 }
@@ -383,8 +386,7 @@ export class ConurbanoScene extends Scene {
   static config = {
     worldWidth: META.WW, worldHeight: META.WH, seed: 7,
     // atlas de hasta 8192×4096 (128 MB de video): casas con más detalle + personajes + autos
-    // margen de 1 px entre sprites (con filtrado lineal y sin mipmaps alcanza): con 2 px los 51 juegos de autos no dejan lugar para más casas
-    assets: { maxAtlasWidth: 8192, maxAtlasHeight: 4096, atlasPadding: 1 },
+    assets: { maxAtlasWidth: 8192, maxAtlasHeight: 4096 },
     spatial: { cellSize: 64, maxNeighbors: 48, maxEntitiesPerCell: 192, numberOfSpatialWorkers: HC >= 6 ? 2 : 1 },
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
