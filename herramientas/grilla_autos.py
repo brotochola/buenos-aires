@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-COLS, ESC, PAD = 5, 4, 6
+COLS, ESC, PAD, ASP = 7, 4, 6, 1536 / 738   # ASP: la proporción de la pestaña de Chrome donde se muestra (se sube una captura)
 
 
 def armar(hoja):
@@ -23,11 +23,11 @@ def armar(hoja):
     cw = max(j["frames"][n]["frame"]["w"] for n in names) + PAD * 2
     ch = max(j["frames"][n]["frame"]["h"] for n in names) + PAD * 2
     rows = (len(names) + COLS - 1) // COLS
-    # celdas tales que la grilla sea cuadrada (Gemini devuelve 1:1 sin deformar)
-    if COLS * cw > rows * ch:
-        ch = (COLS * cw + rows - 1) // rows
+    # celdas tales que la grilla tenga la proporción de la pestaña (la captura que se sube es la grilla entera)
+    if COLS * cw > rows * ch * ASP:
+        ch = int(np.ceil(COLS * cw / ASP / rows))
     else:
-        cw = (rows * ch + COLS - 1) // COLS
+        cw = int(np.ceil(rows * ch * ASP / COLS))
     g = Image.new("RGBA", (COLS * cw, rows * ch), (255, 0, 255, 255))
     for k, n in enumerate(names):
         f = j["frames"][n]["frame"]
