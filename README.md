@@ -82,7 +82,7 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 ## Límites conocidos
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
-- Ese atlas (hasta 8192×4096) lleva casas, gente, árboles y autos, y **no puede pasar de 8192 cuadros**. WeedJS guarda una fila por cuadro en una textura de 3 × N, y 8192 es el alto máximo de textura en muchas GPUs y en Chromium headless. Si se pasa, no se dibuja ningún sprite y la consola no muestra error. Hoy tiene 7938: 5799 son piezas de casas y 1190 son de autos. Con la perilla «variedad» del editor en 200 entran unos 8 tipos de casa más. Si un barrio se pasa, bajá la variedad o sacá colores en `herramientas/hornear_autos.js`. `hornear_atlas.js` avisa cuántos cuadros tiene.
+- Ese atlas (hasta 8192×4096 píxeles) lleva casas, gente, árboles, props y autos. Con WeedJS ff32c939 o posterior no hay tope de cuadros (antes, con más de 8192, no se dibujaba ningún sprite: N-111). Si un barrio no entra en los píxeles, el juego no carga («Could not fit … into atlas»): bajá la «variedad» de casas.
 - Sin giro de cámara, porque los sprites están horneados para una sola vista.
 - Las texturas float (`rgba32float`) de las capas worldRect no suben bien en WebGL en esta versión de WeedJS: se suben como bytes con tipo FLOAT. Por eso la tabla de calles va en RGBA8 con punto fijo.
 

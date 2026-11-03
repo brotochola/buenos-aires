@@ -14,8 +14,7 @@ const { chromium } = require('playwright'); const fs = require('fs'), path = req
   fs.writeFileSync(path.join(B, 'atlas', 'bigAtlas.json'), r.json);
   fs.writeFileSync(path.join(B, 'atlas', 'bigAtlas.png'), Buffer.from(r.png.split(',')[1], 'base64'));
   fs.writeFileSync(mjs, fs.readFileSync(mjs, 'utf8').replace('export const META = {', 'export const META = {"atlas":true,'));
-  // WeedJS guarda una fila por cuadro en una textura de 3 × N: con más de 8192 cuadros muchas GPUs no dibujan ningún sprite
+  // WeedJS < ff32c939 guardaba una fila por cuadro en una textura de 3 × N: con más de MAX_TEXTURE_SIZE cuadros no dibujaba ningún sprite (N-111, arreglado)
   const n = Object.keys(JSON.parse(r.json).frames).length;
-  console.log(r.w + '×' + r.h, (r.json.length / 1e6).toFixed(2) + ' MB json', n + ' cuadros (tope 8192)'); await b.close();
-  if (n > 8192) console.error('Se pasa de 8192 cuadros: bajá la «variedad» de casas o sacá colores en herramientas/hornear_autos.js');
+  console.log(r.w + '×' + r.h, (r.json.length / 1e6).toFixed(2) + ' MB json', n + ' cuadros'); await b.close();
 })();
