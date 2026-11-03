@@ -54,8 +54,8 @@ const Ground = (() => {
     set(b0 * f, b1 * f, b2 * f);
   }
 
-  // cazuela: cuadrado de 1,1 m alineado con la calle; borde de ladrillo (1), de cemento (2) o sin borde (3); tierra con algo de pasto
-  const PIT = .55, BORDE = .09;
+  // cazuela: cuadrado de 1,4 m alineado con la calle; borde de ladrillo (1), de cemento (2) o sin borde (3); tierra con algo de pasto
+  const PIT = .7, BORDE = .11;
   function cazuela(W, wx, wy, ix, iy) {
     const gx = Math.floor(wx / 2), gy = Math.floor(wy / 2);
     for (let x = gx - 1; x <= gx + 1; x++) for (let y = gy - 1; y <= gy + 1; y++) { const L = W.pitGrid.get(x + "," + y); if (!L) continue;

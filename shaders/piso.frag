@@ -59,7 +59,7 @@ vec3 tiles(float u, float v, int ix, int iy, int kind, bool dmg) {
   if (dmg && h < .3 && abs(lu - lv) < .04) return vec3(110, 98, 76);
   return base * f;
 }
-// cazuela alrededor de un árbol: cuadrado de 1,1 m alineado con la calle. Devuelve el color, o x < 0 si no hay
+// cazuela alrededor de un árbol: cuadrado de 1,4 m alineado con la calle. Devuelve el color, o x < 0 si no hay
 vec3 cazuela(float wx, float wy, int ix, int iy) {
   int gx = int(floor(wx / 2.0)), gy = int(floor(wy / 2.0));
   for (int x = gx - 1; x <= gx + 1; x++) for (int y = gy - 1; y <= gy + 1; y++) {
@@ -67,11 +67,11 @@ vec3 cazuela(float wx, float wy, int ix, int iy) {
     vec4 q = texelFetch(pits, ivec2(x, y), 0); int tp = b8(q.a); if (tp == 0) continue;
     vec2 c = vec2(float(x) * 2.0 + q.r * 2.0, float(y) * 2.0 + q.g * 2.0); float a = q.b * 6.2831853 * 255.0 / 256.0;
     vec2 d = vec2(wx, wy) - c; float cs = cos(a), sn = sin(a), lx = d.x * cs + d.y * sn, ly = -d.x * sn + d.y * cs;
-    if (abs(lx) >= .55 || abs(ly) >= .55) continue;
-    float edge = .55 - max(abs(lx), abs(ly)); int t = tp & 3;
-    if (edge < .09 && t == 1) return vec3(150, 74, 52) * (.9 + .15 * NG(ix, iy));
-    if (edge < .09 && t == 2) return vec3(172, 170, 162) * (.92 + .1 * NG(ix, iy));
-    if (edge < .145) return dirt(ix, iy) * .72;
+    if (abs(lx) >= .7 || abs(ly) >= .7) continue;
+    float edge = .7 - max(abs(lx), abs(ly)); int t = tp & 3;
+    if (edge < .11 && t == 1) return vec3(150, 74, 52) * (.9 + .15 * NG(ix, iy));
+    if (edge < .11 && t == 2) return vec3(172, 170, 162) * (.92 + .1 * NG(ix, iy));
+    if (edge < .18) return dirt(ix, iy) * .72;
     if ((tp & 4) != 0 && NB(ix * 2, iy * 2) > .5) return grass(ix, iy, .6);
     return dirt(ix, iy);
   }
