@@ -292,7 +292,7 @@ export class AutoIA extends Auto {
       // alcance y ancho del carril según el tamaño de los dos (con dos autos chicos, ~95 y ~22 px)
       const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? A.hl[i] + A.hl[j] + 35 : A.hl[i] + 40;
       if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? A.hw[i] + A.hw[j] - 2 : A.hw[i] + 4; if (as > corr) continue;
-      const u = (1 - ahead / reach) * (.4 + .6 * (1 - as / corr)); if (u > brake) brake = u; steer += (side >= 0 ? -1 : 1) * u; }
+      const u = (1 - ahead / reach) * (.4 + .6 * (1 - as / corr)); if (u > brake) brake = u; if (isCar) steer += (side >= 0 ? -1 : 1) * u; }   // a la gente se la espera, no se la esquiva (si no, el auto se sube a la vereda)
     if (brake > 0) { turn = Math.max(-1, Math.min(1, turn * (1 - brake * .6) + Math.max(-1, Math.min(1, steer)) * .8)); fwd *= 1 - brake;
       if (brake > .6) { const k = 1 - (brake - .6) * .25; RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; } }   // frena, no da marcha atrás
     this.applyForces(fwd, turn);
