@@ -165,7 +165,7 @@ const Houses = (() => {
     const wall = r.pick(WALLS);
     const finish = kind === "obra" ? "hueco" : kind === "villa" ? (r() < .62 ? "hueco" : "stucco") : (r() < .14 ? "brick" : "stucco");
     // revestimientos de frente: piedra Mar del Plata (entera o hasta 1,2 m), o salpicré; muy de los 60 y 70 en el conurbano
-    const rv2 = rng(spec.seed ^ 0x9e3779b9), revest = finish === "stucco" && kind !== "villa" ? (rv2() < .16 ? "piedra" : rv2() < .2 ? "zocalo_piedra" : rv2() < .14 ? "salpicre" : null) : null;
+    const rv2 = rng(spec.seed ^ 0x9e3779b9), revest = finish === "stucco" && kind !== "villa" && kind !== "galpon" ? (rv2() < .16 ? "piedra" : rv2() < .2 ? "zocalo_piedra" : rv2() < .14 ? "salpicre" : null) : null;
     const storeys = { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: r.pick([1, 1, 1, 2, 2, 3]) }[kind];
     const D = spec.D || { casa: r.pick([4.2, 5]), chalet: 4.6, negocio: 4.2, galpon: 6, casa2: 4.6, negocio_casa: 4.6, obra: 4.2, ph: 5.2, villa: 3.6 }[kind];
     const y0 = kind === "chalet" ? 2.6 : 0, zr = GF + (storeys - 1) * UF;
@@ -352,9 +352,26 @@ const Houses = (() => {
     if (r() < .35 && !shop && kind !== "chalet") plant(sc, r.uniform(.2, Math.max(.3, W - .6)), y0 - .45, 0, spec.seed + 81, true);
     if (r() < .6) clothes(sc, .3, W - .3, y0 + D + 1.6, 1.85, spec.seed + 99);      // ropa en el patio de atrás
     if (r() < .3) ac(sc, r.uniform(.2, Math.max(.3, W - 1.1)), y0 + D, 2.3, spec.seed + 83, true, true);
+    // ---- terraza: lavadero o cuartito en el fondo (muy de Buenos Aires), con su tanque arriba
+    let lav = null;
+    if (flat && W >= 5 && D >= 4.2 && kind !== "obra" && r() < (kind === "villa" ? .2 : .38)) {
+      const lw = Math.min(W - 1, r.uniform(2.4, 3.6)), ld = Math.min(D - 1.4, r.uniform(2.2, 3)), lh = 2.3, lx = r() < .5 ? .2 : W - .2 - lw, ly = y0 + D - .2 - ld;
+      const lt = wallTex(lw, lh, mix(wall, [214, 208, 196], .4), finish === "hueco" || r() < .4 ? "hueco" : "stucco", spec.seed + 120, wear * 1.3);
+      doorDecal(lt, px(.3), px(.15), px(.75), px(1.95), "chapa", wall);
+      if (lw > 2.6) windowDecal(lt, px(lw - 1.1), px(.5), px(.7), px(.6), "none", wall);
+      const st = wallTex(ld, lh, mix(wall, [200, 196, 188], .5), "stucco", spec.seed + 121, wear * 1.4);
+      sc.box(lx, ly, zr, lx + lw, ly + ld, zr + lh, { front: lt, back: st, left: st, right: st, top: roofTex(lw, ld, "losa", spec.seed + 122) });
+      lav = { x: lx + lw / 2, y: ly + ld / 2, z: zr + lh };
+    }
+    // terraza: algo de vida (sillas de plástico, macetas, una parrilla), sólo en techos planos
+    if (flat && kind !== "obra" && r() < .45) { const n = r.int(1, 3);
+      for (let k = 0; k < n; k++) { const qx = r.uniform(.6, W - 1), qy = y0 + r.uniform(.6, D * .55);
+        if (r() < .5) plant(sc, qx, qy, zr, spec.seed + 130 + k, r() < .4);
+        else sc.box(qx, qy, zr, qx + .45, qy + .45, zr + .45, { front: [236, 236, 230], back: [236, 236, 230], left: [206, 206, 200], right: [206, 206, 200], top: [244, 244, 240] }); } }
     // ---- techo: tanque, antena, chimenea
     const roofZ = flat ? zr : zr + .5;
     if (roofKind === "tejas") tank(sc, r.uniform(.8, W - .8), y0 + D * .6, zr + 1.2, spec.seed + 90);
+    else if (lav) tank(sc, lav.x, lav.y, lav.z, spec.seed + 90, r() < .85 ? "negro" : "gris");
     else tank(sc, r.uniform(.9, Math.max(1, W - .9)), y0 + D * r.uniform(.45, .7), roofZ + (flat ? .2 : .6), spec.seed + 90, r() < .85 ? "negro" : "gris");
     if (r() < .5 && roofKind !== "tejas") antenna(sc, r.uniform(.4, W - .4), y0 + D * .3, roofZ);
     if (r() < .5) { const cx = r.uniform(.3, W - .5); sc.box(cx, y0 + D * .75, roofZ, cx + .25, y0 + D * .75 + .25, roofZ + 1, { front: [160, 160, 164], back: [160, 160, 164], left: [124, 124, 128], right: [124, 124, 128], top: [120, 120, 124] }); }

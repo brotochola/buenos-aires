@@ -256,7 +256,10 @@ const World = (() => {
           const p = [s.a[0] + s.dir[0] * t + nOut[0] * off, s.a[1] + s.dir[1] * t + nOut[1] * off];
           const villa = s.type === "pasillo" || villaAt(p[0] + nOut[0] * 3, p[1] + nOut[1] * 3);
           const w = wealthAt(p[0], p[1]);
-          const F = C.frente / 8.66, fw = villa ? r.uni(3.6, 6) : F * (s.type === "ave" ? r.uni(7, 10.5) : w < .3 ? r.uni(5.5, 8.5) : w < .6 ? r.uni(7, 9.5) : r.uni(8.5, 13));
+          const F = C.frente / 8.66, fw0 = villa ? r.uni(3.6, 6) : F * (s.type === "ave" ? r.uni(7, 10.5) : w < .3 ? r.uni(5.5, 8.5) : w < .6 ? r.uni(7, 9.5) : r.uni(8.5, 13));
+          // frentes en metros enteros pares (1,5 m en la villa): la casa del catálogo ocupa el lote entero, pegada a las vecinas
+          // (entre medianeras, como en Buenos Aires), sin huecos de pasto entre casa y casa
+          const fw = villa ? Math.max(3, Math.round(fw0 / 1.5) * 1.5) : Math.max(4, Math.round(fw0 / 2) * 2);
           if (t + fw > s.len) break;
           // marco del lote: local +y = nOut (alejándose de la calle); local x = ux (izquierda→derecha visto desde la calle)
           const ux0 = [nOut[1], -nOut[0]];
@@ -294,7 +297,7 @@ const World = (() => {
       const phi = Math.atan2(ux[1], ux[0]);   // local x -> ux ; local -y -> hacia la calle
       return { id, q, o, ux, nOut, fw, ld, seg: s, side, w, kind, phi, seed: (r() * 1e9) | 0,
         vereda: w < .3 ? pickW(r, [["tierra", 4], ["cem", 2], ["vain_d", 1.5], ["pasto", 3]]) : pickW(r, [["vain", 5], ["vain_d", 1.6], ["gris", 2.5], ["cem", 2.5], ["roja", 1], ["tierra", w < .5 ? .6 : 0]]),
-        patio: kind === "baldio" ? "yuyo" : w < .3 ? pickW(r, [["tierra", 4], ["pasto", 3], ["cem", 1.5]]) : pickW(r, [["pasto", 5], ["cem", 2.5], ["roja", 1.5]]) };
+        patio: kind === "baldio" ? "yuyo" : w < .3 ? pickW(r, [["tierra", 4], ["pasto", 2], ["cem", 3]]) : w < .65 ? pickW(r, [["pasto", 2.5], ["cem", 3.5], ["roja", 3]]) : pickW(r, [["pasto", 5], ["cem", 1.5], ["roja", 2]]) };
     }
     // relleno denso de villas: casillas pegadas mirando al pasillo/calle más cercano
     for (const d of villaBlocks) {
