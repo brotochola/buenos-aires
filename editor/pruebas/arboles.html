@@ -1,0 +1,13 @@
+<!doctype html><html><body style="margin:0;background:#6b7d4c">
+<canvas id="c" width="1400" height="900"></canvas>
+<script src="../js/config.js"></script><script src="../js/r3d.js"></script><script src="../js/arboles.js"></script>
+<script>
+  // todos los tipos a la escala del juego (vista filtrada) con zoom 2 lineal
+  const c = document.getElementById('c'), g = c.getContext('2d'), Z = 2; g.imageSmoothingEnabled = true;
+  const tmp = document.createElement('canvas'); tmp.width = 700; tmp.height = 450; const t = tmp.getContext('2d');
+  let x = 4, base = 120, rowH = 0;
+  for (const tp of Arboles.TIPOS) { const a = Arboles.render(tp).vista;
+    if (x + a.w > 696) { x = 4; base += 110; }
+    t.drawImage(a.canvas, x, base - a.oy); x += a.w + 2; }
+  g.drawImage(tmp, 0, 0, 700 * Z, 450 * Z);
+</script></body></html>

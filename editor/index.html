@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Editor de barrios · Conurbano</title>
+<style>
+ :root { --panel: rgba(20,22,28,.9); --ink: #ece6d8; --muted: #a9a294; --acc: #f2c14e; }
+ html,body { margin:0; height:100%; overflow:hidden; background:#28301f; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
+ #stage canvas { display:block; image-rendering: pixelated; touch-action:none; -webkit-user-select:none; user-select:none; }
+ #stage canvas.ovl { position:fixed; left:0; top:0; pointer-events:none; transform-origin:0 0; image-rendering:auto; }
+ html, body { overscroll-behavior:none; -webkit-tap-highlight-color: transparent; }
+ #hud { position:fixed; top:12px; left:12px; background:var(--panel); padding:10px 12px; border-radius:8px; font-size:12px; line-height:1.55; max-width:calc(100vw - 380px); min-width:260px; }
+ #hud h1 { font-size:13px; margin:0 0 4px; color:var(--acc); letter-spacing:.5px; }
+ .row { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center; }
+ button, select { font:inherit; font-size:12px; background:#2d313b; color:var(--ink); border:1px solid #444a57; border-radius:5px; padding:4px 8px; cursor:pointer; }
+ button:hover { background:#3a3f4b; } button.on { background:var(--acc); color:#1b1d24; border-color:var(--acc); }
+ .muted { color:var(--muted); } #err { color:#ff8a80; }
+ #load { position:fixed; right:352px; bottom:12px; background:var(--panel); padding:6px 10px; border-radius:6px; font-size:12px; }
+ #panel { position:fixed; top:12px; right:12px; bottom:12px; width:320px; overflow:auto; background:var(--panel); border-radius:8px; padding:8px 10px; font-size:12px; box-sizing:border-box; }
+ #panel.hide { display:none; }
+ #panel summary { cursor:pointer; color:var(--acc); padding:6px 0; font-weight:bold; }
+ #panel .chk { display:block; padding:2px 0; cursor:pointer; }
+ #panel .knob { margin:6px 0 8px; } #panel .kl { display:flex; justify-content:space-between; gap:8px; } #panel output { color:var(--acc); white-space:nowrap; }
+ #panel input[type=range] { width:100%; } #panel small { color:var(--muted); } #panel button { margin:3px 4px 3px 0; }
+ .legend { margin-top:6px; line-height:1.9; color:var(--muted); } .legend i { display:inline-block; width:10px; height:10px; margin:0 3px 0 6px; vertical-align:middle; border-radius:2px; }
+ #perf { position:fixed; left:12px; top:150px; bottom:12px; width:340px; overflow:auto; background:var(--panel); border-radius:8px; padding:8px 10px; font-size:11.5px; display:none; z-index:3; box-sizing:border-box; }
+ #perf table { width:100%; border-collapse:collapse; table-layout:fixed; } #perf td:first-child { width:55%; color:#cfc8b8; } #perf th { text-align:left; color:var(--acc); padding:6px 0 2px; font-weight:bold; }
+ #perf td { padding:1px 0; vertical-align:top; } #perf td:last-child { text-align:right; padding-left:8px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+ #perf .ok { color:#81c784; } #perf .warn { color:#ffd54f; } #perf .bad { color:#ff8a80; }
+ #perf canvas { width:100%; height:70px; display:block; border-radius:4px; } .pmuted { color:var(--muted); font-size:10.5px; margin:3px 0; }
+ .pbench { margin-top:8px; padding:6px; background:#2d313b; border-radius:5px; line-height:1.5; }
+ #reportBox { position:fixed; inset:20px; background:#20242c; border-radius:10px; padding:10px; display:none; z-index:9; }
+ #reportTxt { width:100%; height:calc(100% - 70px); background:#14161c; color:#ddd; font:11px monospace; box-sizing:border-box; }
+ #insp { position:fixed; left:12px; bottom:12px; background:var(--panel); padding:8px 10px; border-radius:6px; font-size:12px; line-height:1.5; max-width:min(560px, calc(100vw - 380px)); display:none; pointer-events:none; }
+ #drivehud { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); background:var(--panel); padding:8px 14px; border-radius:8px; font-size:13px; display:none; text-align:center; }
+ #drivehud b { color:var(--acc); font-size:16px; }
+ #explorer { position:fixed; inset:0; background:rgba(10,12,14,.72); display:none; align-items:center; justify-content:center; z-index:5; }
+ #explorer .card { background:#20242c; border-radius:10px; padding:12px; max-width:calc(100vw - 32px); box-sizing:border-box; }
+ #excv { display:block; width:min(760px, calc(100vw - 56px)); aspect-ratio: 760/520; image-rendering: pixelated; border-radius:6px; cursor:grab; }
+ #explorer input[type=range] { width:140px; }
+ #atlas { position:fixed; inset:16px; background:#20242c; border-radius:10px; padding:12px; display:none; z-index:6; overflow:auto; }
+ #atcv { display:block; image-rendering: pixelated; max-width:100%; }
+ #drivepad { display:none; position:fixed; inset:auto 0 0 0; height:0; z-index:4; }
+ #drivepad .pad { position:fixed; bottom:calc(14px + env(safe-area-inset-bottom)); display:flex; gap:12px; }
+ #drivepad .l { left:14px; } #drivepad .r { right:14px; flex-direction:column-reverse; }
+ #drivepad .b { width:72px; height:72px; border-radius:50%; background:rgba(20,22,28,.6); border:2px solid rgba(255,255,255,.35); color:#fff; font-size:28px;
+   display:flex; align-items:center; justify-content:center; touch-action:none; user-select:none; -webkit-user-select:none; }
+ #drivepad .b.on { background:rgba(242,193,78,.85); color:#1b1d24; }
+ #drivepad .r .row2 { display:flex; gap:12px; }
+ #padCar { position:fixed; top:calc(166px + env(safe-area-inset-top)); right:10px; font-size:15px; padding:10px 14px; }
+ #padExit { position:fixed; top:calc(118px + env(safe-area-inset-top)); right:10px; font-size:15px; padding:10px 14px; }
+ @media (max-width: 760px), (pointer: coarse) {
+   #hud { top:calc(6px + env(safe-area-inset-top)); left:6px; right:6px; max-width:none; min-width:0; padding:6px 8px; }
+   #hud h1, #hud .help { display:none; }
+   #hud .lbl { display:none; }
+   #hud .row { margin-top:0; gap:5px; } #hud button { font-size:13px; padding:8px 9px; }
+   #stats { display:none; }
+   #perf { left:6px; right:6px; width:auto; top:calc(118px + env(safe-area-inset-top)); bottom:auto; max-height:60vh; font-size:12px; }
+   #panel { top:auto; left:0; right:0; bottom:0; width:auto; height:52vh; border-radius:12px 12px 0 0; padding-bottom:calc(12px + env(safe-area-inset-bottom)); font-size:14px; }
+   #panel .chk { padding:6px 0; } #panel input[type=checkbox] { transform:scale(1.3); margin-right:6px; }
+   #panel input[type=range] { height:28px; }
+ #insp { left:6px; right:6px; bottom:calc(8px + env(safe-area-inset-bottom)); max-width:none; font-size:13px; pointer-events:auto; }
+   #insp button { margin-top:4px; padding:6px 10px; }
+   #load { right:6px; bottom:auto; top:calc(64px + env(safe-area-inset-top)); }
+   #drivehud { bottom:auto; left:10px; transform:none; top:calc(118px + env(safe-area-inset-top)); padding:8px 12px; } #drivehud .muted { display:none; }
+   #explorer .card { padding:8px; width:calc(100vw - 16px); }
+   #excv { width:100%; } #explorer input[type=range] { width:110px; }
+   #atlas { inset:6px; padding:8px; }
+ }
+</style></head><body>
+<div id="stage"></div>
+<div id="hud"><h1>EDITOR DE BARRIOS · CONURBANO</h1>
+ <div class="muted help">arrastrar/flechas: mover · rueda o pellizco: zoom · Q/E, clic derecho o girar con dos dedos: rotar <span id="zoom"></span> · semilla <span id="seed"></span></div>
+ <div class="row"><button id="bR">🎲<span class="lbl"> Otro</span></button><button id="bV">🚗<span class="lbl"> Manejar</span></button><button id="bX">🏠<span class="lbl"> 3D</span></button><button id="bT">🗂<span class="lbl"> Atlas</span></button><button id="bExp" title="Bajar el barrio como zip para Conurbano-weed (carpeta barrio/)">📦<span class="lbl"> Exportar</span></button><button id="bPanel">⚙<span class="lbl"> Panel</span></button><button id="bRotL" title="Girar 45° (Q: 7,5°)">⟲</button><button id="bN" title="Volver al norte">🧭 0°</button><button id="bRotR" title="Girar 45° (E: 7,5°)">⟳</button><button id="bPerf">📊 <span id="fps">–</span></button><button id="bM">−</button><button id="bP">+</button></div>
+ <div class="muted" id="stats" style="margin-top:6px"></div>
+ <div id="err"></div></div>
+<div id="panel"></div>
+<div id="perf"><div class="row" style="margin:0 0 6px"><b style="color:var(--acc)">RENDIMIENTO</b>
+  <button id="bBench">▶ Benchmark 20 s</button><button id="bReport">Copiar reporte</button><button id="bPeaks">Reiniciar picos</button></div>
+ <canvas id="perfGraph" width="300" height="70"></canvas>
+ <div class="pmuted">gris: cuadro · celeste: JS · violeta: GPU · líneas: 16,7 y 33,3 ms</div>
+ <div id="perfBody"></div></div>
+<div id="reportBox"><div class="muted">No se pudo copiar automáticamente: el texto está seleccionado, copialo a mano.</div><textarea id="reportTxt" readonly></textarea><button id="reportClose">Cerrar</button></div>
+<div id="insp"></div>
+<div id="load">armando el barrio…</div>
+<div id="drivepad"><button id="padExit">Bajarse</button><button id="padCar">🔄 Auto</button>
+ <div class="pad l"><div class="b" data-k="a">◀</div><div class="b" data-k="d">▶</div></div>
+ <div class="pad r"><div class="row2"><div class="b" data-k=" " style="font-size:15px">FRENO<br>MANO</div><div class="b" data-k="s">▼</div></div><div class="row2" style="justify-content:flex-end"><div class="b" data-k="w">▲</div></div></div>
+</div>
+<div id="drivehud"><b id="speed">0 km/h</b><br><span class="muted">WASD / flechas · espacio: freno de mano · 1–9: cambiar de auto · V o Esc: bajarse</span></div>
+<div id="explorer"><div class="card">
+ <canvas id="excv" width="760" height="520"></canvas>
+ <div class="row"><select id="exKind"><option value="casa">casa</option><option value="casa2">casa2</option><option value="chalet">chalet</option><option value="negocio">negocio</option><option value="negocio_casa">negocio_casa</option><option value="ph">ph</option><option value="obra">obra</option><option value="villa">villa</option><option value="galpon">galpon</option></select>
+  <button id="exNew">Otra casa</button>
+  <span class="muted">ancho</span><input id="exW" type="range" min="3.6" max="13" step="0.1" value="8"><span id="exWv"></span>
+  <span class="muted">riqueza</span><input id="exWealth" type="range" min="0" max="1" step="0.05" value="0.5">
+ </div>
+ <div class="row"><span class="muted">ángulo</span><input id="exA" type="range" min="0" max="359" value="0"><span id="exAv"></span>
+  <button id="exAuto">Girar</button><button id="exClose">Cerrar (Esc)</button><span class="muted" id="exInfo"></span></div>
+</div></div>
+<div id="atlas"><div class="row" style="margin:0 0 8px"><button id="atSprites">Atlas de sprites</button><button id="atBaked">Casas horneadas ahora</button><button id="atClose">Cerrar (Esc)</button><span class="muted" id="atinfo"></span></div><canvas id="atcv"></canvas></div>
+<script src="vendor/three.iife.js"></script>
+<script src="vendor/planck.min.js"></script>
+<script>const ASSETS_PNG = "recursos/v4_assets.png";</script>
+<script src="recursos/v4_assets.js"></script>
+<script src="js/config.js"></script>
+<script src="js/perf.js"></script>
+<script src="js/r3d.js"></script>
+<script src="js/cam.js"></script>
+<script src="js/houses.js"></script>
+<script src="js/house3.js"></script>
+<script src="js/world.js"></script>
+<script src="js/arboles.js"></script>
+<script src="js/ground.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/people.js"></script>
+<script src="js/crowd.js"></script>
+<script src="js/barrio.js"></script>
+<script src="js/exportar.js"></script>
+<script src="js/main.js"></script>
+
+</body></html>

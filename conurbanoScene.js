@@ -1,11 +1,14 @@
 // ===================== conurbanoScene.js — el barrio del conurbano en WeedJS =====================
 // Mundo de WeedJS = píxeles de la proyección oblicua (18 px/m de ancho, 9 px/m de profundidad), igual que littleCity.
-// Todo lo horneado sale de weedbake/run_bake.js: catálogo de casas (R3), posiciones, flowfields y datos del piso.
+// Todo el barrio sale del editor de barrios (editor/): exportás el zip y su carpeta `barrio/` va al lado de este archivo.
 //   piso       -> capa worldRect con un shader que pinta calles/veredas/patios en la GPU (shaders/piso.frag)
 //   casas      -> entidades estáticas con su sprite horneado + colisionador poligonal + sombra (malla)
 //   gente      -> miles de personas LPC (se ajusta sola a lo que aguante el aparato) siguiendo flowfields estáticos con costos (cruzan, no caminan por la calle)
 //   autos      -> Box2D (patrón de carScene/littleCity), IA por el flowfield de carriles; V para manejar
-import { META } from './meta.js';
+// ---------- el barrio exportado por el editor (carpeta barrio/). meta.js es chico: lo importan todos los hilos.
+// META.atlas lo pone herramientas/hornear_atlas.js cuando hay atlas pre-horneado en barrio/atlas/ (si no, el juego lo arma al cargar)
+import { META } from './barrio/meta.js';
+const BARRIO = new URL('./barrio/', import.meta.url).href;
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
   Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
@@ -13,17 +16,18 @@ const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, Colli
 const LUZ = 0xffdcaa;
 const { ShapeType } = enums;
 
-const NLPC = 19, NPED = META.pedTargets, PXM = META.PXM;
+const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
 
 // ---------- cuánta gente. ?gente=N la fija; si no, arranca según el aparato y se ajusta sola mirando los fps de los workers
-// (data/gente.bin trae ~23 000 lugares en las veredas, horneados con herramientas/hornear_gente.js)
+// (los lugares se sortean en las veredas: las celdas con dirección del flowfield "veredas" del barrio)
 const Q = new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
 const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
 const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
 const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
 const GENTE_MAX = GENTE_FIJA ? GENTE_FIJA + 50 : (MOVIL ? 14000 : 23000);   // pool (con algo de margen para pruebas)
 const GENTE_INICIAL = GENTE_FIJA || (MOVIL ? (HC >= 8 ? 6000 : 3500) : 10000);
-const PED_FIELDS = Array.from({ length: NPED }, (_, i) => 'peaton' + i);
+// campos que sigue la gente: los destinos del editor + "veredas" (vuelta manzana). Cada tanto cambian de campo.
+const PED_FIELDS = Array.from({ length: NPED }, (_, i) => 'peaton' + i).concat(['veredas']), NCAMPOS = PED_FIELDS.length;
 const CAR_SHEETS = ['red', 'white', 'black', 'blue', 'yellow', 'poli', 'burnt'];
 const LPC_EXCLUDE = ['spellcast', 'thrust', 'slash', 'shoot', 'jump', 'sit', 'emote', 'run', 'combat', '1h_slash', '1h_halfslash']
   .flatMap(a => ['up', 'left', 'down', 'right'].map(d => `${a}_${d}`)).concat(['hurt', 'climb']);
@@ -89,11 +93,11 @@ export class Prop extends GameObject {
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     this.setSprite('props', c.f, 0);
-    const an = META.anchors[c.f]; this.spriteRenderer.anchorX = an[0]; this.spriteRenderer.anchorY = an[1];
+    const an = META.anclas[c.f]; this.spriteRenderer.anchorX = an[0]; this.spriteRenderer.anchorY = an[1];
     if (c.fl) this.setScale(-1, 1);
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(1.5, c.r);
     this.collider.visualRange = 200;
-    this.shadowCaster.heightMultiplier = c.f.startsWith('utree_') ? 1 : .8;
+    this.shadowCaster.heightMultiplier = .8;
     const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1];
     if (c.f.startsWith('u_farol')) {          // farol: charco de luz en la vereda + brillo en la lámpara
       L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * .92;
@@ -107,8 +111,24 @@ export class Prop extends GameObject {
   }
 }
 
+// árbol del editor: el tronco es el sprite; cada rama (con sus hojas) es una decoración colgada, anclada en su base, que se mece.
+// El orden dentro del árbol viene en las piezas (las ramas de atrás antes que el tronco).
+const ARB_ESCALA = .6;
+export class Arbol extends GameObject {
+  static isStatic = true;
+  static components = [RigidBody, Collider, SpriteRenderer];
+  onSpawned(c = {}) {
+    this.rigidBody.static = 1;
+    const T = c.tipo, fl = c.fl ? -1 : 1, E = T.escala || ARB_ESCALA;   // el tipo viaja en la config: la escena lo lee en el hilo principal
+    this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(2, c.r || 3); this.collider.visualRange = 200;
+    for (const p of T.piezas) {
+      if (p[5] === 0) { this.setSprite('arboles', p[0], 0); this.spriteRenderer.anchorX = fl > 0 ? p[3] : 1 - p[3]; this.spriteRenderer.anchorY = p[4]; this.setScale(E * fl, E); continue; }
+      this.addDecoration('arboles_' + p[0], p[1] * fl, p[2], E * fl, E, p[5], { anchorX: p[3], anchorY: p[4], sway: !!p[6], swayAmplitude: .022 + rng() * .02, swayFrequency: .45 + rng() * .4 });
+    }
+  }
+}
 // ---------- gente
-const _v = { x: 0, y: 0 };
+const _v = { x: 0, y: 0 }, _w = { x: 0, y: 0 };
 const DIRN = ['up', 'left', 'down', 'right'], WALK = DIRN.map(d => 'walk_' + d), IDLE = DIRN.map(d => 'idle_' + d);
 export class Persona extends GameObject {
   static deriveSpeed = true;
@@ -123,7 +143,7 @@ export class Persona extends GameObject {
     const s = .56 + rng() * .08; this.setScale(s, s);
     this.collider.radius = 4.5; this.collider.visualRange = 52;
     const p = this.personaComp;
-    p.campo = (rng() * NPED) | 0; p.quieta = c.quieta ? 1 : 0; p.estado = 0; p.timer = rng() * 4; p.vel = 17 + rng() * 9; p.cara = 2;
+    p.campo = (rng() * NCAMPOS) | 0; p.quieta = c.quieta ? 1 : 0; p.estado = 0; p.timer = rng() * 4; p.vel = 17 + rng() * 9; p.cara = 2;
     this.shadowCaster.heightMultiplier = 1.2;
     this._anim = -1;
   }
@@ -132,13 +152,20 @@ export class Persona extends GameObject {
     let vx = RigidBody.vx[i], vy = RigidBody.vy[i];
     if (!P.quieta[i]) {
       P.timer[i] -= dts;
-      if (P.estado[i] === 0) { if (P.timer[i] <= 0) { P.estado[i] = 1; P.timer[i] = 15 + rng() * 60; } }
+      if (P.estado[i] === 0) { if (P.timer[i] <= 0) { P.estado[i] = 1; P.timer[i] = 15 + rng() * 45; } }
       else {
         NavGrid.requestVectorFromStaticFlowfield(PED_FIELDS[P.campo[i]], this.x, this.y, _v);
-        if ((_v.x === 0 && _v.y === 0) || P.timer[i] <= 0) {        // llegó, no hay camino o se cansó: pausa y otro destino
-          P.estado[i] = 0; P.timer[i] = 1 + rng() * 7; P.campo[i] = (rng() * NPED) | 0;
+        if ((_v.x === 0 && _v.y === 0) || P.timer[i] <= 0) {        // llegó, no hay camino o se cansó: pausa y otro campo
+          P.estado[i] = 0; P.timer[i] = 1 + rng() * 7; P.campo[i] = (rng() * NCAMPOS) | 0;
         } else {
-          const sp = P.vel[i];
+          // ¿lo que tengo adelante es calle? Entonces mirar si vienen autos: si viene uno, esperar en el cordón
+          let espera = false;
+          NavGrid.requestVectorFromStaticFlowfield('calles', this.x + _v.x * 22, this.y + _v.y * 14, _w);
+          if (_w.x !== 0 || _w.y !== 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!AutoComp.active[j] || !Transform.active[j]) continue;
+            const cvx = RigidBody.vx[j], cvy = RigidBody.vy[j], cs2 = cvx * cvx + cvy * cvy; if (cs2 < 400) continue;
+            const dx = this.x - Transform.x[j], dy = this.y - Transform.y[j], d2 = dx * dx + dy * dy; if (d2 > 26000) continue;
+            if (dx * cvx + dy * cvy > 0 || d2 < 900) { espera = true; break; } }     // se acerca, o está encima
+          const sp = espera ? 0 : P.vel[i];
           this.addAcceleration((_v.x * sp - vx) * 6, (_v.y * sp - vy) * 6);
         }
       }
@@ -266,11 +293,12 @@ export class AutoJugador extends Auto {
 
 // ---------- escena
 const SHEETS = {};
-for (let i = 0; i < META.sheets; i++) SHEETS['obj' + i] = { json: 'img/obj' + i + '.json', png: 'img/obj' + i + '.png' };
-SHEETS.props = { json: 'img/props.json', png: 'img/props.png' };
+for (let i = 0; i < META.hojasCasas; i++) SHEETS['casas' + i] = { json: BARRIO + 'img/casas' + i + '.json', png: BARRIO + 'img/casas' + i + '.png' };
+SHEETS.props = { json: BARRIO + 'img/props.json', png: BARRIO + 'img/props.png' };
+SHEETS.arboles = { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles.png' };
 for (let i = 0; i < NLPC; i++) SHEETS['lpc' + i] = { json: 'img/lpc/civil1.json', png: 'img/lpc/c' + i + '.png', excludeAnimations: LPC_EXCLUDE };
 for (const c of CAR_SHEETS) SHEETS['auto_' + c] = { json: 'img/cars/' + c + '.json', png: 'img/cars/' + c + '.png' };
-const FLOW = { calles: 'data/ff_calles.json' }; PED_FIELDS.forEach(n => FLOW[n] = 'data/ff_' + n + '.json');
+const FLOW = { calles: BARRIO + 'ff_calles.json' }; PED_FIELDS.forEach(n => FLOW[n] = BARRIO + 'ff_' + n + '.json');
 const f32 = (v) => ({ value: v, type: 'f32' });
 const PACK = typeof globalThis.location?.search === 'string' && new URLSearchParams(globalThis.location.search).has('empaquetar');
 
@@ -281,7 +309,7 @@ export class ConurbanoScene extends Scene {
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
-    decoration: { maxDecorations: META.nPiezas + 6500 },
+    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + META.nProps + META.nCables + 3000, maxAttachedDecorationsPerEntity: 32 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
@@ -309,17 +337,17 @@ export class ConurbanoScene extends Scene {
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
   // (con ?empaquetar en la URL se arma en el navegador, para volver a hornearlo después de cambiar los sprites)
-  static assets = { ...(PACK ? {} : { bigAtlas: { json: 'img/baked/bigAtlas.json', png: 'img/baked/bigAtlas.png' } }), spritesheets: SHEETS, flowfields: FLOW };
+  static assets = { ...(PACK || !META.atlas ? {} : { bigAtlas: { json: BARRIO + 'atlas/bigAtlas.json', png: BARRIO + 'atlas/bigAtlas.png' } }), spritesheets: SHEETS, flowfields: FLOW };
   static sharedResources = [
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
   ];
-  static entities = [[Casa, 700], [SombraCasa, 700], [Franja, META.nFranjas + 16], [Prop, 1100], [Persona, GENTE_MAX], [AutoIA, 160], [AutoEstacionado, 260], [Chatarra, 40], [AutoJugador, 1]];
+  static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Franja, META.nFranjas + 16], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1]];
 
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
-    const bin = await (await fetch('data/ground.bin')).arrayBuffer(), u8 = new Uint8Array(bin), parts = META.groundParts;
+    const bin = await (await fetch(BARRIO + 'piso.bin')).arrayBuffer(), u8 = new Uint8Array(bin), parts = META.pisoPartes;
     PisoData.cellA.set(u8.subarray(parts.cellA[0], parts.cellA[0] + parts.cellA[1]));
     PisoData.cellB.set(u8.subarray(parts.cellB[0], parts.cellB[0] + parts.cellB[1]));
     PisoData.wealth.set(u8.subarray(parts.wealth[0], parts.wealth[0] + parts.wealth[1]));
@@ -329,34 +357,38 @@ export class ConurbanoScene extends Scene {
     L.updateTexture('cellA', PisoData.cellA); L.updateTexture('cellB', PisoData.cellB); L.updateTexture('wealth', PisoData.wealth);
     L.updateTexture('noiseT', PisoData.noise); L.updateTexture('segs', PisoData.segs);
     // ---- objetos
-    const w = await (await fetch('data/world.json')).json();
+    const w = await (await fetch(BARRIO + 'mundo.json')).json();
     const { Decoration } = WEED;
-    for (const h of w.houses) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
-      const fr = w.franjas[h.a], tex = 'obj' + h.o + '_' + h.a + '_';
+    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+      const fr = w.franjas[h.a], tex = 'casas' + h.o + '_' + h.a + '_';
       for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2] }); }
     for (const p of w.props) {
-      if (p.sh && !(p.r > 0)) { const a = META.anchors[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
+      if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
-      else { const a = META.anchors[p.f]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -1 : 1 }); }
+      else { const a = META.anclas[p.f]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -1 : 1 }); }
     }
+    const ash = META.anclas.sh_tree;
+    for (const a of w.arboles) { Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: w.arbolTipos[a.t] }); if (ash) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }
     for (const c of w.cables) { const dx = c[2] - c[0], dy = c[3] - c[1], L2 = Math.hypot(dx, dy);
       Decoration.spawn({ x: c[0], y: c[1], texture: '_white', anchorX: 0, anchorY: .5, scaleX: L2 / 8, scaleY: 1 / 8, rotation: Math.atan2(dy, dx), tint: 0x17171b, alpha: .85, layer: 'cables' }); }
-    const g = new Uint16Array(await (await fetch('data/gente.bin')).arrayBuffer()), NG = g.length >> 1;
-    this._gx = new Float32Array(NG); this._gy = new Float32Array(NG); this._gq = new Uint8Array(NG);
-    for (let i = 0; i < NG; i++) { this._gx[i] = g[i * 2] / 2; this._gy[i] = (g[i * 2 + 1] & 0x7fff) / 2; this._gq[i] = g[i * 2 + 1] >> 15; }
-    // las primeras del archivo son las del barrio original (con las quietas de los negocios); las demás ya vienen salteadas por todo el mapa
-    this._gCur = 0; this.gente = 0; this.genteMax = Math.min(GENTE_MAX, NG); this.genteFija = !!GENTE_FIJA;
+    // lugares para la gente: puntos al azar que caen en una vereda (el flowfield "veredas" tiene dirección ahí)
+    const NG = 23000, gx = new Float32Array(NG), gy = new Float32Array(NG); let ng = 0;
+    for (let k = 0; k < NG * 40 && ng < NG; k++) { const x = rng() * META.WW, y = rng() * META.WH; NavGrid.requestVectorFromStaticFlowfield('veredas', x, y, _v);
+      if (_v.x !== 0 || _v.y !== 0) { gx[ng] = x; gy[ng] = y; ng++; } }
+    this._gx = gx.subarray(0, ng); this._gy = gy.subarray(0, ng); this._gq = new Uint8Array(ng);
+    const NG_ = ng;
+    this._gCur = 0; this.gente = 0; this.genteMax = Math.min(GENTE_MAX, NG_); this.genteFija = !!GENTE_FIJA;
     this.sumarGente(Math.min(GENTE_INICIAL, this.genteMax), false);
     // ?prueba=x,y[,prop];x,y… pone props fijos donde se pida (para revisar a mano el orden de dibujo)
     if (Q.get('prueba')) for (const t of Q.get('prueba').split(';')) { const [x, y, f] = t.split(','); if (f === 'p') Persona.spawn({ x: +x, y: +y, quieta: 1 }); else Prop.spawn({ x: +x, y: +y, f: f || 'u_farola', r: 1 }); }
     let first = null;
-    for (const c of w.cars) {
+    for (const c of w.autos) {
       if (c.c === 'burnt') Chatarra.spawn({ x: c.x, y: c.y, rot: c.rot, color: 'burnt', fijo: 1 });
       else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c, faros: 1 }); if (!first) first = c; }
       else AutoEstacionado.spawn({ x: c.x, y: c.y, rot: c.rot, color: c.c });
     }
     // tu auto: arranca en el centro del mapa, en el carril del primer auto con IA más cercano
-    let best = first, bd = 1e18; for (const c of w.cars) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
+    let best = first, bd = 1e18; for (const c of w.autos) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
     if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, color: 'red', drive: 300, faros: 1 }); this._spawnCar = best; }
     this.focusX = best ? best.x : META.WW / 2; this.focusY = best ? best.y : META.WH / 2;
   }

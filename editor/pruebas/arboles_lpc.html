@@ -1,0 +1,13 @@
+<!doctype html><html><body style="margin:0;background:#6b7d4c">
+<canvas id="c" width="1400" height="760"></canvas>
+<script src="../js/config.js"></script><script src="../js/r3d.js"></script><script src="../js/arboles.js"></script>
+<script>
+  // como en el juego: árboles y personas LPC al 0,6 con filtrado lineal, y la cámara con zoom 2 (también lineal)
+  const c = document.getElementById('c'), g = c.getContext('2d'), Z = 2.6;
+  const W = 540, H = 290, tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; const t = tmp.getContext('2d');
+  const load = (u) => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = u; });
+  Promise.all([load('../../img/lpc/c3.png'), load('../../img/lpc/c7.png'), load('../../img/lpc/c11.png')]).then((ims) => {
+    let x = 6; for (const tp of ['fresno_1', 'jacaranda_0', 'platano_0', 'otono_1']) { const a = Arboles.render(tp).vista; t.drawImage(a.canvas, x, H - 8 - a.oy); x += a.w + 6; }
+    [[ims[0], 60], [ims[1], 190], [ims[2], 300], [ims[0], 420]].forEach(([im, px], k) => t.drawImage(im, 0, (10 + (k % 2) * 2) * 64, 64, 64, px, H - 8 - 64 * .6 * .93, 64 * .6, 64 * .6));
+    g.imageSmoothingEnabled = true; g.drawImage(tmp, 0, 0, W * Z, H * Z); });
+</script></body></html>
