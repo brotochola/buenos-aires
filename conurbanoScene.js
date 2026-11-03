@@ -407,8 +407,8 @@ export class ConurbanoScene extends Scene {
         fragment: { webgl: 'shaders/piso.frag' }, worldRect: { width: META.WW, height: META.WH },
         textures: [{ name: 'cellA', format: 'rgba8unorm', size: { width: META.CW, height: META.CH } }, { name: 'cellB', format: 'rgba8unorm', size: { width: META.CW, height: META.CH } },
           { name: 'wealth', format: 'r8unorm', size: { width: META.WG, height: META.HG } }, { name: 'noiseT', format: 'rgba8unorm', size: { width: 256, height: 256 } },
-          { name: 'segs', format: 'rgba8unorm', size: { width: 12, height: META.NS } }],
-        uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG) } } },
+          { name: 'segs', format: 'rgba8unorm', size: { width: 12, height: META.NS } }, { name: 'pits', format: 'rgba8unorm', size: { width: META.PW || 1, height: META.PH || 1 } }],
+        uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG), uPW: f32(META.PW || 1), uPH: f32(META.PH || 1) } } },
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
       sombras: { zIndex: 1.6, ySorting: false, maxItems: 3000 },
       cables: { zIndex: 3.5, ySorting: false, maxItems: 4000 },
@@ -420,7 +420,7 @@ export class ConurbanoScene extends Scene {
   static assets = { ...(PACK || !META.atlas ? {} : { bigAtlas: { json: BARRIO + 'atlas/bigAtlas.json', png: BARRIO + 'atlas/bigAtlas.png' } }), spritesheets: SHEETS, flowfields: FLOW };
   static sharedResources = [
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
-      wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 } }],
+      wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 }, pits: { type: Uint8Array, length: (META.PW || 1) * (META.PH || 1) * 4 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
   ];
   static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1]];
@@ -433,9 +433,10 @@ export class ConurbanoScene extends Scene {
     PisoData.wealth.set(u8.subarray(parts.wealth[0], parts.wealth[0] + parts.wealth[1]));
     PisoData.noise.set(u8.subarray(parts.noise[0], parts.noise[0] + parts.noise[1]));
     PisoData.segs.set(u8.subarray(parts.segs[0], parts.segs[0] + parts.segs[1]));
+    if (parts.pits) PisoData.pits.set(u8.subarray(parts.pits[0], parts.pits[0] + parts.pits[1]));
     const L = Layer.get('piso');
     L.updateTexture('cellA', PisoData.cellA); L.updateTexture('cellB', PisoData.cellB); L.updateTexture('wealth', PisoData.wealth);
-    L.updateTexture('noiseT', PisoData.noise); L.updateTexture('segs', PisoData.segs);
+    L.updateTexture('noiseT', PisoData.noise); L.updateTexture('segs', PisoData.segs); if (parts.pits) L.updateTexture('pits', PisoData.pits);
     // ---- objetos
     const w = await (await fetch(BARRIO + 'mundo.json')).json();
     const { Decoration } = WEED;

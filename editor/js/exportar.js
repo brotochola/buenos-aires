@@ -189,14 +189,19 @@ const Exportar = (() => {
     for (let j = 0; j < HGc; j++) for (let i = 0; i < WGc; i++) wealth[j * WGc + i] = Math.round(W.wealthAt(i * 10 + 5, j * 10 + 5) * 255);
     const N = Ground.N, noise = new Uint8Array(256 * 256 * 4);
     for (let i = 0; i < 65536; i++) { noise[i * 4] = Math.round(N.a[i] * 255); noise[i * 4 + 1] = Math.round(N.b[i] * 255); noise[i * 4 + 2] = Math.round(N.c[i] * 255); noise[i * 4 + 3] = Math.round(N.g[i] * 255); }
-    const partes = { cellA, cellB, wealth, noise, segs }, offs = {}; let off = 0;
+    // cazuelas: grilla de 2 m; por celda, una cazuela: r,g = centro dentro de la celda (0..2 m), b = ángulo (/256 vuelta), a = tipo | 4 con pasto
+    const PWc = Math.ceil(MW / 2), PHc = Math.ceil(MH / 2), pits = new Uint8Array(PWc * PHc * 4);
+    for (const q of (B.pits || [])) { const i = Math.floor(q.x / 2), j = Math.floor(q.y / 2); if (i < 0 || j < 0 || i >= PWc || j >= PHc) continue; const o = (j * PWc + i) * 4;
+      if (pits[o + 3]) continue; pits[o] = Math.round((q.x - i * 2) / 2 * 255); pits[o + 1] = Math.round((q.y - j * 2) / 2 * 255);
+      pits[o + 2] = Math.round(((q.ang / (2 * Math.PI)) % 1 + 1) % 1 * 256) & 255; pits[o + 3] = q.tipo | (q.pasto ? 4 : 0); }
+    const partes = { cellA, cellB, wealth, noise, segs, pits }, offs = {}; let off = 0;
     for (const k in partes) { offs[k] = [off, partes[k].length]; off += partes[k].length; off = (off + 3) & ~3; }
     const piso = new Uint8Array(off); for (const k in partes) piso.set(partes[k], offs[k][0]);
     archivos.push(["piso.bin", piso]);
     // ---------- 8. meta y mundo
     const nFranjas = casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
-      MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, NS, CELL, PXM: 13.5, pisoPartes: offs,
+      MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas, escalas };
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables })]);

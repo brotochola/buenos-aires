@@ -25,7 +25,7 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 
 - **Mundo de WeedJS = píxeles de la proyección oblicua** (18 px/m de ancho, 9 px/m de profundidad, corrimiento K = 0,16), igual que littleCity. La física de Box2D corre en ese espacio.
 - **Piso:** una capa `worldRect` con un shader (`shaders/piso.frag`) que pinta calles, veredas, sendas, cordones, canteros, baches y patios en la GPU, píxel por píxel, con el mismo algoritmo que la versión Pixi. Los datos van en texturas compartidas (`PisoData`): celdas de 0,5 m con las calles candidatas, la tabla de calles en punto fijo de 16 bits, la riqueza y el ruido.
-- **Casas, tapiales y postes:** sprites horneados con R3 (luz, sombras, contornos), en un catálogo compartido entre lotes (`img/obj*.png`). Los ángulos de las grillas, avenidas y pasillos están cuantizados a 15°, y cada lote usa la casa del catálogo más parecida para su ángulo. Cada casa es una entidad estática con colisionador poligonal (el lote) y su sombra al piso es una malla en la capa `sombrasCasas`.
+- **Casas, tapiales y postes:** sprites horneados con R3 (luz, sombras, contornos), en un catálogo compartido entre lotes (`img/obj*.png`). Las calles y las casas usan sólo los 48 rumbos de pantalla de los autos (cada 7,5°), pasados a ángulos del mundo: así los autos quedan paralelos a la calle y las casas a su vereda. Cada grilla usa un par de esos rumbos que queda casi en escuadra (error menor a 1,6°). Cada casa es una entidad estática con colisionador poligonal (el lote) y su sombra al piso es una malla en la capa `sombrasCasas`.
 - **Orden de dibujo (ySort) de las casas:** cada casa se dibuja en franjas verticales. En la proyección oblicua la altura sólo sube en pantalla, así que cada columna del sprite es un pedazo fijo de piso, y su profundidad es la base de la pared ahí. El horneado calcula esa base desde las cajas 3D apoyadas en el piso, y junta columnas mientras la base no cambie más de 8 px (64 px de ancho como máximo). Cada franja es una entidad `Franja` ubicada en la base, de donde sale su y de orden. Lleva colgadas piezas de 64 px de alto como decoraciones: se ordenan con la y del padre, pero se recortan cada una por su propio centro, así las paredes altas no desaparecen en el borde al hacer zoom. Las piezas se pisan 1 px para que no queden rayas. La entidad `Casa` sólo tiene el colisionador y la luz de la ventana.
 - **Árboles:** salen del editor (esqueleto tipo L-system, hojas en rosetas). Cada uno es una entidad `Arbol`: el tronco es su sprite y cada rama es una decoración colgada, anclada en su base, que se mece (`sway`).
 - **Gente:** de 3500 a más de 15 000 personas LPC con cuerpo de Box2D, según el aparato. Arranca con 6000 en un celu de 8 núcleos (3500 en uno más chico, 10 000 en compu) y durante el primer minuto se ajusta sola. Mira los fps del render y de cada worker. Si sobra, suma de a 10 %; si no da, saca de a 12 %, siempre fuera de cámara. Si sacar gente no mejora nada (el freno es la GPU), la devuelve y deja de tocar. `?gente=8000` en la URL fija la cantidad. Los lugares (~23 000 en las veredas) están en `data/gente.bin` (`node herramientas/hornear_gente.js`). Siguen 6 flowfields estáticos con costos (vereda 10, calle 220), así que cruzan por las sendas y no caminan por la calle. Se separan entre sí y esquivan autos.
@@ -56,6 +56,16 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 
 El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el juego. Eso queda para el paso 4 o para el build final.
 
+## Cómo se arma la ciudad (editor/js/world.js)
+
+- **Grilla continua:** en un mapa chico, una sola grilla (como Flores). En uno grande, zonas de loteos de distintas épocas separadas por rectas, que son avenidas o calles. Las calles siguen derecho de una cuadra a la otra.
+- **Avenidas** rectas cada 4 a 6 cuadras. **Pasajes** de una cuadra, de calle a calle.
+- **La red se limpia como grafo:** esquinas de 3 o 4 calles, ángulos de 35° o más, dos T enfrentadas a menos de 14 m se juntan en un cruce, y las calles que terminan en la nada se estiran hasta la próxima o se sacan.
+- **Villas:** grupos de 2 a 5 manzanas en la zona más pobre, rodeadas de calles comunes (como la 1-11-14). Adentro tienen calles de tierra entre manzanas y pasillos que serpentean y salen a la calle.
+- **Plazas:** una manzana entera cada 5 o 6 cuadras, con senderos de baldosa roja, monumento o fuente, árboles, faroles, bancos y juegos.
+- **Lotes** hasta la mitad de la manzana. En los hondos casi siempre hay algo construido en el fondo.
+- **Cazuelas** de tierra (con borde de ladrillo, de cemento o sin borde) alrededor de los árboles de vereda, a veces con plantas o yuyos.
+
 ## Arte con Gemini (props, plantas, yuyos y piezas de fachada)
 
 Estilo: pixel art duro con contorno de color (el más oscuro de cada material, nunca negro), sombreado de 3 a 5 tonos que tira a violeta en la sombra y a amarillo en la luz, luz desde arriba a la izquierda.
@@ -73,7 +83,6 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
 - Ese atlas (hasta 8192×4096) lleva casas, gente, árboles y autos, y **no puede pasar de 8192 cuadros**. WeedJS guarda una fila por cuadro en una textura de 3 × N, y 8192 es el alto máximo de textura en muchas GPUs y en Chromium headless. Si se pasa, no se dibuja ningún sprite y la consola no muestra error. Hoy tiene 7938: 5799 son piezas de casas y 1190 son de autos. Con la perilla «variedad» del editor en 200 entran unos 8 tipos de casa más. Si un barrio se pasa, bajá la variedad o sacá colores en `herramientas/hornear_autos.js`. `hornear_atlas.js` avisa cuántos cuadros tiene.
-- Los bordes entre loteos (la división de Voronoi) no están cuantizados. Ahí la casa puede quedar hasta 7,5° torcida respecto de la vereda.
 - Sin giro de cámara, porque los sprites están horneados para una sola vista.
 - Las texturas float (`rgba32float`) de las capas worldRect no suben bien en WebGL en esta versión de WeedJS: se suben como bytes con tipo FLOAT. Por eso la tabla de calles va en RGBA8 con punto fijo.
 

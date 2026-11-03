@@ -11,7 +11,8 @@ uniform sampler2D cellB;    // rg = calle 3 (+1), b = vereda (tipo | 16 dañada)
 uniform sampler2D wealth;   // riqueza, celdas de 10 m
 uniform sampler2D noiseT;   // r = ruido a, g = b, b = c, a = granulado
 uniform sampler2D segs;     // 12 texels RGBA8 por calle: 24 valores de 16 bits (punto fijo)
-uniform float uMW, uMH, uK, uSF, uSYN, uGC, uCW, uCH, uWG, uHG;
+uniform sampler2D pits;     // cazuelas en celdas de 2 m: rg = centro en la celda, b = ángulo (/256 vuelta), a = tipo (1 ladrillo, 2 cemento, 3 sin borde) | 4 con pasto
+uniform float uMW, uMH, uK, uSF, uSYN, uGC, uCW, uCH, uWG, uHG, uPW, uPH;
 
 int b8(float v) { return int(v * 255.0 + 0.5); }
 float NA(int x, int y) { return texelFetch(noiseT, ivec2(x & 255, y & 255), 0).r; }
@@ -57,6 +58,24 @@ vec3 tiles(float u, float v, int ix, int iy, int kind, bool dmg) {
   if (kind != 6) { float pu = fract(lu * 3.0), pv = fract(lv * 3.0); if (pu < .12 || pv < .12) f *= .9; else if (pu < .24 || pv < .24) f *= 1.04; }
   if (dmg && h < .3 && abs(lu - lv) < .04) return vec3(110, 98, 76);
   return base * f;
+}
+// cazuela alrededor de un árbol: cuadrado de 1,1 m alineado con la calle. Devuelve el color, o x < 0 si no hay
+vec3 cazuela(float wx, float wy, int ix, int iy) {
+  int gx = int(floor(wx / 2.0)), gy = int(floor(wy / 2.0));
+  for (int x = gx - 1; x <= gx + 1; x++) for (int y = gy - 1; y <= gy + 1; y++) {
+    if (x < 0 || y < 0 || x >= int(uPW) || y >= int(uPH)) continue;
+    vec4 q = texelFetch(pits, ivec2(x, y), 0); int tp = b8(q.a); if (tp == 0) continue;
+    vec2 c = vec2(float(x) * 2.0 + q.r * 2.0, float(y) * 2.0 + q.g * 2.0); float a = q.b * 6.2831853 * 255.0 / 256.0;
+    vec2 d = vec2(wx, wy) - c; float cs = cos(a), sn = sin(a), lx = d.x * cs + d.y * sn, ly = -d.x * sn + d.y * cs;
+    if (abs(lx) >= .55 || abs(ly) >= .55) continue;
+    float edge = .55 - max(abs(lx), abs(ly)); int t = tp & 3;
+    if (edge < .09 && t == 1) return vec3(150, 74, 52) * (.9 + .15 * NG(ix, iy));
+    if (edge < .09 && t == 2) return vec3(172, 170, 162) * (.92 + .1 * NG(ix, iy));
+    if (edge < .145) return dirt(ix, iy) * .72;
+    if ((tp & 4) != 0 && NB(ix * 2, iy * 2) > .5) return grass(ix, iy, .6);
+    return dirt(ix, iy);
+  }
+  return vec3(-1.0);
 }
 float wealthAt(float x, float y) { return texelFetch(wealth, ivec2(clamp(int(x / 10.0), 0, int(uWG) - 1), clamp(int(y / 10.0), 0, int(uHG) - 1)), 0).r; }
 
@@ -120,6 +139,7 @@ vec3 pixel(float wx, float wy) {
     Seg s = loadSeg(wid); float dd = wd - s.hw;
     if (s.mat == 2) { if (dd < .6) return grass(ix, iy, .7); }
     else { if (dd < .16) return vec3(222, 218, 208); if (dd < .2) return vec3(168, 164, 156); }
+    vec3 cz = cazuela(wx, wy, ix, iy); if (cz.x >= 0.0) return cz;
     bool cant = s.cant && dd < 1.0 && !nearCross(wid, wt, 1.6);
     if (cant) return grass(ix, iy, .2);
     int vk = b8(B.b); int kind = vk & 15; bool dmg = (vk & 16) != 0;

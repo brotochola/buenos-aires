@@ -4,111 +4,122 @@
 const World = (() => {
   const { rng, vnoise } = R3;
   const CLS = { ave: 4, calle: 3, pasaje: 2, pasillo: 1 };
+  // los 48 rumbos de pantalla de los autos (cada 7,5°) pasados a ángulos del mundo (proyección oblicua: x + K·y, −SYN·y)
+  const TAU = 2 * Math.PI, ANG = (() => { const o = []; for (let k = 0; k < 48; k++) { const a = k * Math.PI / 24, dy = -Math.sin(a) / R3.SYN, dx = Math.cos(a) + R3.K * Math.sin(a) / R3.SYN;
+    o.push(((Math.atan2(dy, dx) % TAU) + TAU) % TAU); } return o.sort((a, b) => a - b); })();
+  const angDist = (a, b) => Math.abs((((a - b) % TAU) + 1.5 * TAU) % TAU - Math.PI);
+  const angIdx = (t) => { let b = 0, bd = 9; for (let i = 0; i < 48; i++) { const d = angDist(t, ANG[i]); if (d < bd) { bd = d; b = i; } } return b; };
+  const snapAng = (t) => ANG[angIdx(t)];
+  const PAIRS = []; for (let i = 0; i < 48; i++) { const j = angIdx(ANG[i] + Math.PI / 2); if (angDist(ANG[j], ANG[i] + Math.PI / 2) < 1.6 * Math.PI / 180) PAIRS.push([ANG[i], ANG[j]]); }
 
   function generate(seed) {
     const C = CFG.v, MW = C.mapW, MH = C.mapH, r = rng(seed);
-    const QA = C.cuantizar > 0 ? C.cuantizar * Math.PI / 180 : 0, snapA = (a) => QA ? Math.round(a / QA) * QA : a;
     // ---------- riqueza (0 = pobre, 1 = acomodado)
     const WG = Math.ceil(MW / 10), HG = Math.ceil(MH / 10), n1 = vnoise(WG, HG, Math.max(2, Math.round(C.zonaRiqueza / 10)), r), n2 = vnoise(WG, HG, 6, r);
     const wealthAt = (x, y) => { const gx = Math.max(0, Math.min(WG - 1, (x / 10) | 0)), gy = Math.max(0, Math.min(HG - 1, (y / 10) | 0)), k = gy * WG + gx;
       return Math.max(0, Math.min(1, (n1[k] - .5) * C.contraste + (n2[k] - .5) * .5 + .5 + C.sesgo)); };
 
-    // ---------- loteos (Voronoi) agrupados en familias de grilla
-    // Cada familia es una cuadrícula (ángulo, largo y ancho de manzana, origen). Los loteos de una misma familia comparten la
-    // cuadrícula, así las calles siguen derecho de un loteo al otro, como en Buenos Aires. Entre familias distintas el borde es
-    // una calle o una avenida, donde las grillas topan en T (como en el conurbano, entre loteos de distintas épocas).
-    const seeds = [];
-    const minSep = Math.sqrt(MW * MH / C.loteos) * .7;
-    for (let i = 0; i < C.loteos; i++) { let p, ok, tries = 0;
-      do { p = [r.uni(30, MW - 30), r.uni(30, MH - 30)]; ok = seeds.every(s => Math.hypot(s.p[0] - p[0], s.p[1] - p[1]) > minSep); } while (!ok && ++tries < 60);
-      seeds.push({ p }); }
-    // familias: en un mapa chico (unas 5 × 3 cuadras) una sola grilla, como Flores; en uno grande, loteos de distintas épocas
+    // ---------- zonas y grillas
+    // Las calles sólo van en los 48 rumbos de pantalla que tienen los autos (cada 7,5°), pasados al mundo (ANG). Cada grilla usa
+    // un par de esos rumbos que queda casi en escuadra en el mundo (PAIRS, error < 1,6°), así los autos van derechos en las dos
+    // direcciones y las casas, que se hornean en esos mismos rumbos, quedan paralelas a su calle.
+    // En un mapa chico hay una sola grilla (como Flores); en uno grande, zonas de loteos de distintas épocas separadas por rectas
+    // (también en esos rumbos), que son avenidas o calles.
     const dz = C.desorden * Math.PI / 180, nF = Math.max(1, Math.min(4, Math.round(MW * MH * (C.loteos / 15) / 200000)));
-    const fams = [], th0 = snapA(r.uni(-dz, dz));
-    for (let f = 0; f < nF; f++) {
-      // centros de familia bien separados (el más lejano de los ya elegidos)
-      let best = null, bd = -1; for (const s of seeds) { const d = fams.length ? Math.min(...fams.map(q => Math.hypot(q.c[0] - s.p[0], q.c[1] - s.p[1]))) : r(); if (d > bd) { bd = d; best = s.p; } }
-      const theta = f === 0 ? th0 : snapA(th0 + (r() < C.diagonal ? Math.PI / 4 : r.pick([1, -1]) * r.uni(.18, .55)));
-      const w = wealthAt(best[0], best[1]), cuadrada = w > .5 ? r() < .7 : r() < .3;       // cuadras cuadradas (CABA) o alargadas (conurbano)
-      const bA = C.manzana * (cuadrada ? r.uni(96, 112) : r.uni(105, 135)), bB = C.manzana * (cuadrada ? bA / C.manzana * r.uni(.94, 1.04) : r.uni(55, 72));
-      fams.push({ i: f, c: best, theta, bA, bB, oA: r.uni(0, bA), oB: r.uni(0, bB), u: [Math.cos(theta), Math.sin(theta)], v: [-Math.sin(theta), Math.cos(theta)] });
+    const regions = [{ poly: [[0, 0], [MW, 0], [MW, MH], [0, MH]] }], cortes = [];
+    while (regions.length < nF) {
+      regions.sort((a, b) => polyArea(b.poly) - polyArea(a.poly)); const R = regions.shift();
+      const xs = R.poly.map(q => q[0]), ys = R.poly.map(q => q[1]), bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+      const p = [(Math.max(...xs) + Math.min(...xs)) / 2 + r.uni(-.15, .15) * bw, (Math.max(...ys) + Math.min(...ys)) / 2 + r.uni(-.15, .15) * bh];
+      const ang = snapAng((bw > bh ? Math.PI / 2 : 0) + r.uni(-.45, .45)), d = [Math.cos(ang), Math.sin(ang)], n = [-d[1], d[0]];
+      const A = clip(R.poly, q => (q[0] - p[0]) * n[0] + (q[1] - p[1]) * n[1]), Bp = clip(R.poly, q => -((q[0] - p[0]) * n[0] + (q[1] - p[1]) * n[1]));
+      const s = clipLine(R.poly, p, d); if (!s || A.length < 3 || Bp.length < 3) { regions.push(R); break; }
+      cortes.push(s); regions.push({ poly: A }, { poly: Bp });
     }
-    let villas = 0;
-    const districts = seeds.map((s, i) => {
-      let poly = [[0, 0], [MW, 0], [MW, MH], [0, MH]];
-      for (const o of seeds) { if (o === s) continue;
-        const m = [(s.p[0] + o.p[0]) / 2, (s.p[1] + o.p[1]) / 2], n = [o.p[0] - s.p[0], o.p[1] - s.p[1]];
-        poly = clip(poly, (q) => (q[0] - m[0]) * n[0] + (q[1] - m[1]) * n[1]); }
-      const w = wealthAt(s.p[0], s.p[1]);
-      let type = "loteo";
-      if (w < C.umbralVilla && villas < C.villasMax && r() < .75) { type = "villa"; villas++; }
-      const fam = fams.reduce((a, f) => Math.hypot(f.c[0] - s.p[0], f.c[1] - s.p[1]) < Math.hypot(a.c[0] - s.p[0], a.c[1] - s.p[1]) ? f : a, fams[0]);
-      return { i, p: s.p, poly, w, type, fam, theta: fam.theta, bA: fam.bA, bB: fam.bB };
+    const fams = regions.map((R, i) => {
+      const want = r.uni(-dz, dz) + (r() < C.diagonal ? Math.PI / 4 : 0); let best = PAIRS[0], bd = 9;
+      for (const [a, b] of PAIRS) { const dd = Math.abs((((a - want) % Math.PI) + 1.5 * Math.PI) % Math.PI - Math.PI / 2); if (dd < bd) { bd = dd; best = [a, b]; } }
+      const c = centroid(R.poly), w = wealthAt(c[0], c[1]), cuadrada = w > .5 ? r() < .7 : r() < .3;       // cuadras cuadradas (CABA) o alargadas (conurbano)
+      const bA = C.manzana * (cuadrada ? r.uni(96, 112) : r.uni(105, 135)), bB = C.manzana * (cuadrada ? bA / C.manzana * r.uni(.94, 1.04) : r.uni(55, 72));
+      const u = [Math.cos(best[0]), Math.sin(best[0])], v = [Math.cos(best[1]), Math.sin(best[1])];
+      const f = { i, c, poly: R.poly, w, theta: best[0], thetaV: best[1], bA, bB, oA: r.uni(0, bA), oB: r.uni(0, bB), u, v, nu: [-u[1], u[0]], nv: [-v[1], v[0]] };
+      // esquina de la manzana: cruce de la línea V número i (q·nv = oA + i·bA) con la línea U número j (q·nu = oB + j·bB)
+      const det = f.nu[0] * f.nv[1] - f.nu[1] * f.nv[0];
+      f.corner = (i, j) => { const a = f.oB + j * f.bB, b = f.oA + i * f.bA; return [(a * f.nv[1] - b * f.nu[1]) / det, (b * f.nu[0] - a * f.nv[0]) / det]; };
+      const pv = R.poly.map(q => q[0] * f.nv[0] + q[1] * f.nv[1]), pu = R.poly.map(q => q[0] * f.nu[0] + q[1] * f.nu[1]);
+      f.i0 = Math.floor((Math.min(...pv) - f.oA) / bA) - 1; f.i1 = Math.ceil((Math.max(...pv) - f.oA) / bA) + 1;
+      f.j0 = Math.floor((Math.min(...pu) - f.oB) / bB) - 1; f.j1 = Math.ceil((Math.max(...pu) - f.oB) / bB) + 1;
+      f.block = (i, j) => { const q = [f.corner(i, j), f.corner(i + 1, j), f.corner(i + 1, j + 1), f.corner(i, j + 1)]; return polyArea(q) < 0 ? q.reverse() : q; };
+      return f;
     });
+    const big = fams.reduce((a, f) => polyArea(f.poly) > polyArea(a.poly) ? f : a, fams[0]).i;
 
-    // ---------- calles: primero en crudo (líneas), después se limpian como red (esquinas de 3 o 4, sin callejones)
+    // ---------- villas: grupos de manzanas enteras en las zonas más pobres, rodeadas de calles comunes (como la 1-11-14)
+    const villaOf = new Map(), villaBlocks = [];
+    { const cand = [];
+      for (const f of fams) for (let i = f.i0; i < f.i1; i++) for (let j = f.j0; j < f.j1; j++) {
+        const q = f.block(i, j), c = centroid(q);
+        if (q.some(p => p[0] < 6 || p[1] < 6 || p[0] > MW - 6 || p[1] > MH - 6) || q.some(p => inside(f.poly, p) < 3)) continue;
+        cand.push({ f, i, j, q, c, w: wealthAt(c[0], c[1]) }); }
+      const key = (b) => b.f.i + ":" + b.i + ":" + b.j, byKey = new Map(cand.map(b => [key(b), b]));
+      const seedsV = cand.filter(b => b.w < C.umbralVilla).sort((a, b) => a.w - b.w);
+      let nV = 0;
+      for (const s of seedsV) {
+        if (nV >= C.villasMax) break; if (villaOf.has(key(s))) continue;
+        if ([...villaOf.keys()].some(k => { const b = byKey.get(k); return Math.hypot(b.c[0] - s.c[0], b.c[1] - s.c[1]) < 2.5 * (s.f.bA + s.f.bB); })) continue;
+        const target = Math.max(2, Math.round(r.uni(2, 4.5) * Math.sqrt(MW * MH / 163000))), grupo = [s]; villaOf.set(key(s), nV);
+        for (let g = 0; g < grupo.length && grupo.length < target; g++) { const b = grupo[g];
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(() => r() - .5)) { const o = byKey.get(b.f.i + ":" + (b.i + di) + ":" + (b.j + dj));
+            if (o && !villaOf.has(key(o)) && o.w < C.umbralVilla + .14 && grupo.length < target) { villaOf.set(key(o), nV); grupo.push(o); } } }
+        nV++;
+      }
+      for (const [k, id] of villaOf) { const b = byKey.get(k); villaBlocks.push({ i: villaBlocks.length, p: b.c, poly: b.q, w: b.w, type: "villa", villa: id, theta: b.f.theta, bA: b.f.bA, bB: b.f.bB, fam: b.f }); }
+    }
+    const villaAt = (x, y) => villaBlocks.some(b => inside(b.poly, [x, y]) > 0);
+    const villaKey = (f, i, j) => villaOf.has(f.i + ":" + i + ":" + j) ? villaOf.get(f.i + ":" + i + ":" + j) : -1;
+    // zonas (para el editor y los loteos): primero las manzanas de villa, después las zonas de cada grilla
+    const districts = villaBlocks.concat(fams.map(f => ({ i: villaBlocks.length + f.i, p: f.c, poly: f.poly, w: f.w, type: "loteo", fam: f, theta: f.theta, bA: f.bA, bB: f.bB })));
+
+    // ---------- calles: primero en crudo, cuadra por cuadra; después se limpian como red (esquinas de 3 o 4, sin callejones)
     const raw = [];
     const add = (a, b, type, d, extra = {}) => { if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 4) raw.push({ a, b, type, d, ...extra }); };
-    // bordes entre loteos: sólo donde cambia la familia o empieza una villa (si no, la grilla sigue de largo)
-    const seen = new Set(), owner = new Map();
-    for (const d of districts) for (let i = 0; i < d.poly.length; i++) {
-      const a = d.poly[i], b = d.poly[(i + 1) % d.poly.length], key = [a, b].map(q => q.map(v => Math.round(v)).join(",")).sort().join("|");
-      if (!owner.has(key)) owner.set(key, []); owner.get(key).push(d); }
-    for (const [key, ds] of owner) {
-      if (ds.length < 2 || seen.has(key)) continue; seen.add(key);
-      const [d1, d2] = ds; if (d1.fam === d2.fam && d1.type !== "villa" && d2.type !== "villa") continue;
-      const [pa, pb] = key.split("|").map(t => t.split(",").map(Number)), len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
-      add(pa, pb, len > 150 && r() < .55 ? "ave" : "calle", d1.type === "villa" ? d1 : d2, { ancha: r() < .3, borde: true });
-    }
-    // grillas: las mismas líneas para todos los loteos de una familia; avenidas cada 4 a 6 cuadras en la familia más grande
-    const famSize = fams.map(f => districts.filter(d => d.fam === f).length), big = famSize.indexOf(Math.max(...famSize));
-    const aveEvery = [r.int(4, 6), r.int(4, 6)], aveOff = [r.int(0, 5), r.int(0, 5)];
-    let nAve = 0;
-    for (const d of districts) {
-      if (d.type === "villa") continue;
-      const f = d.fam, xs = d.poly.map(q => q[0] * f.u[0] + q[1] * f.u[1]), ys = d.poly.map(q => q[0] * f.v[0] + q[1] * f.v[1]);
-      // líneas paralelas a u (en v = oB + k·bB) y paralelas a v (en u = oA + k·bA)
-      for (const [axis, dirv, other, step, o0, lo, hi] of [[0, f.u, f.v, f.bB, f.oB, Math.min(...ys), Math.max(...ys)], [1, f.v, f.u, f.bA, f.oA, Math.min(...xs), Math.max(...xs)]]) {
-        for (let k = Math.ceil((lo - o0) / step); o0 + k * step < hi; k++) {
-          const off = o0 + k * step, c = [other[0] * off, other[1] * off], seg = clipLine(d.poly, c, dirv);
-          if (!seg) continue;
-          const ave = f.i === big && nAve < 99 && C.avenidas > 0 && ((k - aveOff[axis]) % aveEvery[axis] + aveEvery[axis]) % aveEvery[axis] === 0 && (axis === 0 || C.avenidas > 1);
-          add(seg[0], seg[1], ave ? "ave" : "calle", d, { linea: f.i + ":" + axis + ":" + k });
-          // pasaje a mitad de manzana, de una esquina a la otra (una cuadra)
-          if (r() < C.pasajes * (d.w < .4 ? 1.1 : .5) * .35) {
-            const off2 = off + step / 2, c2 = [other[0] * off2, other[1] * off2], s2 = clipLine(d.poly, c2, dirv);
-            if (s2) { const st2 = axis === 0 ? f.bA : f.bB, oo = axis === 0 ? f.oA : f.oB, t0 = s2[0][0] * dirv[0] + s2[0][1] * dirv[1], t1 = s2[1][0] * dirv[0] + s2[1][1] * dirv[1];
-              const j = Math.floor((t0 + r.uni(0, Math.max(0, t1 - t0 - st2)) - oo) / st2) + 1, a0 = Math.max(t0, oo + j * st2), a1 = Math.min(t1, oo + (j + 1) * st2);
-              if (a1 - a0 > 30) add([other[0] * off2 + dirv[0] * a0, other[1] * off2 + dirv[1] * a0], [other[0] * off2 + dirv[0] * a1, other[1] * off2 + dirv[1] * a1], "pasaje", d); }
-          }
-        }
+    for (const s of cortes) add(s[0], s[1], Math.hypot(s[1][0] - s[0][0], s[1][1] - s[0][1]) > 150 ? "ave" : "calle", null, { ancha: true, borde: true });
+    const aveEvery = [r.int(4, 6), r.int(4, 6)], aveOff = [r.int(0, 5), r.int(0, 5)], esAve = (f, axis, k) => f.i === big && C.avenidas > axis &&
+      ((k - aveOff[axis]) % aveEvery[axis] + aveEvery[axis]) % aveEvery[axis] === 0;
+    for (const f of fams) {
+      const piece = (a, b, type, extra) => { const c = clipSeg(f.poly, a, b); if (c) add(c[0], c[1], type, f, extra); };
+      // cuadras de las líneas U (j fijo, entre las líneas V i e i+1) y de las líneas V (i fijo, entre j y j+1)
+      for (let j = f.j0; j <= f.j1; j++) for (let i = f.i0; i < f.i1; i++) {
+        const va = villaKey(f, i, j - 1), vb = villaKey(f, i, j), adentro = va >= 0 && va === vb;
+        piece(f.corner(i, j), f.corner(i + 1, j), adentro ? "pasaje" : esAve(f, 0, j) ? "ave" : "calle", adentro ? { tierra: true } : {}); }
+      for (let i = f.i0; i <= f.i1; i++) for (let j = f.j0; j < f.j1; j++) {
+        const va = villaKey(f, i - 1, j), vb = villaKey(f, i, j), adentro = va >= 0 && va === vb;
+        piece(f.corner(i, j), f.corner(i, j + 1), adentro ? "pasaje" : esAve(f, 1, i) ? "ave" : "calle", adentro ? { tierra: true } : {}); }
+      // pasajes a mitad de manzana, de una calle a la de enfrente (más en los barrios pobres)
+      for (let i = f.i0; i < f.i1; i++) for (let j = f.j0; j < f.j1; j++) {
+        if (villaKey(f, i, j) >= 0) continue; const c = centroid(f.block(i, j)), w = wealthAt(c[0], c[1]);
+        if (r() > C.pasajes * (w < .4 ? 1.1 : .5) * .35) continue;
+        const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        if (r() < .5) piece(mid(f.corner(i, j), f.corner(i, j + 1)), mid(f.corner(i + 1, j), f.corner(i + 1, j + 1)), "pasaje", {});
+        else piece(mid(f.corner(i, j), f.corner(i + 1, j)), mid(f.corner(i, j + 1), f.corner(i + 1, j + 1)), "pasaje", {});
       }
     }
-    // villas: pasillos como dos familias de líneas que serpentean y se cruzan; cada una termina en el borde de la villa,
-    // que es una calle, así no quedan pasillos ciegos. Y una calle de tierra que la cruza.
-    for (const d of districts) {
-      if (d.type !== "villa") continue;
+    // villas: en cada manzana, pasillos en dos familias de líneas que serpentean y se cruzan; terminan en la calle de alrededor
+    for (const d of villaBlocks) {
       const a0 = d.theta + r.uni(-.3, .3);
       for (const ang of [a0, a0 + Math.PI / 2 + r.uni(-.25, .25)]) {
         const u = [Math.cos(ang), Math.sin(ang)], v = [-u[1], u[0]], pu = d.poly.map(q => q[0] * u[0] + q[1] * u[1]), pv = d.poly.map(q => q[0] * v[0] + q[1] * v[1]);
         const u0 = Math.min(...pu) - 5, u1 = Math.max(...pu) + 5;
         for (let off = Math.min(...pv) + r.uni(6, 14); off < Math.max(...pv) - 5; off += r.uni(13, 22)) {
-          // polilínea que serpentea: tramos de 8 a 13 m con un desvío lateral que se acumula poco
           let prev = null, prevIn = false, lat = 0;
           for (let t = u0; t <= u1 + 1; t += r.uni(8, 13)) {
             lat = Math.max(-5, Math.min(5, lat + r.uni(-2.2, 2.2)));
             const q = [u[0] * t + v[0] * (off + lat), u[1] * t + v[1] * (off + lat)], qIn = inside(d.poly, q) > 0;
-            if (prev && (qIn || prevIn)) {
-              if (qIn && prevIn) add(prev, q, "pasillo", d);
-              else { const s2 = clipLine(d.poly, prev, [(q[0] - prev[0]), (q[1] - prev[1])].map((c, _, z) => c / Math.hypot(z[0], z[1])));
-                if (s2) { const L = Math.hypot(q[0] - prev[0], q[1] - prev[1]), A = qIn ? s2[0] : prev, B = qIn ? q : s2[1];
-                  if (Math.hypot(B[0] - A[0], B[1] - A[1]) <= L + .5) add(A, B, "pasillo", d); } }
-            }
+            if (prev && (qIn || prevIn)) { const c = clipSeg(d.poly, prev, q); if (c) add(c[0], c[1], "pasillo", d); }
             prev = q; prevIn = qIn;
           }
         }
       }
-      const s2 = clipLine(d.poly, d.p, [Math.cos(d.theta), Math.sin(d.theta)]); if (s2) add(s2[0], s2[1], "calle", d, { tierra: true });
     }
 
     // ---------- limpieza de la red: grafo plano, reglas de Buenos Aires, y vuelta a segmentos rectos
@@ -204,25 +215,21 @@ const World = (() => {
     const plazas = [];
     if (C.plazas !== 0) {
       const f = fams[big], step = r.int(5, 6), pi = r.int(0, step - 1), pj = r.int(0, step - 1);
-      const P = (uu, vv) => [f.u[0] * uu + f.v[0] * vv, f.u[1] * uu + f.v[1] * vv];
-      const cu = [[0, 0], [MW, 0], [MW, MH], [0, MH]].map(q => q[0] * f.u[0] + q[1] * f.u[1]), cv = [[0, 0], [MW, 0], [MW, MH], [0, MH]].map(q => q[0] * f.v[0] + q[1] * f.v[1]);
       const cands = [];
-      for (let i = Math.floor((Math.min(...cu) - f.oA) / f.bA); f.oA + i * f.bA < Math.max(...cu); i++)
-        for (let j = Math.floor((Math.min(...cv) - f.oB) / f.bB); f.oB + j * f.bB < Math.max(...cv); j++) {
-          const u0 = f.oA + i * f.bA, v0 = f.oB + j * f.bB, q = [P(u0, v0), P(u0 + f.bA, v0), P(u0 + f.bA, v0 + f.bB), P(u0, v0 + f.bB)], c = P(u0 + f.bA / 2, v0 + f.bB / 2);
-          if (q.some(p => p[0] < 4 || p[1] < 4 || p[0] > MW - 4 || p[1] > MH - 4)) continue;
-          const d = districts.find(d => inside(d.poly, c) > 0); if (!d || d.type === "villa" || d.fam !== f) continue;
-          // las cuatro cuadras que la rodean tienen que ser calles
-          const lados = [[.5, 0], [1, .5], [.5, 1], [0, .5]].filter(([a, b]) => { const m = P(u0 + f.bA * a, v0 + f.bB * b), k = classify(m[0], m[1]); return k && k.k === "road"; }).length;
-          if (lados < 4) continue;
-          cands.push({ i, j, q, c, d, u0, v0, en: ((i - pi) % step + step) % step === 0 && ((j - pj) % step + step) % step === 0 });
-        }
+      for (let i = f.i0; i < f.i1; i++) for (let j = f.j0; j < f.j1; j++) {
+        const q = f.block(i, j), c = centroid(q);
+        if (q.some(p => p[0] < 4 || p[1] < 4 || p[0] > MW - 4 || p[1] > MH - 4) || q.some(p => inside(f.poly, p) < 1) || villaKey(f, i, j) >= 0) continue;
+        // las cuatro cuadras que la rodean tienen que ser calles
+        const lados = [[0, 1], [1, 2], [2, 3], [3, 0]].filter(([a, b]) => { const m = [(q[a][0] + q[b][0]) / 2, (q[a][1] + q[b][1]) / 2], k = classify(m[0], m[1]); return k && k.k === "road"; }).length;
+        if (lados < 4) continue;
+        cands.push({ i, j, q, c, en: ((i - pi) % step + step) % step === 0 && ((j - pj) % step + step) % step === 0 });
+      }
       let elegidas = cands.filter(c => c.en);
       if (!elegidas.length && cands.length) elegidas = [cands.reduce((a, b) => Math.hypot(b.c[0] - MW / 2, b.c[1] - MH / 2) < Math.hypot(a.c[0] - MW / 2, a.c[1] - MH / 2) ? b : a)];
       for (const pz of elegidas) {
         const id = lots.length, w = wealthAt(pz.c[0], pz.c[1]);
         const lot = { id, q: pz.q, o: pz.q[0], ux: f.u, nOut: f.v, fw: f.bA, ld: f.bB, seg: null, side: 1, w, kind: "plaza", phi: f.theta, seed: (r() * 1e9) | 0, vereda: "vain", patio: "pasto",
-          plaza: { c: pz.c, u: f.u, v: f.v, bA: f.bA, bB: f.bB, u0: pz.u0, v0: pz.v0 } };
+          plaza: { c: pz.c, u: f.u, v: f.v, bA: f.bA, bB: f.bB } };
         lots.push(lot); plazas.push(lot);
         // el pasto en toda la manzana (menos las veredas de alrededor); después los senderos encima
         for (let y = Math.floor(Math.min(...pz.q.map(p => p[1])) * LR); y <= Math.ceil(Math.max(...pz.q.map(p => p[1])) * LR); y++)
@@ -244,10 +251,10 @@ const World = (() => {
     for (const s of order) {
       for (const side of [1, -1]) {
         const nOut = [s.n[0] * side, s.n[1] * side], off = s.hw + s.sw + .05;
-        const villa = s.type === "pasillo" || (s.district && s.district.type === "villa");
-        let t = villa ? r.uni(0, 2) : r.uni(1, 4);
+        let t = s.type === "pasillo" ? r.uni(0, 2) : r.uni(1, 4);
         while (t < s.len - 3) {
           const p = [s.a[0] + s.dir[0] * t + nOut[0] * off, s.a[1] + s.dir[1] * t + nOut[1] * off];
+          const villa = s.type === "pasillo" || villaAt(p[0] + nOut[0] * 3, p[1] + nOut[1] * 3);
           const w = wealthAt(p[0], p[1]);
           const F = C.frente / 8.66, fw = villa ? r.uni(3.6, 6) : F * (s.type === "ave" ? r.uni(7, 10.5) : w < .3 ? r.uni(5.5, 8.5) : w < .6 ? r.uni(7, 9.5) : r.uni(8.5, 13));
           if (t + fw > s.len) break;
@@ -258,7 +265,12 @@ const World = (() => {
           const uxr = [ux0[0] * Math.cos(rot) - ux0[1] * Math.sin(rot), ux0[0] * Math.sin(rot) + ux0[1] * Math.cos(rot)];
           const nOutR = [-uxr[1], uxr[0]];
           let placed = false;
-          for (const ld of villa ? [r.uni(6, 9), 5, 4] : [r.uni(C.fondo * .6, C.fondo), C.fondo * .52, C.fondo * .4, 8, 6]) {
+          // fondo del lote: hasta la mitad de la manzana (los lotes de una calle y los de la de atrás se tocan en el medio, como en
+          // Buenos Aires), medido buscando la calle de enfrente; si no hay, el fondo de siempre
+          let half = 0; if (!villa) { for (let dd = 4; dd < 110; dd += 1.5) { const qx = p[0] + nOutR[0] * dd, qy = p[1] + nOutR[1] * dd;
+              if (qx < 0 || qy < 0 || qx > MW || qy > MH) { half = dd; break; } const k = classify(qx, qy); if (k) { half = dd / 2 - .3; break; } } }
+          const cands = villa ? [r.uni(6, 9), 5, 4] : half > 10 ? [Math.min(55, half) * C.fondo / 27, Math.min(55, half) * .75 * C.fondo / 27, C.fondo * .52, 8, 6] : [r.uni(C.fondo * .6, C.fondo), C.fondo * .52, C.fondo * .4, 8, 6];
+          for (const ld of cands) {
             const q = quadPts(o, uxr, nOutR, fw, ld);
             if (quadFree(q)) {
               const id = lots.length;
@@ -285,8 +297,7 @@ const World = (() => {
         patio: kind === "baldio" ? "yuyo" : w < .3 ? pickW(r, [["tierra", 4], ["pasto", 3], ["cem", 1.5]]) : pickW(r, [["pasto", 5], ["cem", 2.5], ["roja", 1.5]]) };
     }
     // relleno denso de villas: casillas pegadas mirando al pasillo/calle más cercano
-    for (const d of districts) {
-      if (d.type !== "villa") continue;
+    for (const d of villaBlocks) {
       const xs = d.poly.map(p => p[0]), ys = d.poly.map(p => p[1]);
       for (let y = Math.min(...ys); y < Math.max(...ys); y += 3.2) for (let x = Math.min(...xs); x < Math.max(...xs); x += 3.2) {
         const p = [x + r.uni(-1, 1), y + r.uni(-1, 1)];
@@ -306,7 +317,7 @@ const World = (() => {
       }
     }
     const lotAt = (x, y) => { const gx = (x * LR) | 0, gy = (y * LR) | 0; if (gx < 0 || gy < 0 || gx >= LW || gy >= LH) return null; const i = lotGrid[gy * LW + gx]; return i >= 0 ? lots[i] : null; };
-    return { MW, MH, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas };
+    return { MW, MH, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt };
   }
 
   // ---------- red de calles como grafo, con las reglas de Buenos Aires y el conurbano:
@@ -361,8 +372,10 @@ const World = (() => {
       let ch = 0;
       // (c) esquinas pegadas: se juntan si queda una esquina de 4 como mucho; si no, se saca la calle menor
       for (let id = 0; id < edges.length; id++) { const e = edges[id]; if (!e.ok) continue; const [, , l] = vec(e.n0, e);
-        if (l >= 14 || nodes[e.n0].e.size < 3 || nodes[e.n1].e.size < 3) continue;
-        const arms = [...nodes[e.n0].e, ...nodes[e.n1].e].filter(x => x !== id);
+        // los pasillos de las villas no cuentan: pueden llegar a la calle tan seguido como quieran
+        const calles = (n) => [...nodes[n].e].filter(x => edges[x].type !== "pasillo").length;
+        if (l >= 14 || e.type === "pasillo" || calles(e.n0) < 3 || calles(e.n1) < 3) continue;
+        const arms = [...nodes[e.n0].e, ...nodes[e.n1].e].filter(x => x !== id && edges[x].type !== "pasillo");
         // sólo cuando la calle corta sigue derecho en las dos esquinas (dos T sobre la misma calle); si no (una esquina de polígono), se deja
         const [ux0, uy0] = vec(e.n0, e), stem = (n) => [...nodes[n].e].filter(x => x !== id && Math.abs(vec(n, edges[x])[0] * ux0 + vec(n, edges[x])[1] * uy0) <= .94);
         const sigue = (n) => [...nodes[n].e].some(x => x !== id && Math.abs(vec(n, edges[x])[0] * ux0 + vec(n, edges[x])[1] * uy0) > .97);
@@ -447,6 +460,14 @@ const World = (() => {
   function segInter(s, o) { const d = s.dir[0] * o.dir[1] - s.dir[1] * o.dir[0]; if (Math.abs(d) < 1e-6) return null;
     const ax = o.a[0] - s.a[0], ay = o.a[1] - s.a[1], t = (ax * o.dir[1] - ay * o.dir[0]) / d, u = (ax * s.dir[1] - ay * s.dir[0]) / d;
     if (t < -1 || t > s.len + 1 || u < -1 || u > o.len + 1) return null; return [s.a[0] + s.dir[0] * t, s.a[1] + s.dir[1] * t]; }
+  function polyArea(q) { let a = 0; for (let i = 0; i < q.length; i++) { const p = q[i], n = q[(i + 1) % q.length]; a += p[0] * n[1] - n[0] * p[1]; } return a / 2; }
+  function centroid(q) { let x = 0, y = 0; for (const p of q) { x += p[0]; y += p[1]; } return [x / q.length, y / q.length]; }
+  // recorta el segmento a–b al polígono convexo (mismo sentido que el mapa); null si queda afuera o muy corto
+  function clipSeg(poly, a, b) { const d = [b[0] - a[0], b[1] - a[1]]; let t0 = 0, t1 = 1;
+    for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length], n = [q[1] - p[1], -(q[0] - p[0])];
+      const num = (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1], den = d[0] * n[0] + d[1] * n[1];
+      if (Math.abs(den) < 1e-12) { if (num < 0) return null; continue; } const t = num / den; if (den < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t); }
+    if ((t1 - t0) * Math.hypot(d[0], d[1]) < 1) return null; return [[a[0] + d[0] * t0, a[1] + d[1] * t0], [a[0] + d[0] * t1, a[1] + d[1] * t1]]; }
   function inQuad(q, x, y) { let s = 0; for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4], c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]); if (c > 0) s |= 1; else if (c < 0) s |= 2; } return s !== 3; }
-  return { generate, segDist, pickW };
+  return { generate, segDist, pickW, ANG, angIdx, snapAng };
 })();

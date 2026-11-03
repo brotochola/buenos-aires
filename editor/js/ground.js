@@ -54,6 +54,21 @@ const Ground = (() => {
     set(b0 * f, b1 * f, b2 * f);
   }
 
+  // cazuela: cuadrado de 1,1 m alineado con la calle; borde de ladrillo (1), de cemento (2) o sin borde (3); tierra con algo de pasto
+  const PIT = .55, BORDE = .09;
+  function cazuela(W, wx, wy, ix, iy) {
+    const gx = Math.floor(wx / 2), gy = Math.floor(wy / 2);
+    for (let x = gx - 1; x <= gx + 1; x++) for (let y = gy - 1; y <= gy + 1; y++) { const L = W.pitGrid.get(x + "," + y); if (!L) continue;
+      for (const q of L) { const dx = wx - q.x, dy = wy - q.y, c = Math.cos(q.ang), s = Math.sin(q.ang), lx = dx * c + dy * s, ly = -dx * s + dy * c;
+        if (Math.abs(lx) >= PIT || Math.abs(ly) >= PIT) continue;
+        const edge = PIT - Math.max(Math.abs(lx), Math.abs(ly));
+        if (edge < BORDE && q.tipo === 1) { const f = .9 + .15 * S(N.g, ix, iy); return set(150 * f, 74 * f, 52 * f), true; }
+        if (edge < BORDE && q.tipo === 2) { const f = .92 + .1 * S(N.g, ix, iy); return set(172 * f, 170 * f, 162 * f), true; }
+        if (edge < BORDE * 1.6) { dirt(ix, iy); mulc(.72); return true; }               // la tierra baja un poco junto al borde
+        if (q.pasto && S(N.b, ix * 2, iy * 2) > .5) grass(ix, iy, .6); else dirt(ix, iy);
+        return true; } }
+    return false;
+  }
   const cl = { k: 0, s: null, d: 0, t: 0, ds: 0 };
   function pixel(W, wx, wy) {
     if (wx < 0 || wy < 0 || wx > W.MW || wy > W.MH) return set(40, 46, 36);
@@ -98,6 +113,7 @@ const Ground = (() => {
       const s = c.s, dd = c.d - s.hw, sgn = c.ds >= 0 ? 1 : -1;
       if (s.mat === "tierra") { if (dd < .6) return grass(ix, iy, .7); }
       else { if (dd < .16) return set(222, 218, 208); if (dd < .2) return set(168, 164, 156); }
+      if (W.pitGrid && cazuela(W, wx, wy, ix, iy)) return;
       let cant = s.cantero && dd < 1.0;
       if (cant) for (let i = 0; i < s.cross.length; i++) if (Math.abs(c.t - s.cross[i]) < 1.6) cant = false;
       if (cant) return grass(ix, iy, .2);

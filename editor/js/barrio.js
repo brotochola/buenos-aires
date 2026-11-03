@@ -3,7 +3,8 @@
 // se exporta. Las casas, tapiales y postes salen de un catálogo compartido (ángulos cuantizados, medidas redondeadas),
 // recortado a "variedad de casas" para que entren en el atlas del juego.
 const Barrio = (() => {
-  const Q = Math.PI / 12, qa = (a) => Math.round(a / Q) * Q, aIdx = (a) => ((Math.round(a / Q) % 24) + 24) % 24;
+  // las casas se hornean en los mismos 48 rumbos que las calles (los de los autos): así quedan paralelas a su vereda
+  const aIdx = (a) => World.angIdx(a), qa = (a) => World.ANG[World.angIdx(a)], Q = Math.PI / 24;
   const Wb = (w, step) => Math.max(3, Math.floor(w / step + 1e-6) * step);
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
@@ -30,7 +31,7 @@ const Barrio = (() => {
     function want(spec) { const k = JSON.stringify(spec); let e = cat.get(k); if (!e) { e = { spec, n: 0, id: cat.size }; cat.set(k, e); } e.n++; return e; }
     function addObj(kind, spec, lot, x0, y0, phiQ, place, collider, extra = {}) { const e = want(spec); const o = { kind, e, x0, y0, phiQ, place, collider, lot, ...extra }; objs.push(o); return o; }
     // ---- registros
-    const props = [], arboles = [], people = [], cables = [], cars = [], postes = [];
+    const props = [], arboles = [], people = [], cables = [], cars = [], postes = [], pits = [];
     const VAR = {}; for (const n of Object.keys(F)) { const m = /^(.+)_([b-z])$/.exec(n); if (m && F[m[1]]) (VAR[m[1]] ||= [m[1]]).push(n); }
     function put(name, x, y, opt = {}) {
       if (VAR[name]) { const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663)); name = VAR[name][h % VAR[name].length]; }
@@ -113,8 +114,9 @@ const Barrio = (() => {
       const occRect = (u0, u1, v0, v1) => { for (let u = u0; u < u1; u += .4) for (let v = v0; v < v1; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); } };
       occRect(.2, lot.fw, -.6, depthTot + 1.5);
       let backV = 0;
-      const pBack = (lot.w < .3 ? .65 : lot.w < .55 ? .4 : .12) * C.fondoConstr;
-      if (lot.kind !== "villa" && lot.ld - depthTot > 8 && r() < pBack) {
+      // en lotes hondos casi siempre hay algo en el fondo (PH, otra casa, un galpón), como en las manzanas de Flores
+      const pBack = (lot.w < .3 ? .65 : lot.w < .55 ? .4 : .12) * C.fondoConstr, hondo = lot.ld - depthTot > 22;
+      if (lot.kind !== "villa" && lot.ld - depthTot > 8 && (r() < pBack || (hondo && rx() < .75))) {
         const bw = Wb(Math.min(lot.fw, r.uni(4, lot.fw)), 2), bu = r() < .5 ? 0 : lot.fw - bw, bd = Math.min(lot.ld - depthTot - 4, r.uni(3.8, 5.5)) < 4.6 ? 4 : 5, bv = lot.ld - bd - .3;
         const k2 = r.pick(lot.w < .3 ? ["obra", "villa", "casa"] : ["casa", "casa", "obra"]), [bx, by] = LP(bu, bv);
         addObj("house", { t: "casa", k: k2, W: bw, D: bd, a: aIdx(lot.phi), wb: Math.min(1, wb), v: 0 }, lot, bx, by, phiQ, { u0: bu, uw: bw, v0: bv }, rect(bu, bu + bw, bv, bv + bd), { back: true });
@@ -151,7 +153,12 @@ const Barrio = (() => {
       for (const side of [1, -1]) {
         if (s.sw >= 2.2) for (let t = r.uni(3, 9); t < s.len - 3; t += r.uni(7, 13)) {
           if (crossNear(t) || r() > (.3 + .55 * s.w) * C.arboles) continue; const p = at(s, t, side * (s.hw + (s.cantero ? .6 : .55)));
-          const c = W.classify(p[0], p[1]); if (c && c.k === "walk" && c.s === s) arbol(p[0], p[1], r() < .5); }
+          const c = W.classify(p[0], p[1]); if (c && c.k === "walk" && c.s === s && arbol(p[0], p[1], r() < .5) && !s.cantero) {
+            // cazuela: cuadrado de tierra alrededor del árbol (borde de ladrillo, de cemento o sin borde), a veces con plantas o yuyos
+            const tipo = s.w < .3 ? rx.pick([2, 3, 3]) : rx.pick([1, 1, 2, 3]), conPasto = rx() < .55;
+            pits.push({ x: p[0], y: p[1], ang: Math.atan2(s.dir[1], s.dir[0]), tipo, pasto: conPasto });
+            if (rx() < .6) { const q = at(s, t + rx.pick([-.32, .32]), side * (s.hw + .55 + rx.uni(-.25, .25)));
+              put(rx() < .35 && s.w > .4 ? rx.pick(["plm_agapanto", "pl_boj", "plm_lantana", "plm_romero"]) : rx.pick(["yy_diente_leon", "yy_trebol", "yy_llanten", "yy_cola_zorro", "yy_ortiga_b", "yy_brotes", "yy_pasto_seco"]), q[0], q[1], { noClaim: true }); } } }
         // canteros y cazuelas: agapantos, yuyos, bojs y arbolitos con jaula cerca del cordón
         if (F.plm_agapanto && s.sw >= 1.6) for (let t = rx.uni(2, 8); t < s.len - 2; t += rx.uni(5, 13)) {
           if (crossNear(t) || rx() > .35 + .3 * s.w) continue; const p = at(s, t, side * (s.hw + .5)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || c.s !== s) continue;
@@ -236,11 +243,13 @@ const Barrio = (() => {
         o.e.n--; best.n++; o.e = best;
         const lot = o.lot, u = o.place.u0 + (o.place.uw - best.spec.W) / 2, v = o.place.v0; o.x0 = lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v; o.y0 = lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v; }
       for (const [k, e] of [...cat]) if (e.n <= 0) cat.delete(k); }
-    return { W, SEED, cat, objs, props, arboles, people, cables, cars, postes, claim, occ };
+    // cazuelas: también en el mundo (el piso del editor las dibuja), con una grilla de 2 m para buscarlas rápido
+    W.pits = pits; W.pitGrid = new Map(); for (const q of pits) { const k = Math.floor(q.x / 2) + "," + Math.floor(q.y / 2); if (!W.pitGrid.has(k)) W.pitGrid.set(k, []); W.pitGrid.get(k).push(q); }
+    return { W, SEED, cat, objs, props, arboles, people, cables, cars, postes, pits, claim, occ };
   }
   // la casa/tapial/poste 3D de una clave del catálogo (misma semilla en el visor y en la exportación)
   function build3D(spec) {
-    const phi = spec.a * Q;
+    const phi = World.ANG[spec.a];
     if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17, wealth: [.25, .7][spec.wb] }, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
     return Houses.poste(7, phi, !!spec.l);
