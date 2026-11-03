@@ -8,10 +8,10 @@ const Barrio = (() => {
   const Wb = (w, step) => Math.max(3, Math.floor(w / step + 1e-6) * step);
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
-  const RAD = [["pz_monumento", 2.2], ["pz_fuente", 2.5], ["pz_calesita", 2.6], ["pz_glorieta", 3], ["pz_jacaranda", .5], ["pz_palo_borracho", .5], ["pz_", 1.2], ["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
+  const RAD = [["k_gauchito", .9], ["k_virgen", .7], ["k_mantero", .9], ["k_pelopincho", 1.2], ["k_cucha", .6], ["k_", .35], ["b_tendedero", 1.6], ["b_mesa_patio", 1.4], ["b_arco", 1.4], ["b_bolsones", .7], ["b_pallets", .6], ["b_viejo", .45], ["b_mujer", .4], ["b_", .3], ["c_volquete", 2.2], ["c_puesto", 1.3], ["c_chori", 1.1], ["c_mesa_bar", 1], ["c_moto", .7], ["c_bici", .6], ["c_perro", .35], ["c_gato", .2], ["c_palomas", .5], ["c_buzon", .3], ["c_hidrante", .2], ["pz_monumento", 2.2], ["pz_fuente", 2.5], ["pz_calesita", 2.6], ["pz_glorieta", 3], ["pz_jacaranda", .5], ["pz_palo_borracho", .5], ["pz_", 1.2], ["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
     ["u_refugio", 1.2], ["u_kiosco", 1.5], ["carro_cartonero", 1.0], ["chango", .5], ["gomas", .55], ["chapas", .5], ["u_tanque", .6], ["u_banco", .9], ["u_parada", .25], ["u_cesto", .3], ["u_poste_trafo", .45], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
   // colisión (m): sólo lo que frena un auto
-  const COLR = [["pz_monumento", 1.6], ["pz_fuente", 2.2], ["pz_calesita", 2.2], ["pz_glorieta", 2.4], ["pz_jacaranda", .3], ["pz_palo_borracho", .35], ["pz_hamacas", .9], ["pz_pingpong", .9], ["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
+  const COLR = [["k_gauchito", .6], ["k_virgen", .45], ["k_heladera", .35], ["k_cucha", .45], ["b_tendedero", .1], ["b_mesa_patio", .9], ["b_bolsones", .5], ["b_pallets", .45], ["b_tacho", .3], ["b_viejo", .25], ["b_mujer", .2], ["c_volquete", 1.6], ["c_puesto", .8], ["c_chori", .7], ["c_moto", .4], ["c_buzon", .2], ["c_hidrante", .12], ["pz_monumento", 1.6], ["pz_fuente", 2.2], ["pz_calesita", 2.2], ["pz_glorieta", 2.4], ["pz_jacaranda", .3], ["pz_palo_borracho", .35], ["pz_hamacas", .9], ["pz_pingpong", .9], ["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
     ["u_refugio", .9], ["u_kiosco", 1.1], ["carro_cartonero", .7], ["u_tanque", .45], ["u_banco", .45], ["u_parada", .08], ["u_cesto", .1], ["u_poste_trafo", .22], ["u_valla", .35], ["obra_material", .5], ["parrilla", .55], ["pileta", 1.3], ["u_tablero", .3], ["u_caja", .25]];
   const lookup = (tbl, n, d) => { for (const [p, v] of tbl) if (n.startsWith(p)) return v; return d; };
   const SH = (n) => n.startsWith("plm_") ? "sh_small" : n.startsWith("u_farol") || n.startsWith("u_poste") || n.startsWith("u_parada") ? "sh_pole" : n.startsWith("u_cesto") || n.startsWith("u_banco") || n.startsWith("u_kiosco") ? "sh_small" : n.startsWith("u_contenedor") || n.startsWith("canasto") || n.startsWith("u_campana") ? "sh_small" : null;
@@ -73,6 +73,8 @@ const Barrio = (() => {
       for (const n of ["pz_hamacas", "pz_tobogan", "pz_subibaja", "pz_calesita"]) { if (!F[n]) continue; const q = enCuarto(cuartos[0], n, n === "pz_calesita" ? 2.5 : 1.6); if (q) put(n, q[0], q[1], { noClaim: true }); }
       for (const n of ["pz_aparato", "pz_aparato", "pz_pingpong", "pz_ajedrez", "pz_bebedero"]) { if (!F[n]) continue; const q = enCuarto(cuartos[1], n, 1.4); if (q) put(n, q[0], q[1], { noClaim: true }); }
       for (let k = 0; k < 6; k++) { const n = rx2.pick(["pz_cantero", "plm_agapanto", "plm_lantana", "pl_boj", "plm_rosal", "plm_yuyos"]); if (!F[n]) continue; const q = enCuarto(cuartos[2 + (k & 1)], n, .9); if (q) put(n, q[0], q[1], { noClaim: true }); }
+      for (const n of ["c_palomas", "c_palomas", "c_perro", "c_perro_duerme", "c_gato"]) { if (!F[n] || rx2() > .7) continue; const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) put(n, q[0], q[1], { noCollide: true }); }
+      if (F.c_chori && rx2() < .6) { const q = at2(rx2.pick([-1, 1]) * (hA + 4), rx2.uni(-hB * .5, hB * .5)); put("c_chori", q[0], q[1]); }
       if (F.pz_glorieta && rx2() < .4) { const q = enCuarto(cuartos[2], "pz_glorieta", 3); if (q) put("pz_glorieta", q[0], q[1], { noClaim: true }); }
       for (let k = 0; k < Math.round(P.bA * P.bB / 900) * C.gente; k++) { const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) person(q[0], q[1], rx2() < .5); }
     }
@@ -90,6 +92,8 @@ const Barrio = (() => {
         const c = LP(lot.fw / 2, lot.ld / 2);
         if (r() < .5 * C.arboles) arbol(c[0], c[1], r() < .5);
         if (r() < .5) put("bolsas_" + r.int(0, 1), c[0] + r.uni(-2, 2), c[1] + r.uni(-2, 2));
+        if (F.b_cartel_vende && rx() < .3) { const q = LP(rx.uni(1, lot.fw - 1), .6); put("b_cartel_vende", q[0], q[1]); }
+        if (F.b_arco && lot.fw > 8 && lot.ld > 12 && rx() < .3) { const q = LP(lot.fw / 2, lot.ld * .7); put("b_arco", q[0], q[1], { noCollide: true }); const b = LP(lot.fw / 2 + rx.uni(-2, 2), lot.ld * .45); put("b_pelota", b[0], b[1], { noCollide: true }); }
         // yuyos del baldío: matas altas y secas, cardos, ortigas, mostacilla
         if (F.yy_seco_alto) { const n = Math.round(lot.fw * lot.ld / 14 * rx.uni(.5, 1.2));
           for (let k = 0; k < n; k++) { const q = LP(rx.uni(.4, lot.fw - .4), rx.uni(.6, lot.ld - .4));
@@ -124,6 +128,11 @@ const Barrio = (() => {
       }
       if ((backV || lot.ld) - depthTot > 3.5) { const pp = () => LP(r.uni(.8, lot.fw - .8), r.uni(depthTot + 2.2, (backV || lot.ld) - .8));
         if (r() < .3 * C.arboles) { const p = pp(); arbol(p[0], p[1], r() < .5); }
+        if (F.b_tendedero && rx() < (lot.w < .5 ? .45 : .2)) put("b_tendedero", ...pp());
+        if (F.k_cucha && rx() < .18) put("k_cucha", ...pp());
+        if (F.k_pelopincho && lot.w > .2 && lot.w < .7 && rx() < .1) put("k_pelopincho", ...pp());
+        if (F.b_mesa_patio && rx() < (lot.w < .55 ? .18 : .06)) put("b_mesa_patio", ...pp());
+        if (F.b_autito && lot.w < .5 && rx() < .2) put(rx.pick(["b_autito", "b_pelota", "b_perro_bebe", "b_tacho_azul", "b_sombrilla"]), ...pp());
         if (F.plm_rosal && rx() < .35) put(rx.pick(lot.w < .3 ? ["plm_tomates", "plm_yuyos", "pl_cubierta", "plm_santarita", "plm_lantana", "plm_romero"] : ["plm_rosal", "plm_jazmin", "pl_hortensia", "plm_agapanto", "plm_santarita", "plm_lantana", "plm_romero", "pl_limonero", "plm_pindo"]), ...pp());
         if ((lot.kind === "villa" || lot.w < .25) && rx() < .5) put(rx.pick(["u_tanque", "chapas", "gomas", "parrilla_tambor", "silla", "antena", "garrafa"]), ...pp());
         if (r() < .2) put("parrilla", ...pp()); if (lot.w > .3 && r() < .1) put("pileta", ...pp()); if (r() < .08 * C.gente) { const p = pp(); person(p[0], p[1], true); } }
@@ -141,6 +150,20 @@ const Barrio = (() => {
             : ["pl_malvon", "pl_potus", "pl_aloe", "pl_cactus", "pl_sansevieria", "pl_hortensia", "plm_rosal", "pl_clivia", "pl_helecho", "pl_calas", "pl_malvon"];
           const u0 = rx.uni(-lot.fw / 3, lot.fw / 3 - .5 * n);           // en fila, pegadas al frente
           for (let k = 0; k < n; k++) put(rx.pick(POT), ...nearX(rx.uni(.22, .36), u0 + k * rx.uni(.42, .6)), { noClaim: true }); }
+        // vida en la vereda: mesas de bar frente a los negocios, motos y bicis estacionadas, perros y gatos
+        if (F.c_mesa_bar && (lot.kind === "negocio" || lot.kind === "negocio_casa") && s.sw >= 2.6 && rx() < .3) put("c_mesa_bar", ...nearX(rx.uni(1.5, 1.8), rx.uni(-lot.fw / 4, lot.fw / 4)), { rad: .75 });
+        if (F.c_moto && rx() < (lot.kind === "negocio" ? .12 : .04)) put(rx() < .6 ? "c_moto" : "c_bici", ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .4 });
+        if (F.c_perro && rx() < (lot.w < .35 ? .07 : .025)) put(rx.pick(["c_perro", "c_perro_duerme", "c_perro_duerme", "c_gato"]), ...nearX(rx.uni(.95, 1.5), rx.uni(-lot.fw / 3, lot.fw / 3)), { noCollide: true, rad: .25 });
+        // kioscos y almacenes: heladera de bebidas, cajones de envases, sillas apiladas, pizarra de helados
+        if (F.k_heladera && (lot.kind === "negocio" || lot.kind === "negocio_casa") && rx() < .35) put(rx.pick(["k_heladera", "k_cajones_botellas", "k_cajones_botellas", "k_sillas_pila", "k_pizarra_helado"]), ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .3 });
+        // devoción popular: el Gauchito Gil (rojo) y la Virgen, en las esquinas y frentes de los barrios pobres
+        if (F.k_gauchito && lot.w < .45 && rx() < .025) put(rx() < .6 ? "k_gauchito" : "k_virgen", ...nearX(rx.uni(1.1, 1.4), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .5 });
+        if (F.k_tele && lot.w < .4 && rx() < .03) put(rx() < .5 ? "k_tele" : "k_colchon", ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .35 });
+        // vecinos en la vereda (la abuela barriendo, el abuelo con el mate) y cosas de los barrios pobres
+        if (F.b_viejo_mate && lot.kind !== "galpon" && rx() < .035) put(rx() < .5 ? "b_viejo_mate" : "b_mujer_barre", ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .35 });
+        if (F.b_jaula && lot.w < .6 && rx() < .04) put("b_jaula", ...nearX(.22, rx.uni(-lot.fw / 3, lot.fw / 3)), { noClaim: true });
+        if (F.b_pallets && (lot.kind === "villa" || lot.w < .25) && rx() < .15) put(rx.pick(["b_pallets", "b_tacho_azul", "b_bolsones", "b_chango_vacio", "b_bolsones"]), ...nearX(rx.uni(1.05, 1.4), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .4 });
+        if (F.c_volquete && lot.kind === "obra" && rx() < .5) { const q = at(s, mid, side * (s.hw - 1.4)), c = W.classify(q[0], q[1]); if (c && c.k === "road") put("c_volquete", q[0], q[1], { face: [s.dir[0], s.dir[1]] }); }
         if (F.plm_santarita && lot.w > .35 && rx() < .06) put("plm_santarita", ...nearX(.5, rx.uni(-lot.fw / 3, lot.fw / 3)), { noClaim: true });
         if ((lot.kind === "villa" || lot.w < .22) && rx() < .3) put(rx.pick(["garrafa", "silla", "cajones", "gomas", "chapas", "parrilla_tambor", "carro_cartonero", "chango", "silla"]), ...nearX(rx.uni(.9, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)));
         if (r() < .04) put(r.pick(["u_tablero", "u_caja_bsas"]), ...near(.4));
@@ -207,6 +230,13 @@ const Barrio = (() => {
       if ((s.type === "ave" || o.type === "ave" || (s.mat === "asf" && o.mat === "asf" && s.w > .45)) && ok.length > 1) { put("u_semaforo", ...ok[1]); if (ok[2]) put("u_semaforo", ...ok[2]); }
       if (s.mat !== "tierra" && r() < .25 && ok[3]) put("u_campana", ...ok[3]);
       const asf = s.mat === "asf" && o.mat === "asf", ave = s.type === "ave" || o.type === "ave";
+      if (F.c_buzon && asf && rx() < .08 && ok.length > 2) { const q = ok[2]; put("c_buzon", q[0] + o.dir[0] * 1.6, q[1] + o.dir[1] * 1.6); }
+      if (F.c_hidrante && s.mat !== "tierra" && rx() < .12 && ok.length > 1) { const q = ok[ok.length - 1]; put("c_hidrante", q[0] - o.dir[0] * 2.2, q[1] - o.dir[1] * 2.2); }
+      if (F.c_puesto_flores && ave && rx() < .18 && ok.length > 1) { const q = ok[1]; put(rx() < .5 ? "c_puesto_flores" : "c_puesto_frutas", q[0] + s.dir[0] * 3.5, q[1] + s.dir[1] * 3.5); }
+      if (F.k_mantero && ave && rx() < .15 && ok.length) { const q = ok[0]; put("k_mantero", q[0] + s.dir[0] * 5, q[1] + s.dir[1] * 5); }
+      if (F.k_gauchito && s.w < .35 && rx() < .06 && ok.length > 1) { const q = ok[1]; put("k_gauchito", q[0] - s.dir[0] * 1.2, q[1] - s.dir[1] * 1.2); }
+      if (F.c_chori && ave && rx() < .1 && ok.length > 2) { const q = ok[ok.length - 1]; put("c_chori", q[0] + o.dir[0] * 3, q[1] + o.dir[1] * 3); }
+      if (F.c_palomas && rx() < .1 && ok.length) { const q = ok[0]; put("c_palomas", q[0] + s.dir[0] * 2.5, q[1] + s.dir[1] * 2.5, { noCollide: true }); }
       if (F.u_cesto && asf && rx() < .35 && ok.length) { const q = ok[ok.length - 1]; put("u_cesto", q[0] + s.dir[0] * 1.2, q[1] + s.dir[1] * 1.2); }
       if (F.u_poste_trafo && s.mat !== "tierra" && !ave && rx() < .1 && ok.length > 1) { const q = ok[1]; put("u_poste_trafo", q[0] - s.dir[0] * 1.5, q[1] - s.dir[1] * 1.5); }
       if (F.u_kiosco && ave && rx() < .3 && ok.length) { const q = ok[0], d = (o.hw + o.sw) + 3; for (const sg of [1, -1]) { const k = [q[0] + s.dir[0] * sg * d * .5, q[1] + s.dir[1] * sg * d * .5];

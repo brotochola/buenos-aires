@@ -1,0 +1,132 @@
+{
+ "img": "calle_02.png",
+ "bg": "cyan",
+ "ref": 1550,
+ "grow": 3,
+ "persona": [
+  108,
+  268
+ ],
+ "objs": [
+  {
+   "name": "hd_volquete",
+   "h": 1,
+   "at": [
+    380,
+    195
+   ]
+  },
+  {
+   "name": "hd_puesto_flores",
+   "h": 1,
+   "at": [
+    765,
+    185
+   ]
+  },
+  {
+   "name": "hd_puesto_frutas",
+   "h": 1,
+   "at": [
+    1095,
+    185
+   ]
+  },
+  {
+   "name": "hd_chori",
+   "h": 1,
+   "at": [
+    1395,
+    200
+   ]
+  },
+  {
+   "name": "hd_buzon",
+   "h": 1,
+   "at": [
+    230,
+    510
+   ]
+  },
+  {
+   "name": "hd_mesa_bar",
+   "h": 1,
+   "at": [
+    470,
+    480
+   ]
+  },
+  {
+   "name": "hd_moto",
+   "h": 1,
+   "at": [
+    770,
+    450
+   ]
+  },
+  {
+   "name": "hd_bici",
+   "h": 1,
+   "at": [
+    1010,
+    450
+   ]
+  },
+  {
+   "name": "hd_perro",
+   "h": 1,
+   "at": [
+    1180,
+    450
+   ]
+  },
+  {
+   "name": "hd_perro_duerme",
+   "h": 1,
+   "at": [
+    1310,
+    470
+   ]
+  },
+  {
+   "name": "hd_hidrante",
+   "h": 1,
+   "at": [
+    1443,
+    440
+   ]
+  },
+  {
+   "name": "hd_gato",
+   "h": 1,
+   "at": [
+    800,
+    605
+   ]
+  },
+  {
+   "name": "hd_palomas",
+   "h": 1,
+   "at": [
+    995,
+    590
+   ]
+  },
+  {
+   "name": "hd_rejilla",
+   "h": 1,
+   "at": [
+    1225,
+    595
+   ]
+  },
+  {
+   "name": "hd_tapa",
+   "h": 1,
+   "at": [
+    1435,
+    595
+   ]
+  }
+ ]
+}

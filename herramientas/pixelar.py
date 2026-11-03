@@ -49,7 +49,7 @@ def bgish(c, key):
     return (np.minimum(r, b) - g > 60) & (np.abs(r - b) < 70)
 
 
-def grid(a, fg):
+def grid(a, fg, pmin=2.5, pmax=12.0):
     """Pixel size P and phase (ox, oy) of the drawing's grid."""
     f = a[..., :3].astype(float)
     res = []
@@ -61,7 +61,7 @@ def grid(a, fg):
         ac = np.correlate(p, p, mode="full")[len(p) - 1:]
         ac = ac / (ac[0] + 1e-9)
         res.append((prof, ac))
-    Ps = np.arange(2.5, 12.0, 0.01)
+    Ps = np.arange(pmin, pmax, 0.01)
 
     def comb(P):
         s = 0
@@ -94,7 +94,7 @@ def process(spec_path):
     H, W = src.shape[:2]
     S = W / spec.get("ref", 1024)                               # spec coordinates -> real image
     fg = ndimage.binary_opening(~key_mask(src, key), iterations=1)
-    P, ox, oy = spec.get("grid") or grid(src, fg)
+    P, ox, oy = spec.get("grid") or grid(src, fg, *spec.get("rango", [2.5, 12.0]))
     nw, nh = int((W - ox) // P), int((H - oy) // P)
     print(f"{spec['img']}: {W}x{H}, Gemini pixel = {P:.2f} px (phase {ox:.1f}, {oy:.1f}) -> {nw}x{nh} native")
 
@@ -131,6 +131,14 @@ def process(spec_path):
         else:
             alpha[yy, xx] = False
 
+    # silhouette pixels still tinted by the background (blend of fondo + contorno): they become a dark outline
+    edge = alpha & ~ndimage.binary_erosion(alpha)
+    r_, g_, b_ = out[..., 0], out[..., 1], out[..., 2]
+    tint = ((np.minimum(g_, b_) - r_) > 28) if key == "cyan" else ((np.minimum(r_, b_) - g_) > 28)
+    for (yy, xx) in zip(*np.nonzero(edge & tint)):
+        ys, xs = slice(max(0, yy - 1), yy + 2), slice(max(0, xx - 1), xx + 2)
+        ok = alpha[ys, xs] & ~(edge[ys, xs] & tint[ys, xs])
+        out[yy, xx] = (out[ys, xs][ok].mean(0) if ok.any() else out[yy, xx]) * .42
     # 5. objects
     g = spec.get("grow", 1)
     lab, n = ndimage.label(ndimage.binary_dilation(alpha, iterations=g) if g > 0 else alpha)

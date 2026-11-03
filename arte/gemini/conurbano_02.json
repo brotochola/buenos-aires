@@ -1,0 +1,144 @@
+{
+ "img": "conurbano_02.png",
+ "bg": "cyan",
+ "ref": 1024,
+ "grow": 0,
+ "persona": [
+  67,
+  227
+ ],
+ "objs": [
+  {
+   "name": "hd_gauchito",
+   "h": 1,
+   "at": [
+    200,
+    105
+   ]
+  },
+  {
+   "name": "hd_virgen",
+   "h": 1,
+   "at": [
+    345,
+    100
+   ]
+  },
+  {
+   "name": "hd_colchon",
+   "h": 1,
+   "at": [
+    490,
+    105
+   ]
+  },
+  {
+   "name": "hd_heladera",
+   "h": 1,
+   "at": [
+    610,
+    105
+   ]
+  },
+  {
+   "name": "hd_cajones_botellas",
+   "h": 1,
+   "at": [
+    690,
+    130
+   ]
+  },
+  {
+   "name": "hd_banderines",
+   "h": 1,
+   "at": [
+    820,
+    50
+   ]
+  },
+  {
+   "name": "hd_bandera",
+   "h": 1,
+   "at": [
+    855,
+    125
+   ]
+  },
+  {
+   "name": "hd_sillas_pila",
+   "h": 1,
+   "at": [
+    548,
+    250
+   ]
+  },
+  {
+   "name": "hd_cajones_bot2",
+   "h": 1,
+   "at": [
+    635,
+    255
+   ]
+  },
+  {
+   "name": "hd_pizarra_helado",
+   "h": 1,
+   "at": [
+    725,
+    255
+   ]
+  },
+  {
+   "name": "hd_basural",
+   "h": 1,
+   "at": [
+    300,
+    310
+   ]
+  },
+  {
+   "name": "hd_tele",
+   "h": 1,
+   "at": [
+    448,
+    390
+   ]
+  },
+  {
+   "name": "hd_mantero",
+   "h": 1,
+   "at": [
+    555,
+    375
+   ]
+  },
+  {
+   "name": "hd_pelopincho",
+   "h": 1,
+   "at": [
+    685,
+    385
+   ]
+  },
+  {
+   "name": "hd_cucha",
+   "h": 1,
+   "at": [
+    795,
+    370
+   ]
+  },
+  {
+   "name": "hd_parrilla_ladrillo",
+   "h": 1,
+   "at": [
+    925,
+    340
+   ]
+  }
+ ],
+ "rango": [
+  1.645,
+  1.66
+ ]
+}

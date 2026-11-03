@@ -1,0 +1,140 @@
+{
+ "img": "barrio_02.png",
+ "bg": "cyan",
+ "ref": 1550,
+ "grow": 0,
+ "persona": [
+  105,
+  290
+ ],
+ "objs": [
+  {
+   "name": "hd_tendedero",
+   "h": 1,
+   "at": [
+    375,
+    190
+   ]
+  },
+  {
+   "name": "hd_mesa_patio",
+   "h": 1,
+   "at": [
+    540,
+    310
+   ]
+  },
+  {
+   "name": "hd_viejo_mate",
+   "h": 1,
+   "at": [
+    815,
+    270
+   ]
+  },
+  {
+   "name": "hd_mujer_barre",
+   "h": 1,
+   "at": [
+    965,
+    265
+   ]
+  },
+  {
+   "name": "hd_autito",
+   "h": 1,
+   "at": [
+    1125,
+    300
+   ]
+  },
+  {
+   "name": "hd_pelota",
+   "h": 1,
+   "at": [
+    1265,
+    325
+   ]
+  },
+  {
+   "name": "hd_arco",
+   "h": 1,
+   "at": [
+    1375,
+    260
+   ]
+  },
+  {
+   "name": "hd_perro_bebe",
+   "h": 1,
+   "at": [
+    140,
+    590
+   ]
+  },
+  {
+   "name": "hd_jaula",
+   "h": 1,
+   "at": [
+    290,
+    520
+   ]
+  },
+  {
+   "name": "hd_pallets",
+   "h": 1,
+   "at": [
+    465,
+    565
+   ]
+  },
+  {
+   "name": "hd_tacho_azul",
+   "h": 1,
+   "at": [
+    640,
+    565
+   ]
+  },
+  {
+   "name": "hd_bolsones",
+   "h": 1,
+   "at": [
+    815,
+    570
+   ]
+  },
+  {
+   "name": "hd_pizarra",
+   "h": 1,
+   "at": [
+    1020,
+    570
+   ]
+  },
+  {
+   "name": "hd_cartel_vende",
+   "h": 1,
+   "at": [
+    1160,
+    560
+   ]
+  },
+  {
+   "name": "hd_sombrilla",
+   "h": 1,
+   "at": [
+    1272,
+    520
+   ]
+  },
+  {
+   "name": "hd_chango_vacio",
+   "h": 1,
+   "at": [
+    1410,
+    560
+   ]
+  }
+ ]
+}
