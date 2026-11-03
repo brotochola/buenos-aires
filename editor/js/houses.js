@@ -25,7 +25,14 @@ const Houses = (() => {
     if (curtains && t.r() < .65) { const cc = t.r.pick([[236, 230, 214], [222, 200, 160], [204, 220, 232], [230, 196, 196], [200, 220, 190]]), cw = Math.max(2, ((x1 - x0) / 4) | 0);
       t.rect(x0, y0, x0 + cw, y1, mul(cc, .92)); t.rect(x1 - cw, y0, x1, y1, mul(cc, .92)); for (let x = x0; x < x0 + cw; x += 2) t.shade(x, y0, x + 1, y1, .88); }
   }
+  // pieza de Gemini para cada estilo (si está cargada); si no, el dibujo procedural de siempre
+  const pieza = (style, w, h) => style === "persiana" ? "fd_ventana_persiana" : style === "reja" ? "fd_ventana_reja" : style === "cerrado" ? null
+    : h < px(.75) ? "fd_ventana_bano" : "fd_ventana_madera";
   function windowDecal(t, x, y, w, h, style, wall) {
+    const pz = pieza(style, w, h);
+    if (pz && R3.DECALS[pz]) { t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(wall, .55)); t.blit(pz, x, y, w, h + (pz === "fd_ventana_bano" ? 0 : Math.round(h * .06)));
+      for (let xx = x; xx < x + w; xx += 2) t.shade(xx, y + h + 3, xx + 1, y + h + 3 + t.r.int(2, 9), .93); return; }
+    if (style === "reja") style = "none";
     t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(wall, .5)); t.rect(x, y, x + w, y + h, mul(wall, .72));
     const fr = t.r() < .65 ? [236, 232, 222] : mul(WOOD, 1.1);
     t.rect(x + 1, y + 1, x + w, y + h, fr); glass(t, x + 3, y + 3, x + w - 2, y + h - 2); t.rect(x + (w >> 1), y + 3, x + (w >> 1) + 1, y + h - 2, fr);
@@ -36,6 +43,9 @@ const Houses = (() => {
   }
   function doorDecal(t, x, y, w, h, kind, wall) {
     t.rect(x - 1, y - 1, x + w + 1, y + h, mul(wall, .5));
+    const dc = kind === "madera" || !R3.DECALS.fd_puerta_chapa ? null : t.r.pick([[38, 40, 46], [34, 84, 58], [120, 36, 32], [58, 78, 110], [196, 192, 182], [30, 60, 40], [150, 150, 154], [150, 150, 154]]);
+    if (t.blit(kind === "madera" ? "fd_puerta_madera" : "fd_puerta_chapa", x, y, w, h, dc && dc[0] !== 150 ? mul(dc, 1.25) : null)) {
+      const nx = x + w + 3; if (nx + 8 < t.w && R3.DECALS.fd_medidor && t.r() < .35) t.blit("fd_medidor", nx, y + h * .18, px(.45), px(.6)); return; }
     if (kind === "madera") { const c = mul(WOOD, t.r.uniform(.8, 1.2)); t.rect(x, y, x + w, y + h, c);
       for (const [a0, b0, a1, b1] of [[3, 3, w - 3, (h >> 1) - 2], [3, (h >> 1) + 1, w - 3, h - 3]]) { t.rect(x + a0, y + b0, x + a1, y + b1, mul(c, .86)); t.rect(x + a0, y + b0, x + a1, y + b0 + 1, mul(c, .58)); t.rect(x + a0, y + b0, x + a0 + 1, y + b1, mul(c, .6)); t.rect(x + a0, y + b1 - 1, x + a1, y + b1, mul(c, 1.25)); }
       for (let yy = y; yy < y + h; yy += 2) t.shade(x, yy, x + w, yy + 1, .97); }
@@ -46,6 +56,7 @@ const Houses = (() => {
     const nx = x + w + 3; if (nx + 8 < t.w) { t.rect(nx, y + 6, nx + 8, y + 11, [40, 40, 46]); t.rect(nx + 1, y + 7, nx + 7, y + 10, [232, 232, 226]); for (const k of [2, 4, 6]) t.p(nx + k, y + 8, [40, 40, 46]); }
   }
   function shutterDecal(t, x, y, w, h, up = 0) {
+    if (!up && t.blit("fd_persiana_local", x - 1, y - Math.round(h * .12), w + 2, h + Math.round(h * .12))) return;
     t.rect(x - 1, y - 3, x + w + 1, y, [104, 104, 102]); const top = y + ((h * up) | 0); t.rect(x, y, x + w, top, [26, 24, 24]);
     const base = t.r.pick([[150, 152, 156], [132, 134, 138], [64, 100, 140], [60, 120, 90], [176, 170, 160]]);
     for (let yy = top; yy < y + h; yy++) t.rect(x, yy, x + w, yy + 1, mul(base, [1.14, 1, .76][(yy - top) % 3]));
@@ -53,6 +64,7 @@ const Houses = (() => {
     for (let i = 0; i < 3; i++) { const sx = t.r.int(x, x + w - 6); t.shade(sx, top, sx + 4, y + h, .93); }
   }
   function portonDecal(t, x, y, w, h) { const c = t.r.pick([[36, 96, 66], [58, 78, 118], [126, 46, 36], [54, 54, 60], [196, 192, 182], [180, 140, 60]]);
+    if (t.blit("fd_porton", x, y, w, h, c[0] === 36 ? null : mul(c, 1.2))) return;
     for (let xx = x; xx < x + w; xx++) t.rect(xx, y, xx + 1, y + h, mul(c, [1.12, 1, .8, .94][(xx - x) % 4])); t.rect(x, y, x + w, y + 2, mul(c, .6)); t.rect(x + (w >> 1), y, x + (w >> 1) + 1, y + h, mul(c, .5)); t.shade(x, y, x + 2, y + h, .7); }
   function goodsDecal(t, x0, y0, x1, y1, shop) {
     const pal = GOODS[shop] || [[220, 60, 50], [244, 206, 60], [60, 140, 220], [244, 244, 236], [80, 180, 90], [240, 140, 40]];
@@ -205,7 +217,7 @@ const Houses = (() => {
     // ---- pisos altos (frente)
     for (let k = 1; k < storeys; k++) {
       const zb = GF + (k - 1) * UF;
-      if (kind === "villa") { for (let xm = .4; xm < W - 1.2; xm += 2.4) windowDecal(ft, X(xm), zt(zb + 2.2), X(1), px(.95), r.pick(["none", "cerrado", "persiana"]), wall); continue; }
+      if (kind === "villa") { for (let xm = .4; xm < W - 1.2; xm += 2.4) windowDecal(ft, X(xm), zt(zb + 2.2), X(1), px(.95), r.pick(["reja", "cerrado", "persiana"]), wall); continue; }
       if (kind === "obra") { for (let xm = .6; xm < W - 1.3; xm += 2.4) ft.rect(X(xm), zt(zb + 2.1), X(xm + 1.2), zt(zb + .9), [24, 20, 20]); continue; }
       const n = Math.max(1, Math.floor(W / 2.8)), bal = r() < .6;
       for (let i = 0; i < n; i++) { const cx = W * (i + .5) / n;

@@ -115,12 +115,15 @@ const Exportar = (() => {
     const props = B.props.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip;
       if (e.face) { const s0 = PW(e.x, e.y), s1 = PW(e.x + e.face[0], e.y + e.face[1]); fl = s1[0] < s0[0]; }
       return { f: e.f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null }; });
-    const anclas = {};
+    const anclas = {}, escalas = {};
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
-      const ns = [...usados].sort((a, b) => F[b].h - F[a].h); let x = 0, y = 0, rowH = 0; const pos = {};
-      for (const n of ns) { const f = F[n]; if (x + f.w > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += f.w + 2; rowH = Math.max(rowH, f.h); }
+      // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
+      const S = (n) => F[n].hd || F[n];
+      const ns = [...usados].sort((a, b) => S(b).h - S(a).h); let x = 0, y = 0, rowH = 0; const pos = {};
+      for (const n of ns) { const f = S(n); if (x + f.w > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += f.w + 2; rowH = Math.max(rowH, f.h); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
-      for (const n of ns) { const f = F[n], [px, py] = pos[n]; g.drawImage(atlas, f.x, f.y, f.w, f.h, px, py, f.w, f.h); frames[n] = fr(px, py, f.w, f.h); anclas[n] = [r2(f.ox / f.w), r2(f.oy / f.h)]; }
+      for (const n of ns) { const f = S(n), [px, py] = pos[n]; g.drawImage(f.img || atlas, f.x, f.y, f.w, f.h, px, py, f.w, f.h); frames[n] = fr(px, py, f.w, f.h); anclas[n] = [r2(f.ox / f.w), r2(f.oy / f.h)];
+        if (f.e) escalas[n] = f.e; }
       archivos.push(["img/props.png", await png(cv)], ["img/props.json", json(hoja(frames, "props.png", cv))]); }
     // ---------- 5. autos y cables
     const scrRot = (hd) => Math.atan2(-SYN * Math.sin(hd), Math.cos(hd) + K * Math.sin(hd));
@@ -193,7 +196,7 @@ const Exportar = (() => {
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
-      nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas };
+      nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas, escalas };
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables })]);
     progreso("zip", .98); await espera();
     const zip = await Zip.armar(archivos.map(([p, d]) => ["barrio/" + p, d]));

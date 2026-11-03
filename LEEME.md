@@ -52,6 +52,19 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 
 El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el juego. Eso queda para el paso 4 o para el build final.
 
+## Arte con Gemini (props y piezas de fachada)
+
+Estilo: pixel art duro con contorno de color (el más oscuro de cada material, nunca negro), sombreado de 3 a 5 tonos que tira a violeta en la sombra y a amarillo en la luz, luz desde arriba a la izquierda. Todo a la densidad de los LPC y las casas: 30 px/m, mostrado a 0,6 en el juego.
+
+1. Se le pide a Gemini (Nano Banana, razonamiento alto) una hoja de objetos sobre fondo magenta plano. Los pedidos y las hojas originales están en `arte/gemini/*.png`.
+2. `arte/gemini/<hoja>.json` dice qué objeto es cada uno y cuánto mide (`h` alto y `d` fondo en metros, o `w` ancho). Si hace falta, también da `at` (centro aproximado) y `box` (recorte a mano).
+3. `python3 herramientas/pixelar.py arte/gemini/<hoja>.json` saca el fondo y separa los objetos. Los vuelve a pixelar a 30 px/m: cada pixel toma el color más común de lo que cubre, así no hay mezcla. También limpia la paleta y pone el contorno de color. El resultado queda en `arte/gemini/limpio/`.
+4. `arte/hd.json` dice qué nombre del juego usa cada objeto. Por ejemplo, `u_farola` es la luminaria LED y `u_contenedor` / `u_contenedor_b` son variantes.
+5. `python3 herramientas/armar_hd.py` arma dos hojas:
+   - `editor/recursos/hd_props.png/js`: los props;
+   - `editor/recursos/fachada.png/js`: las piezas de fachada `fd_*` (ventanas, puertas, portones, persianas de local, medidor).
+6. El editor usa los props HD en lugar de los v4 del mismo nombre y R3 pega las piezas de fachada en las paredes, sin suavizar. El exportador manda los props HD con su resolución y `META.escalas` le dice al juego que los muestre a 0,6.
+
 ## Límites conocidos
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de 4096² de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.

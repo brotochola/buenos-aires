@@ -1,0 +1,13 @@
+{"img": "conurbano_01.png", "colors": 120, "grow": 4, "objs": [
+ {"name": "hd_canasto_bolsas", "h": 1.3, "d": 0.6, "at": [125,190]},
+ {"name": "hd_canasto_verde", "h": 1.3, "d": 0.6, "at": [325,200]},
+ {"name": "hd_parrilla", "h": 2.0, "d": 1.0, "at": [530,175]},
+ {"name": "hd_pilar_luz", "h": 1.9, "d": 0.4, "at": [705,165]},
+ {"name": "hd_macetero", "h": 0.8, "d": 0.8, "at": [890,215]},
+ {"name": "hd_bolardo_amarillo", "h": 0.9, "d": 0.2, "at": [85,460]},
+ {"name": "hd_bolardo_negro", "h": 0.9, "d": 0.2, "at": [152,460]},
+ {"name": "hd_obra", "w": 2.4, "at": [320,455]},
+ {"name": "hd_bolsas", "w": 1.4, "at": [555,460]},
+ {"name": "hd_cono", "h": 0.7, "d": 0.4, "at": [715,460]},
+ {"name": "hd_valla", "h": 1.1, "d": 0.6, "at": [890,435]}
+]}

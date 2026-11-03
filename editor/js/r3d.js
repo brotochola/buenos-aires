@@ -3,6 +3,7 @@
 //   sx = (x + K*y) * S      sy = -(z*cos30 + y*sin30) * S       (S = 18 px/m en el sprite final)
 const R3 = (() => {
   const SF = 18, SS = 2, K = 0.16, CZ = Math.cos(Math.PI / 6), SYN = 0.5;
+  const DECALS = {};   // piezas de fachada (Gemini) cargadas por el editor: {nombre: {w, h, d}}
   // detalle: las texturas y los sprites se dibujan a SF·DET px/m (el juego los muestra a 1/DET, como a los personajes LPC).
   // DET = 1 deja todo como antes (el visor 3D del editor); la exportación sube a 5/3 (30 px/m).
   let DET = 1, TD = SF, S = TD * SS;
@@ -55,6 +56,16 @@ const R3 = (() => {
       for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * this.w + x) * 4; for (let k = 0; k < 3; k++) this.d[i + k] += (c[k] - this.d[i + k]) * t; } }
     p(x, y, c) { x |= 0; y |= 0; if (x < 0 || y < 0 || x >= this.w || y >= this.h) return; const i = (y * this.w + x) * 4; this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = 255; }
     get(x, y) { const i = (y * this.w + x) * 4; return [this.d[i], this.d[i + 1], this.d[i + 2], this.d[i + 3]]; }
+    // pega una pieza de fachada (R3.DECALS[name] = {w, h, d: RGBA bytes}) estirada a w×h, sin suavizar; devuelve false si no está
+    // tint: recolorea conservando el sombreado (luminancia de cada pixel relativa a la media de la pieza)
+    blit(name, x, y, w, h, tint) { const im = DECALS[name]; if (!im) return false; x = Math.round(x); y = Math.round(y); w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h));
+      if (tint && im.L == null) { let s = 0, n = 0; for (let k = 0; k < im.d.length; k += 4) if (im.d[k + 3] >= 128) { s += .3 * im.d[k] + .59 * im.d[k + 1] + .11 * im.d[k + 2]; n++; } im.L = s / Math.max(1, n); }
+      for (let j = 0; j < h; j++) { const yy = y + j; if (yy < 0 || yy >= this.h) continue; const sy = Math.min(im.h - 1, ((j + .5) * im.h / h) | 0);
+        for (let i = 0; i < w; i++) { const xx = x + i; if (xx < 0 || xx >= this.w) continue; const sx = Math.min(im.w - 1, ((i + .5) * im.w / w) | 0), k = (sy * im.w + sx) * 4;
+          if (im.d[k + 3] < 128) continue; const o = (yy * this.w + xx) * 4;
+          if (tint) { const l = (.3 * im.d[k] + .59 * im.d[k + 1] + .11 * im.d[k + 2]) / im.L; this.d[o] = Math.min(255, tint[0] * l); this.d[o + 1] = Math.min(255, tint[1] * l); this.d[o + 2] = Math.min(255, tint[2] * l); }
+          else { this.d[o] = im.d[k]; this.d[o + 1] = im.d[k + 1]; this.d[o + 2] = im.d[k + 2]; } this.d[o + 3] = 255; } }
+      return true; }
     crop(y0, y1) { y0 = Math.max(0, y0 | 0); y1 = Math.min(this.h, y1 | 0); const t = Tex.fromPx(this.w, Math.max(1, y1 - y0), 1); t.d.set(this.d.subarray(y0 * this.w * 4, y1 * this.w * 4)); t.r = this.r; return t; }
     // ---- materiales
     stucco(col, wear = 1, y0 = 0, y1 = this.h) {
@@ -306,5 +317,5 @@ const R3 = (() => {
         const X = x + (gx + bx) * k + a, Y = y0 + (gy + dy) * k + b; if (shadow) t.p(X + k, Y + k, shadow); t.p(X, Y, c); } });
       x += (bold ? 7 : 6) * k; }
   }
-  return { SF, K, CZ, SYN, setDetalle, get DET() { return DET; }, get TD() { return TD; }, proj, norm, dot, cross, LIGHT, SUNC, SKY, BOUNCE, hull, rng, vnoise, mul, add, mix, clamp, px, Tex, Scene, text, textW, setLight, get SUN() { return SUN; } };
+  return { SF, K, CZ, SYN, DECALS, setDetalle, get DET() { return DET; }, get TD() { return TD; }, proj, norm, dot, cross, LIGHT, SUNC, SKY, BOUNCE, hull, rng, vnoise, mul, add, mix, clamp, px, Tex, Scene, text, textW, setLight, get SUN() { return SUN; } };
 })();

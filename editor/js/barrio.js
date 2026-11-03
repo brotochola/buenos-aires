@@ -8,18 +8,18 @@ const Barrio = (() => {
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
   const RAD = [["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
-    ["u_refugio", 1.2], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
+    ["u_refugio", 1.2], ["u_kiosco", 1.5], ["carro_cartonero", 1.0], ["chango", .5], ["gomas", .55], ["chapas", .5], ["u_tanque", .6], ["u_banco", .9], ["u_parada", .25], ["u_cesto", .3], ["u_poste_trafo", .45], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
   // colisión (m): sólo lo que frena un auto
   const COLR = [["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
-    ["u_refugio", .9], ["u_valla", .35], ["obra_material", .5], ["parrilla", .55], ["pileta", 1.3], ["u_tablero", .3], ["u_caja", .25]];
+    ["u_refugio", .9], ["u_kiosco", 1.1], ["carro_cartonero", .7], ["u_tanque", .45], ["u_banco", .45], ["u_parada", .08], ["u_cesto", .1], ["u_poste_trafo", .22], ["u_valla", .35], ["obra_material", .5], ["parrilla", .55], ["pileta", 1.3], ["u_tablero", .3], ["u_caja", .25]];
   const lookup = (tbl, n, d) => { for (const [p, v] of tbl) if (n.startsWith(p)) return v; return d; };
-  const SH = (n) => n.startsWith("u_farol") ? "sh_pole" : n.startsWith("u_contenedor") || n.startsWith("canasto") || n.startsWith("u_campana") ? "sh_small" : null;
+  const SH = (n) => n.startsWith("u_farol") || n.startsWith("u_poste") || n.startsWith("u_parada") ? "sh_pole" : n.startsWith("u_cesto") || n.startsWith("u_banco") || n.startsWith("u_kiosco") ? "sh_small" : n.startsWith("u_contenedor") || n.startsWith("canasto") || n.startsWith("u_campana") ? "sh_small" : null;
   // colores de autos (los del juego); "burnt" = chatarra quemada
   const COLORES = [["red", 1.6], ["white", 1.6], ["black", 1.4], ["blue", 1.4], ["yellow", 1], ["poli", .4]];
   const pickW = (r, tbl) => { let t = tbl.reduce((a, b) => a + b[1], 0) * r(); for (const [n, w] of tbl) { t -= w; if (t <= 0) return n; } return tbl[0][0]; };
 
   function generate(SEED, C, F) {
-    const W = World.generate(SEED), r = R3.rng(SEED ^ 0x5bd1e995);
+    const W = World.generate(SEED), r = R3.rng(SEED ^ 0x5bd1e995), rx = R3.rng(SEED ^ 0x27d4eb2f);   // rx: props nuevos (no corre el sorteo de lo demás)
     const occ = new Set(), OC = .4;
     function claim(x, y, rad) { const keys = []; for (let i = Math.floor((x - rad) / OC); i <= Math.floor((x + rad) / OC); i++) for (let j = Math.floor((y - rad) / OC); j <= Math.floor((y + rad) / OC); j++) {
         const cx = (i + .5) * OC, cy = (j + .5) * OC; if ((cx - x) ** 2 + (cy - y) ** 2 <= (rad + OC * .5) ** 2) { const k = i * 100000 + j; if (occ.has(k)) return false; keys.push(k); } }
@@ -31,7 +31,9 @@ const Barrio = (() => {
     function addObj(kind, spec, lot, x0, y0, phiQ, place, collider, extra = {}) { const e = want(spec); const o = { kind, e, x0, y0, phiQ, place, collider, lot, ...extra }; objs.push(o); return o; }
     // ---- registros
     const props = [], arboles = [], people = [], cables = [], cars = [], postes = [];
+    const VAR = {}; for (const n of Object.keys(F)) { const m = /^(.+)_([b-z])$/.exec(n); if (m && F[m[1]]) (VAR[m[1]] ||= [m[1]]).push(n); }
     function put(name, x, y, opt = {}) {
+      if (VAR[name]) { const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663)); name = VAR[name][h % VAR[name].length]; }
       if (!F[name]) return null;
       if (!opt.noClaim && !claim(x, y, opt.rad ?? lookup(RAD, name, .3))) return null;
       const e = { f: name, x, y, flip: !!opt.flip, cr: opt.noCollide ? 0 : lookup(COLR, name, 0), sh: opt.shadow ?? SH(name), face: opt.face || null };
@@ -82,6 +84,7 @@ const Barrio = (() => {
       }
       if ((backV || lot.ld) - depthTot > 3.5) { const pp = () => LP(r.uni(.8, lot.fw - .8), r.uni(depthTot + 2.2, (backV || lot.ld) - .8));
         if (r() < .3 * C.arboles) { const p = pp(); arbol(p[0], p[1], r() < .5); }
+        if ((lot.kind === "villa" || lot.w < .25) && rx() < .5) put(rx.pick(["u_tanque", "chapas", "gomas", "parrilla_tambor", "silla", "antena", "garrafa"]), ...pp());
         if (r() < .2) put("parrilla", ...pp()); if (lot.w > .3 && r() < .1) put("pileta", ...pp()); if (r() < .08 * C.gente) { const p = pp(); person(p[0], p[1], true); } }
       const s = lot.seg, side = lot.side, mid = (lot.o[0] - s.a[0]) * s.dir[0] + (lot.o[1] - s.a[1]) * s.dir[1] + (side === 1 ? lot.fw / 2 : -lot.fw / 2);
       if (s.sw > 1) {
@@ -89,6 +92,7 @@ const Barrio = (() => {
         if ((lot.kind === "negocio" || lot.kind === "negocio_casa") && r() < .6) put("pizarra_" + r.int(0, 2), ...near(.9));
         if (lot.kind === "obra" && r() < .5) put("obra_material", ...near(1.1));
         if (r() < (lot.w < .3 ? .05 : .14)) put("canasto_" + r.int(0, 2), ...near(.45));
+        if ((lot.kind === "villa" || lot.w < .22) && rx() < .3) put(rx.pick(["garrafa", "silla", "cajones", "gomas", "chapas", "parrilla_tambor", "carro_cartonero", "chango", "silla"]), ...near(rx.uni(.5, 1.1)));
         if (r() < .04) put(r.pick(["u_tablero", "u_caja_bsas"]), ...near(.4));
       }
     }
@@ -106,10 +110,16 @@ const Barrio = (() => {
       // faroles: cada 16 a 22 m alternando vereda (en tierra alumbran las lámparas de los postes de madera)
       if (s.mat !== "tierra") for (let t = r.uni(4, 12), k = 0; t < s.len - 3; t += r.uni(16, 22) * (C.faroles ? 1 / C.faroles : 1), k++) {
         if (crossNear(t)) continue; const side = k % 2 ? 1 : -1, p = at(s, t, side * (s.hw + .35)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk") continue;
-        const q = at(s, t, 0); put(s.type === "ave" || s.w > .55 ? "u_farol_doble" : "u_farola", p[0], p[1], { face: [q[0] - p[0], q[1] - p[1]] }); }
+        const q = at(s, t, 0), orn = s.type !== "ave" && s.w > .55 && F.u_farola_orn;
+        put(orn ? (k % 4 === 1 ? "u_farol_doble" : "u_farola_orn") : s.type === "ave" && s.w > .6 && k % 3 === 2 ? "u_farol_doble" : "u_farola", p[0], p[1], { face: [q[0] - p[0], q[1] - p[1]] }); }
+      // avenidas: paradas de colectivo (con un banco al lado, a veces) cada 120 a 220 m
+      if (s.type === "ave" && s.sw > 2 && F.u_parada) for (let t = rx.uni(20, 80); t < s.len - 6; t += rx.uni(120, 220)) {
+        if (crossNear(t)) continue; const side = rx() < .5 ? 1 : -1, p = at(s, t, side * (s.hw + .45)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk") continue;
+        put("u_parada", p[0], p[1]);
+        if (F.u_banco && rx() < .6) { const b = at(s, t + 2.6, side * (s.hw + 1.3)), q = at(s, t + 2.6, 0); if (W.classify(b[0], b[1])?.k === "walk") put("u_banco", b[0], b[1], { face: [b[0] - q[0], b[1] - q[1]] }); } }
       if (s.type !== "ave" && s.sw > 1) {
-        const side = r() < .5 ? 1 : -1, phi = Math.atan2(s.dir[1], s.dir[0]), phiQ = qa(phi), luz = s.mat !== "asf" ? 1 : 0, pts = [], feet = [];
-        for (let t = r.uni(3, 10); t < s.len - 2; t += r.uni(24, 32)) {
+        const side = rx() < .5 ? 1 : -1, phi = Math.atan2(s.dir[1], s.dir[0]), phiQ = qa(phi), luz = s.mat !== "asf" ? 1 : 0, pts = [], feet = [];
+        for (let t = rx.uni(3, 10); t < s.len - 2; t += rx.uni(24, 32)) {
           const p = at(s, t, side * (s.hw + .3)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || !claim(p[0], p[1], .25)) continue;
           addObj("poste", { t: "poste", a: aIdx(phi), l: luz }, null, p[0], p[1], phiQ, null, null); feet.push(p);
           pts.push([[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]].map(([lx, ly, lz]) => [p[0] + Math.cos(phiQ) * lx - Math.sin(phiQ) * ly, p[1] + Math.sin(phiQ) * lx + Math.cos(phiQ) * ly, lz]));
@@ -119,7 +129,7 @@ const Barrio = (() => {
         const curve = (a, b, sag, n) => { let prev = a; for (let i = 1; i <= n; i++) { const t = i / n, q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t - sag * 4 * t * (1 - t)];
           cables.push([prev[0], prev[1], prev[2], q[0], q[1], q[2]]); prev = q; } };
         for (let i = 0; i + 1 < pts.length; i++) for (let k = 0; k < 3; k++) curve(pts[i][k], pts[i + 1][k], .9 + k * .17, 6);
-        for (const cp of pts) if (r() < .7) { const a = cp[2], sd = side * r.uni(2, 4.5), al = r.uni(-3, 3); curve(a, [a[0] + s.n[0] * sd + s.dir[0] * al, a[1] + s.n[1] * sd + s.dir[1] * al, r.uni(2.6, 3.6)], .35, 4); }
+        for (const cp of pts) if (rx() < .7) { const a = cp[2], sd = side * rx.uni(2, 4.5), al = rx.uni(-3, 3); curve(a, [a[0] + s.n[0] * sd + s.dir[0] * al, a[1] + s.n[1] * sd + s.dir[1] * al, rx.uni(2.6, 3.6)], .35, 4); }
       }
     }
     // ---- esquinas
@@ -130,6 +140,11 @@ const Barrio = (() => {
       if (ok.length) put("cartel", ...ok[0]);
       if ((s.type === "ave" || o.type === "ave" || (s.mat === "asf" && o.mat === "asf" && s.w > .45)) && ok.length > 1) { put("u_semaforo", ...ok[1]); if (ok[2]) put("u_semaforo", ...ok[2]); }
       if (s.mat !== "tierra" && r() < .25 && ok[3]) put("u_campana", ...ok[3]);
+      const asf = s.mat === "asf" && o.mat === "asf", ave = s.type === "ave" || o.type === "ave";
+      if (F.u_cesto && asf && rx() < .35 && ok.length) { const q = ok[ok.length - 1]; put("u_cesto", q[0] + s.dir[0] * 1.2, q[1] + s.dir[1] * 1.2); }
+      if (F.u_poste_trafo && s.mat !== "tierra" && !ave && rx() < .1 && ok.length > 1) { const q = ok[1]; put("u_poste_trafo", q[0] - s.dir[0] * 1.5, q[1] - s.dir[1] * 1.5); }
+      if (F.u_kiosco && ave && rx() < .3 && ok.length) { const q = ok[0], d = (o.hw + o.sw) + 3; for (const sg of [1, -1]) { const k = [q[0] + s.dir[0] * sg * d * .5, q[1] + s.dir[1] * sg * d * .5];
+        if (W.classify(k[0], k[1])?.k === "walk" && put("u_kiosco", k[0], k[1], { flip: rx() < .5 })) break; } }
     }
     // ---- autos (estacionados y circulando) y contenedores
     for (const s of W.segs) {

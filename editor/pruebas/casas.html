@@ -1,9 +1,11 @@
 <!doctype html><html><body style="margin:0;background:#3a3d44"><canvas id="c" width="1500" height="900"></canvas>
-<script src="../js/config.js"></script><script src="../js/r3d.js"></script><script src="../js/houses.js"></script>
-<script>
+<script src="../js/config.js"></script><script src="../js/r3d.js"></script><script src="../js/houses.js"></script><script src="../recursos/fachada.js"></script>
+<script>(async () => {
   // misma casa a 18 px/m (DET 1) y a 30 px/m mostrada al 0,6, con zoom de cámara Z (filtrado lineal, como el juego)
   const q = new URLSearchParams(location.search), Z = +(q.get('z') || 2), DET = +(q.get('det') || 5 / 3);
   const kinds = (q.get('k') || 'casa,casa2,negocio_casa,ph,villa,chalet').split(','), c = document.getElementById('c'), g = c.getContext('2d'); g.imageSmoothingEnabled = true;
+  if (!q.has('sinGemini')) { const fi = new Image(); fi.src = '../recursos/fachada.png'; await fi.decode(); const c2 = document.createElement('canvas'); c2.width = fi.width; c2.height = fi.height;
+    const g2 = c2.getContext('2d'); g2.drawImage(fi, 0, 0); for (const [n, f] of Object.entries(FACHADA.frames)) R3.DECALS[n] = { w: f.w, h: f.h, d: g2.getImageData(f.x, f.y, f.w, f.h).data }; }
   R3.setLight(CFG.v); let x = 10, y = 10, rowH = 0;
   const spec = (k, i) => ({ kind: k, W: k === 'villa' ? 5 : k === 'edificio' ? 9 : 8, D: k === 'edificio' ? 12 : k === 'ph' ? 9 : 7, p: k === 'edificio' ? 7 : k === 'petit' ? 3 : 0, seed: 1234 + i * 77, wealth: k === 'villa' ? .1 : .7 });
   for (const [i, k] of kinds.entries()) for (const det of [1, DET]) {
@@ -11,4 +13,4 @@
     if (x + cv.width * s > 1490) { x = 10; y += rowH + 10; rowH = 0; }
     g.drawImage(cv, x, y, cv.width * s, cv.height * s); x += cv.width * s + (det === 1 ? 4 : 18); rowH = Math.max(rowH, cv.height * s); }
   R3.setDetalle(1); window.listo = true;
-</script></body></html>
+})();</script></body></html>

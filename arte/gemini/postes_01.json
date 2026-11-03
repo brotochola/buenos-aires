@@ -1,0 +1,30 @@
+{
+ "img": "postes_01.png",
+ "colors": 56,
+ "objs": [
+  {
+   "name": "hd_led",
+   "h": 9.0
+  },
+  {
+   "name": "hd_farola_doble",
+   "h": 4.6
+  },
+  {
+   "name": "hd_farola",
+   "h": 4.0
+  },
+  {
+   "name": "hd_poste_madera",
+   "h": 8.0
+  },
+  {
+   "name": "hd_poste_trafo",
+   "h": 7.6
+  },
+  {
+   "name": "hd_semaforo",
+   "h": 3.6
+  }
+ ]
+}

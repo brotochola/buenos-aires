@@ -5,10 +5,20 @@
   const MOBILE = matchMedia("(pointer: coarse)").matches || innerWidth < 760;
   const loadImg = (src) => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => fail(new Error("no cargó una imagen")); i.src = src; });
   // atlas v4 + los árboles procedurales (a la escala del barrio) en la franja libre de abajo
-  const atlasImg = await (async () => { const im = await loadImg(ASSETS_PNG), cv = document.createElement("canvas"); cv.width = 2048; cv.height = 2048;
+  const atlasImg = await (async () => { const im = await loadImg(ASSETS_PNG), cv = document.createElement("canvas"); cv.width = 2048; cv.height = 2560;
     const g = cv.getContext("2d"); g.drawImage(im, 0, 0); let x = 0, y = im.height + 2, rowH = 0;
     for (const t of Arboles.TIPOS) { const v = Arboles.render(t).vista; if (x + v.w > 2048) { x = 0; y += rowH + 2; rowH = 0; }
       g.drawImage(v.canvas, x, y); ASSETS.frames["arbol_" + t] = { x, y, w: v.w, h: v.h, ox: Math.round(v.ox), oy: Math.round(v.oy) }; x += v.w + 2; rowH = Math.max(rowH, v.h); }
+    // props HD (Gemini, 30 px/m): el visor los usa achicados a la escala del barrio; el exportador copia el original (f.hd)
+    if (typeof HD_ASSETS !== "undefined") { const hi = await loadImg(HD_PNG), e = HD_ASSETS.escala; x = 0; y += rowH + 2; rowH = 0;
+      g.imageSmoothingQuality = "high";
+      for (const [n, h] of Object.entries(HD_ASSETS.frames)) { const w = Math.ceil(h.w * e), hh = Math.ceil(h.h * e); if (x + w > 2048) { x = 0; y += rowH + 2; rowH = 0; }
+        g.drawImage(hi, h.x, h.y, h.w, h.h, x, y, h.w * e, h.h * e);
+        ASSETS.frames[n] = { x, y, w, h: hh, ox: Math.round(h.ox * e), oy: Math.round(h.oy * e), hd: { img: hi, ...h, e } }; x += w + 2; rowH = Math.max(rowH, hh); } }
+    // piezas de fachada (Gemini): R3 las pega en las paredes al hornear las casas
+    if (typeof FACHADA !== "undefined") { const fi = await loadImg(FACHADA_PNG), c2 = document.createElement("canvas"); c2.width = fi.width; c2.height = fi.height;
+      const g2 = c2.getContext("2d", { willReadFrequently: true }); g2.drawImage(fi, 0, 0);
+      for (const [n, f] of Object.entries(FACHADA.frames)) R3.DECALS[n] = { w: f.w, h: f.h, d: g2.getImageData(f.x, f.y, f.w, f.h).data }; }
     return cv; })();
   const F = ASSETS.frames;
   const G = Gfx.init($("stage"), atlasImg, F), cvs = G.canvas, BB = Gfx.BB, DC = Gfx.DC;

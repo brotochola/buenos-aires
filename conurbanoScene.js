@@ -97,14 +97,15 @@ export class Prop extends GameObject {
     this.rigidBody.static = 1;
     this.setSprite('props', c.f, 0);
     const an = META.anclas[c.f]; this.spriteRenderer.anchorX = an[0]; this.spriteRenderer.anchorY = an[1];
-    if (c.fl) this.setScale(-1, 1);
+    const e = (META.escalas && META.escalas[c.f]) || 1;      // props HD: dibujados a 30 px/m, se muestran a 0.6
+    this.setScale(c.fl ? -e : e, e);
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(1.5, c.r);
     this.collider.visualRange = 200;
     this.shadowCaster.heightMultiplier = .8;
-    const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1];
+    const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1] * e;
     if (c.f.startsWith('u_farol')) {          // farol: charco de luz en la vereda + brillo en la lámpara
-      L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * .92;
-      L.lightIntensity = c.f === 'u_farol_doble' ? 2600 : 1800; L.hasGlowSprite = .55; L.active = 1;
+      L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * (c.f === 'u_farola' ? .97 : .88);
+      L.lightIntensity = c.f === 'u_farol_doble' ? 2600 : c.f === 'u_farola' ? 2200 : 1800; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
     } else {
       L.lightIntensity = 0; L.active = 0;
@@ -371,7 +372,7 @@ export class ConurbanoScene extends Scene {
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
-      else { const a = META.anclas[p.f]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -1 : 1 }); }
+      else { const a = META.anclas[p.f], e = (META.escalas && META.escalas[p.f]) || 1; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -e : e, scaleY: e }); }
     }
     const ash = META.anclas.sh_tree;
     for (const a of w.arboles) { Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: w.arbolTipos[a.t] }); if (ash) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }

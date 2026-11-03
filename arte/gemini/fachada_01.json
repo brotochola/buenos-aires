@@ -1,0 +1,134 @@
+{
+ "img": "fachada_01.png",
+ "colors": 120,
+ "grow": 4,
+ "out": "limpio",
+ "objs": [
+  {
+   "name": "fd_ventana_reja",
+   "w": 1.2,
+   "at": [
+    112,
+    130
+   ],
+   "box": [
+    46,
+    54,
+    179,
+    222
+   ]
+  },
+  {
+   "name": "fd_ventana_persiana",
+   "w": 1.2,
+   "at": [
+    320,
+    135
+   ],
+   "box": [
+    254,
+    54,
+    387,
+    222
+   ]
+  },
+  {
+   "name": "fd_ventana_postigos",
+   "w": 2.2,
+   "at": [
+    555,
+    130
+   ],
+   "box": [
+    434,
+    56,
+    677,
+    222
+   ]
+  },
+  {
+   "name": "fd_ventana_madera",
+   "w": 1.1,
+   "at": [
+    555,
+    130
+   ],
+   "box": [
+    497,
+    56,
+    614,
+    222
+   ]
+  },
+  {
+   "name": "fd_ventana_bano",
+   "w": 0.6,
+   "at": [
+    768,
+    117
+   ],
+   "box": [
+    727,
+    65,
+    812,
+    167
+   ]
+  },
+  {
+   "name": "fd_puerta_madera",
+   "w": 1.0,
+   "at": [
+    935,
+    150
+   ]
+  },
+  {
+   "name": "fd_puerta_chapa",
+   "w": 0.9,
+   "at": [
+    105,
+    425
+   ]
+  },
+  {
+   "name": "fd_porton",
+   "w": 2.5,
+   "at": [
+    318,
+    425
+   ]
+  },
+  {
+   "name": "fd_persiana_local",
+   "w": 3.0,
+   "at": [
+    565,
+    425
+   ]
+  },
+  {
+   "name": "fd_aire_ext",
+   "w": 0.8,
+   "at": [
+    770,
+    370
+   ]
+  },
+  {
+   "name": "fd_aire_int",
+   "w": 0.9,
+   "at": [
+    778,
+    483
+   ]
+  },
+  {
+   "name": "fd_medidor",
+   "w": 0.45,
+   "at": [
+    943,
+    420
+   ]
+  }
+ ]
+}
