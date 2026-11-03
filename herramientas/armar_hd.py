@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Pack the cleaned Gemini props (arte/gemini/limpio/*.png) into the editor's HD props sheet.
+"""Pack the Gemini props (arte/gemini/achicado/*.png: Gemini's drawings shrunk 2x by herramientas/achicar.py)
+into the editor's HD props sheet.
 
   python3 herramientas/armar_hd.py
 
@@ -19,14 +20,15 @@ ART = os.path.join(ROOT, "arte")
 PXM_W = 30.0
 
 cfg = json.load(open(os.path.join(ART, "hd.json")))
-# per-object metadata written by pixelar.py: native size, k (scale to 30 px/m), depth d (m)
+# per-object metadata written by achicar.py: size, k (what the game still scales), depth d (m)
+PROPS = os.path.join(ART, "gemini", "achicado")
 info = {}
-for sp in glob.glob(os.path.join(ART, "gemini", "limpio", "*.json")):
+for sp in glob.glob(os.path.join(PROPS, "*.json")):
     info.update(json.load(open(sp)))
 
 items = []
 for name, src in cfg["frames"].items():
-    im = Image.open(os.path.join(ART, "gemini", "limpio", src + ".png")).convert("RGBA")
+    im = Image.open(os.path.join(PROPS, src + ".png")).convert("RGBA")
     k, d = info[src]["k"], info[src].get("d", 0.3)
     oy = max(0, im.height - 1 - int(round(d * PXM_W * 0.5 * 0.5 / k)))   # anchor: center of the footprint (d/2 m deep)
     items.append((name, im, im.width // 2, oy, k))

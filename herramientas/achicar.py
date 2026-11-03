@@ -9,10 +9,11 @@ again: the drawings looked broken. Here each object is cut from the original she
 every pixel of the result is the average of an f×f block (only the drawing's pixels, never the background), so
 nothing is stretched or sampled out of step, and the drawing looks like Gemini's, smaller.
 
-f is the whole factor that brings the drawing closest to the game's density (30 px/m, the LPC people and the
-houses: the game draws everything at 0.6). What is left over is "k" (between 0.8 and 1.25 or so): the game draws
-the frame at 0.6·k so it measures what the spec says, like before. The spec is the same as pixelar.py's
-(arte/gemini/<sheet>.json: "at" or "box", "h"/"w"/"d", "persona", "uniforme").
+f = 2 (picked by eye on variantes.html: 2x with the block average keeps Gemini's detail), or 1 for what Gemini
+drew less than twice its size in the game (the calesita, the glorieta, the Gauchito sheet…): shrinking those would
+make the game enlarge them back, blurred. What is left over is "k": the game draws the frame at 0.6·k so it
+measures what the spec says, like before (k < 1: the GPU shrinks the rest). The spec is the same as pixelar.py's
+(arte/gemini/<sheet>.json: "at" or "box", "h"/"w"/"d", "persona", "uniforme"). --factor N changes the 2.
 
 Writes arte/gemini/achicado/<name>.png and arte/gemini/achicado/<sheet>.json ({w, h, k, d, f}).
 """
@@ -27,12 +28,19 @@ from pixelar import key_mask   # the same chroma key (flat magenta or cyan backg
 TARGET = 30.0                  # art px per meter (width) in the game
 CZ = math.cos(math.pi / 6)     # heights are foreshortened by cos 30° in the oblique view
 OUT = "achicado"
+FACTOR = 2                     # the chosen shrink (variantes.html)
 
 
 def whole_factor(r):
     """The whole factor f >= 1 closest to r (Gemini px per game px), in ratio."""
     lo = max(1, math.floor(r))
     return min((lo, lo + 1), key=lambda f: abs(math.log(r / f)))
+
+
+def factor(r):
+    """FACTOR, but never below the game's size: a drawing less than FACTOR times its size in the game shrinks by
+    the largest whole factor that keeps it at least that big (1 for the calesita)."""
+    return max(1, min(FACTOR, math.floor(r)))
 
 
 def shrink(rgb, fg, f):
@@ -116,7 +124,7 @@ def process(spec_path):
     os.makedirs(out_dir, exist_ok=True)
     meta = {}
     for o, rgb, m, r in cuts:
-        f = whole_factor(r)
+        f = factor(r)
         im = Image.fromarray(shrink(rgb, m, f))
         bb = im.getbbox(); im = im.crop(bb) if bb else im
         im.save(os.path.join(out_dir, o["name"] + ".png"), optimize=True)
@@ -128,7 +136,10 @@ def process(spec_path):
 
 
 if __name__ == "__main__":
-    paths = sys.argv[1:] or sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "arte", "gemini", "*.json")))
+    args = sys.argv[1:]
+    if "--factor" in args:
+        i = args.index("--factor"); FACTOR = int(args[i + 1]); del args[i:i + 2]
+    paths = args or sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "arte", "gemini", "*.json")))
     for p in paths:
         print(os.path.basename(p))
         process(p)
