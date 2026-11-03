@@ -96,6 +96,24 @@ const R3 = (() => {
           this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = 255;
         } }
     }
+    // piedra Mar del Plata: lajas irregulares (celdas de Voronoi sobre una grilla con ruido) con junta oscura hundida
+    piedra(y0 = 0, y1 = this.h, tonos = [[204, 178, 132], [184, 156, 112], [214, 196, 158], [168, 140, 100], [196, 170, 140], [150, 134, 112]]) {
+      const S = Math.max(4, Math.round(6 * DET)), gw = Math.ceil(this.w / S) + 2, gh = Math.ceil((y1 - y0) / S) + 2, pts = [];
+      for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) pts.push([(i - .5 + this.r()) * S * (1 + .25 * ((j % 2) - .5)), (j - .5 + this.r() * .9) * S * .8, this.r.pick(tonos), .9 + .2 * this.r()]);
+      for (let y = y0; y < y1; y++) { const ly = y - y0, gj = Math.floor(ly / (S * .8));
+        for (let x = 0; x < this.w; x++) { const gi = Math.floor(x / S); let d1 = 1e9, d2 = 1e9, b = null;
+          for (let j = gj - 1; j <= gj + 2; j++) for (let i = gi - 1; i <= gi + 2; i++) { if (i < 0 || j < 0 || i >= gw || j >= gh) continue; const q = pts[j * gw + i], d = (q[0] - x) ** 2 + (q[1] - ly) ** 2;
+            if (d < d1) { d2 = d1; d1 = d; b = q; } else if (d < d2) d2 = d; }
+          const k = (y * this.w + x) * 4, edge = Math.sqrt(d2) - Math.sqrt(d1);
+          let c = b ? mul(b[2], b[3] * (.94 + .1 * this.r())) : [180, 160, 120];
+          if (edge < 1.1) c = mul(c, .5); else if (edge < 2.1) c = mul(c, .82);              // junta y borde de la laja
+          this.d[k] = c[0]; this.d[k + 1] = c[1]; this.d[k + 2] = c[2]; this.d[k + 3] = 255; } }
+    }
+    // salpicré: revoque grueso salpicado (granulado fino con puntos claros y oscuros)
+    salpicre(col, y0 = 0, y1 = this.h) {
+      for (let y = y0; y < y1; y++) for (let x = 0; x < this.w; x++) { const k = (y * this.w + x) * 4, v = this.r(), f = v < .12 ? .82 : v > .9 ? 1.1 : .96 + .06 * this.r();
+        this.d[k] = col[0] * f; this.d[k + 1] = col[1] * f; this.d[k + 2] = col[2] * f; this.d[k + 3] = 255; }
+    }
     hueco(y0 = 0, y1 = this.h) {      // ladrillo hueco: bloques con agujeros, juntas desprolijas
       const CH = Math.max(5, Math.round(5 * DET)), CL = Math.max(12, Math.round(12 * DET)), hy0 = Math.round(CH * .25), hy1 = Math.round(CH * .6), step = Math.max(3, Math.round(3 * DET));
       for (let y = y0; y < y1; y++) { const row = (y / CH) | 0, off = (row % 2) * (CL >> 1), ly = y % CH;

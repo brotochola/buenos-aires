@@ -7,10 +7,10 @@ const Barrio = (() => {
   const Wb = (w, step) => Math.max(3, Math.floor(w / step + 1e-6) * step);
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
-  const RAD = [["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
+  const RAD = [["pz_monumento", 2.2], ["pz_fuente", 2.5], ["pz_calesita", 2.6], ["pz_glorieta", 3], ["pz_jacaranda", .5], ["pz_palo_borracho", .5], ["pz_", 1.2], ["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
     ["u_refugio", 1.2], ["u_kiosco", 1.5], ["carro_cartonero", 1.0], ["chango", .5], ["gomas", .55], ["chapas", .5], ["u_tanque", .6], ["u_banco", .9], ["u_parada", .25], ["u_cesto", .3], ["u_poste_trafo", .45], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
   // colisión (m): sólo lo que frena un auto
-  const COLR = [["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
+  const COLR = [["pz_monumento", 1.6], ["pz_fuente", 2.2], ["pz_calesita", 2.2], ["pz_glorieta", 2.4], ["pz_jacaranda", .3], ["pz_palo_borracho", .35], ["pz_hamacas", .9], ["pz_pingpong", .9], ["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
     ["u_refugio", .9], ["u_kiosco", 1.1], ["carro_cartonero", .7], ["u_tanque", .45], ["u_banco", .45], ["u_parada", .08], ["u_cesto", .1], ["u_poste_trafo", .22], ["u_valla", .35], ["obra_material", .5], ["parrilla", .55], ["pileta", 1.3], ["u_tablero", .3], ["u_caja", .25]];
   const lookup = (tbl, n, d) => { for (const [p, v] of tbl) if (n.startsWith(p)) return v; return d; };
   const SH = (n) => n.startsWith("plm_") ? "sh_small" : n.startsWith("u_farol") || n.startsWith("u_poste") || n.startsWith("u_parada") ? "sh_pole" : n.startsWith("u_cesto") || n.startsWith("u_banco") || n.startsWith("u_kiosco") ? "sh_small" : n.startsWith("u_contenedor") || n.startsWith("canasto") || n.startsWith("u_campana") ? "sh_small" : null;
@@ -44,8 +44,42 @@ const Barrio = (() => {
     const person = (x, y, stay) => { if (conGente) people.push({ x, y, stay: !!stay }); };
     const at = (s, t, off) => [s.a[0] + s.dir[0] * t + s.n[0] * off, s.a[1] + s.dir[1] * t + s.n[1] * off];
 
+    // ---- plazas: árboles en el borde y sueltos, faroles y bancos sobre los senderos, monumento o fuente en el medio,
+    // juegos en un cuarto y aparatos, ping-pong o ajedrez en otro, canteros con flores, cestos y gente quieta
+    function plaza(lot) {
+      const P = lot.plaza, at2 = (du, dv) => [P.c[0] + P.u[0] * du + P.v[0] * dv, P.c[1] + P.u[1] * du + P.v[1] * dv];
+      const pasto = (q) => { const l = W.lotAt(q[0], q[1]); return l && l.kind === "plaza"; }, sendero = (q) => { const l = W.lotAt(q[0], q[1]); return l && l.kind === "sendero"; };
+      const hA = P.bA / 2 - 8.5, hB = P.bB / 2 - 8.5, rx2 = rx;
+      // centro
+      put(F.pz_monumento && rx2() < .55 ? "pz_monumento" : F.pz_fuente ? "pz_fuente" : "u_farol_doble", P.c[0], P.c[1], { noClaim: true });
+      // árboles en el borde, cada 9 a 12 m, fuera de los senderos
+      for (const [ax, len, fixed] of [[0, hA, hB], [0, hA, -hB], [1, hB, hA], [1, hB, -hA]])
+        for (let t = -len + rx2.uni(1, 4); t < len; t += rx2.uni(9, 12)) { const q = ax ? at2(fixed, t) : at2(t, fixed); if (pasto(q)) {
+          if (F.pz_jacaranda && rx2() < .3) put(rx2() < .6 ? "pz_jacaranda" : "pz_palo_borracho", q[0], q[1], { rad: 2 }); else arbol(q[0], q[1], rx2() < .5); } }
+      // árboles sueltos en el pasto
+      for (let k = 0, n = Math.round(P.bA * P.bB / 450); k < n; k++) { const q = at2(rx2.uni(-hA + 3, hA - 3), rx2.uni(-hB + 3, hB - 3)); if (pasto(q)) arbol(q[0], q[1], rx2() < .5); }
+      // faroles y bancos a lo largo de los senderos (cruz y diagonales)
+      const dirs = [[1, 0], [0, 1], [P.bA, P.bB], [P.bA, -P.bB]].map(([a, b]) => { const l = Math.hypot(a, b); return [a / l, b / l]; });
+      for (const [a, b] of dirs) for (const sg of [1, -1]) for (let t = 10; t < Math.hypot(hA * a, hB * b) + 2; t += rx2.uni(12, 16)) {
+        const side = rx2() < .5 ? 1 : -1, q0 = [a * t * sg, b * t * sg], off = 1.9;
+        const qf = at2(q0[0] - b * off * side, q0[1] + a * off * side); if (pasto(qf)) put(F.u_farola_orn ? "u_farola_orn" : "u_farola", qf[0], qf[1]);
+        const qb = at2(q0[0] + a * 3 * sg + b * off * side, q0[1] + b * 3 * sg - a * off * side); if (pasto(qb) && rx2() < .7) put(F.pz_banco ? (rx2() < .5 ? "pz_banco" : "u_banco") : "u_banco", qb[0], qb[1], { face: [-(qb[0] - at2(q0[0], q0[1])[0]), -(qb[1] - at2(q0[0], q0[1])[1])] });
+        if (rx2() < .25) { const qc = at2(q0[0] - b * 2.4 * side, q0[1] + a * 2.4 * side); if (pasto(qc)) put("u_cesto", qc[0], qc[1]); }
+      }
+      // cuartos: juegos, aparatos y mesas, canteros con flores
+      const cuartos = [[1, 1], [-1, 1], [1, -1], [-1, -1]].sort(() => rx2() - .5);
+      const enCuarto = (cu, k, rad) => { for (let tries = 0; tries < 12; tries++) { const q = at2(cu[0] * rx2.uni(hA * .3, hA * .8), cu[1] * rx2.uni(hB * .3, hB * .8)); if (pasto(q) && claim(q[0], q[1], rad)) return q; } return null; };
+      for (const n of ["pz_hamacas", "pz_tobogan", "pz_subibaja", "pz_calesita"]) { if (!F[n]) continue; const q = enCuarto(cuartos[0], n, n === "pz_calesita" ? 2.5 : 1.6); if (q) put(n, q[0], q[1], { noClaim: true }); }
+      for (const n of ["pz_aparato", "pz_aparato", "pz_pingpong", "pz_ajedrez", "pz_bebedero"]) { if (!F[n]) continue; const q = enCuarto(cuartos[1], n, 1.4); if (q) put(n, q[0], q[1], { noClaim: true }); }
+      for (let k = 0; k < 6; k++) { const n = rx2.pick(["pz_cantero", "plm_agapanto", "plm_lantana", "pl_boj", "plm_rosal", "plm_yuyos"]); if (!F[n]) continue; const q = enCuarto(cuartos[2 + (k & 1)], n, .9); if (q) put(n, q[0], q[1], { noClaim: true }); }
+      if (F.pz_glorieta && rx2() < .4) { const q = enCuarto(cuartos[2], "pz_glorieta", 3); if (q) put("pz_glorieta", q[0], q[1], { noClaim: true }); }
+      for (let k = 0; k < Math.round(P.bA * P.bB / 900) * C.gente; k++) { const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) person(q[0], q[1], rx2() < .5); }
+    }
+
     // ---- casas y tapiales
     for (const lot of W.lots) {
+      if (lot.kind === "sendero") continue;
+      if (lot.kind === "plaza") { plaza(lot); continue; }
       const phiQ = qa(lot.phi);
       const LP = (u, v) => [lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v, lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v];
       const rect = (u0, u1, v0, v1) => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => LP(u, v));

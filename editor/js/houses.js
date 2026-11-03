@@ -3,7 +3,8 @@
 const Houses = (() => {
   const { Tex, Scene, rng, mul, add, mix, px, text, textW } = R3;
   const WALLS = [[222, 198, 156], [212, 182, 140], [232, 212, 174], [198, 164, 124], [226, 158, 124], [158, 190, 206], [118, 186, 176],
-    [234, 226, 208], [216, 180, 108], [186, 196, 148], [108, 148, 196], [204, 118, 90], [182, 176, 166], [226, 204, 188], [168, 206, 160], [238, 222, 150]];
+    [234, 226, 208], [216, 180, 108], [186, 196, 148], [108, 148, 196], [204, 118, 90], [182, 176, 166], [226, 204, 188], [168, 206, 160], [238, 222, 150],
+    [240, 196, 196], [196, 222, 226], [214, 232, 196], [246, 226, 160], [232, 176, 150], [206, 190, 222], [250, 244, 232], [160, 196, 170]];
   const SHUTTER = [[44, 92, 64], [32, 82, 70], [38, 70, 104], [110, 64, 38], [52, 52, 58], [128, 40, 38]];
   const WOOD = [120, 74, 44];
   const SHOPS = [["KIOSCO", [200, 34, 34]], ["ALMACEN", [36, 120, 64]], ["VERDULERIA", [40, 128, 56]], ["CARNICERIA", [196, 32, 36]],
@@ -30,7 +31,8 @@ const Houses = (() => {
     : h < px(.75) ? "fd_ventana_bano" : "fd_ventana_madera";
   function windowDecal(t, x, y, w, h, style, wall) {
     const pz = pieza(style, w, h);
-    if (pz && R3.DECALS[pz]) { t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(wall, .55)); t.blit(pz, x, y, w, h + (pz === "fd_ventana_bano" ? 0 : Math.round(h * .06)));
+    if (pz && R3.DECALS[pz]) { t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(wall, .55)); reveal(t, x, y, w, h, wall); const rv = Math.max(2, Math.round(px(.09)));
+      t.blit(pz, x + rv, y + rv + 1, w - rv * 2, h - rv - 1 + (pz === "fd_ventana_bano" ? 0 : Math.round(h * .06)));
       for (let xx = x; xx < x + w; xx += 2) t.shade(xx, y + h + 3, xx + 1, y + h + 3 + t.r.int(2, 9), .93); return; }
     if (style === "reja") style = "none";
     t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(wall, .5)); t.rect(x, y, x + w, y + h, mul(wall, .72));
@@ -41,8 +43,12 @@ const Houses = (() => {
     if (style === "cerrado") { const sc = t.r.pick(SHUTTER); t.rect(x + 2, y + 2, x + w - 1, y + h - 1, sc); for (let yy = y + 3; yy < y + h - 1; yy += 2) t.shade(x + 2, yy, x + w - 1, yy + 1, .7); t.rect(x + (w >> 1), y + 2, x + (w >> 1) + 1, y + h - 1, mul(sc, .5)); }
     for (let xx = x; xx < x + w; xx += 2) t.shade(xx, y + h + 2, xx + 1, y + h + 2 + t.r.int(2, 9), .92);
   }
+  // vano con espesor de pared: jamba de arriba en sombra (la luz viene de arriba a la izquierda), jamba izquierda en sombra, derecha iluminada
+  function reveal(t, x, y, w, h, wall) { const rv = Math.max(2, Math.round(px(.09)));
+    t.rect(x, y, x + w, y + h, mul(wall, .74)); t.rect(x, y, x + w, y + rv + 1, mul(wall, .42)); t.rect(x, y, x + rv, y + h, mul(wall, .55)); t.rect(x + w - rv, y + rv, x + w, y + h, mul(wall, .9)); }
   function doorDecal(t, x, y, w, h, kind, wall) {
     t.rect(x - 1, y - 1, x + w + 1, y + h, mul(wall, .5));
+    if (R3.DECALS.fd_puerta_madera) { reveal(t, x, y, w, h, wall); const rv = Math.max(2, Math.round(px(.09))); x += rv; y += rv + 1; w -= rv * 2; h -= rv + 1; }
     const dc = kind === "madera" || !R3.DECALS.fd_puerta_chapa ? null : t.r.pick([[38, 40, 46], [34, 84, 58], [120, 36, 32], [58, 78, 110], [196, 192, 182], [30, 60, 40], [150, 150, 154], [150, 150, 154]]);
     if (t.blit(kind === "madera" ? "fd_puerta_madera" : "fd_puerta_chapa", x, y, w, h, dc && dc[0] !== 150 ? mul(dc, 1.25) : null)) {
       const nx = x + w + 3; if (nx + 8 < t.w && R3.DECALS.fd_medidor && t.r() < .35) t.blit("fd_medidor", nx, y + h * .18, px(.45), px(.6)); return; }
@@ -158,6 +164,8 @@ const Houses = (() => {
     const sc = new Scene(); sc.setXform(phi);
     const wall = r.pick(WALLS);
     const finish = kind === "obra" ? "hueco" : kind === "villa" ? (r() < .62 ? "hueco" : "stucco") : (r() < .14 ? "brick" : "stucco");
+    // revestimientos de frente: piedra Mar del Plata (entera o hasta 1,2 m), o salpicré; muy de los 60 y 70 en el conurbano
+    const rv2 = rng(spec.seed ^ 0x9e3779b9), revest = finish === "stucco" && kind !== "villa" ? (rv2() < .16 ? "piedra" : rv2() < .2 ? "zocalo_piedra" : rv2() < .14 ? "salpicre" : null) : null;
     const storeys = { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: r.pick([1, 1, 1, 2, 2, 3]) }[kind];
     const D = spec.D || { casa: r.pick([4.2, 5]), chalet: 4.6, negocio: 4.2, galpon: 6, casa2: 4.6, negocio_casa: 4.6, obra: 4.2, ph: 5.2, villa: 3.6 }[kind];
     const y0 = kind === "chalet" ? 2.6 : 0, zr = GF + (storeys - 1) * UF;
@@ -171,13 +179,16 @@ const Houses = (() => {
     const zt = (z) => px(Htot - z), X = (m) => px(m);
     // ---- texturas de las 4 paredes
     const ft = wallTex(W, Htot, wall, finish, spec.seed, wear);
+    if (revest === "piedra") ft.piedra(0, px(Htot - (flat ? PAR : .35)));
+    else if (revest === "zocalo_piedra") ft.piedra(px(Htot - 1.2), ft.h);
+    else if (revest === "salpicre") { ft.salpicre(mix(wall, [236, 230, 218], .4)); ft.runoff(.5, wear * .7); }
     const bt = wallTex(W, Htot, mix(wall, [200, 196, 188], .3), finish, spec.seed + 1, wear * 1.2);
     const stx = new Tex(D, Htot, spec.seed + 3);
     if (finish === "hueco" || r() < .25) stx.hueco(); else if (r() < .5) { stx.stucco(mix(wall, [190, 186, 178], .6), wear * 1.3); stx.runoff(.8, 1.2); stx.peel(2); } else stx.brick();
     if (r() < .15 && finish !== "hueco") pintada(stx, 4, stx.w - 4, px(Htot - 2.6), r);
     // zócalos / estructura de hormigón
     for (const t of [ft, bt]) {
-      if (finish !== "hueco") { t.rect(0, zt(.45), t.w, t.h, [122, 118, 112]); t.rect(0, zt(.45), t.w, zt(.45) + 1, [156, 152, 146]); t.humidity(1.1); }
+      if (finish !== "hueco" && !(t === ft && revest && revest !== "salpicre")) { t.rect(0, zt(.45), t.w, t.h, [122, 118, 112]); t.rect(0, zt(.45), t.w, zt(.45) + 1, [156, 152, 146]); t.humidity(1.1); }
       else { const cols = [0, t.w - px(.3)]; if (W > 7) cols.push((t.w >> 1) - px(.15));
         for (const xc of cols) { const cc = new Tex(.3, Htot, spec.seed + xc); cc.concrete([172, 170, 164]); for (let y = 0; y < t.h; y++) for (let x = 0; x < cc.w && xc + x < t.w; x++) { const i = (y * t.w + xc + x) * 4, j = (y * cc.w + x) * 4; for (let k = 0; k < 3; k++) t.d[i + k] = cc.d[j + k]; } }
         for (let s = 0; s < storeys; s++) { const zz = GF + s * UF; t.rect(0, zt(zz), t.w, zt(zz) + px(.28), [170, 168, 162]); t.shade(0, zt(zz) + px(.28), t.w, zt(zz) + px(.28) + 1, .7); } }

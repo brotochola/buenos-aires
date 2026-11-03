@@ -1,0 +1,142 @@
+{
+ "img": "plaza_01.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "grow": 0,
+ "objs": [
+  {
+   "name": "pz_monumento",
+   "at": [
+    210,
+    240
+   ],
+   "h": 5.5,
+   "d": 1.5
+  },
+  {
+   "name": "pz_fuente",
+   "at": [
+    410,
+    180
+   ],
+   "w": 4.5
+  },
+  {
+   "name": "pz_hamacas",
+   "at": [
+    640,
+    150
+   ],
+   "h": 2.4,
+   "d": 1.5
+  },
+  {
+   "name": "pz_tobogan",
+   "at": [
+    830,
+    170
+   ],
+   "w": 3
+  },
+  {
+   "name": "pz_subibaja",
+   "at": [
+    1020,
+    190
+   ],
+   "w": 3
+  },
+  {
+   "name": "pz_calesita",
+   "at": [
+    1220,
+    175
+   ],
+   "w": 4.5
+  },
+  {
+   "name": "pz_banco",
+   "at": [
+    420,
+    375
+   ],
+   "w": 1.8
+  },
+  {
+   "name": "pz_bebedero",
+   "at": [
+    580,
+    385
+   ],
+   "h": 1.1,
+   "d": 0.4
+  },
+  {
+   "name": "pz_aparato",
+   "at": [
+    740,
+    390
+   ],
+   "h": 1.6,
+   "d": 1
+  },
+  {
+   "name": "pz_jacaranda",
+   "at": [
+    960,
+    520
+   ],
+   "h": 8,
+   "d": 2
+  },
+  {
+   "name": "pz_palo_borracho",
+   "at": [
+    1230,
+    540
+   ],
+   "h": 7.5,
+   "d": 2
+  },
+  {
+   "name": "pz_pingpong",
+   "at": [
+    240,
+    515
+   ],
+   "w": 2.7
+  },
+  {
+   "name": "pz_ajedrez",
+   "at": [
+    220,
+    655
+   ],
+   "w": 1.8
+  },
+  {
+   "name": "pz_glorieta",
+   "at": [
+    405,
+    625
+   ],
+   "w": 3.5
+  },
+  {
+   "name": "pz_reja",
+   "at": [
+    575,
+    680
+   ],
+   "w": 2
+  },
+  {
+   "name": "pz_cantero",
+   "at": [
+    755,
+    665
+   ],
+   "w": 2.5
+  }
+ ]
+}

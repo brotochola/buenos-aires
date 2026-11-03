@@ -145,7 +145,9 @@ const Exportar = (() => {
     rasterRoads(W, GW, GH, (i, s, q) => { const c = s.mat === "pasillo" ? COST.pasillo : s.type === "ave" && Math.abs(q.ds) < s.med ? COST.cantero : s.mat === "tierra" ? COST.tierra : COST.calle;
       road[i] = road[i] ? Math.min(road[i], c) : c; if (s.mat === "pasillo") vereda[i] = 1; });
     for (let i = 0; i < road.length; i++) if (road[i] && !cost[i]) cost[i] = road[i];
-    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) if (cost[y * GW + x] && W.lotAt(x + .5, y + .5)) { cost[y * GW + x] = 0; vereda[y * GW + x] = 0; }
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const l = W.lotAt(x + .5, y + .5);
+      if (l && l.kind === "sendero") { cost[y * GW + x] = COST.vereda; vereda[y * GW + x] = 1; }       // los senderos de las plazas se caminan
+      else if (cost[y * GW + x] && l) { cost[y * GW + x] = 0; vereda[y * GW + x] = 0; } }
     const fg = FlowGrid(GW, GH, cost, COST.calle), nDest = Math.max(3, Math.min(10, Math.round(C.destinos || 6)));
     const targets = fg.pickTargets(nDest, R3.rng(B.SEED ^ 0x2545F491), (c) => c === COST.vereda);
     for (let f = 0; f < targets.length; f++) { progreso("flowfield de peatones " + (f + 1) + "/" + targets.length, .7 + f / targets.length * .12); await espera(); fg.compute(f);
