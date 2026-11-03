@@ -27,7 +27,7 @@ const Houses = (() => {
       t.rect(x0, y0, x0 + cw, y1, mul(cc, .92)); t.rect(x1 - cw, y0, x1, y1, mul(cc, .92)); for (let x = x0; x < x0 + cw; x += 2) t.shade(x, y0, x + 1, y1, .88); }
   }
   // pieza de Gemini para cada estilo (si está cargada); si no, el dibujo procedural de siempre
-  const pieza = (style, w, h) => style === "persiana" ? "fd_ventana_persiana" : style === "reja" ? "fd_ventana_reja" : style === "cerrado" ? null
+  const pieza = (style, w, h) => style === "persiana" && h > px(1.8) && R3.DECALS.fd_persiana_madera ? "fd_persiana_madera" : style === "arco" ? "fd_ventana_arco" : style === "persiana" ? "fd_ventana_persiana" : style === "reja" ? "fd_ventana_reja" : style === "cerrado" ? null
     : h < px(.75) ? "fd_ventana_bano" : "fd_ventana_madera";
   function windowDecal(t, x, y, w, h, style, wall) {
     const pz = pieza(style, w, h);
@@ -50,8 +50,12 @@ const Houses = (() => {
     t.rect(x - 1, y - 1, x + w + 1, y + h, mul(wall, .5));
     if (R3.DECALS.fd_puerta_madera) { reveal(t, x, y, w, h, wall); const rv = Math.max(2, Math.round(px(.09))); x += rv; y += rv + 1; w -= rv * 2; h -= rv + 1; }
     const dc = kind === "madera" || !R3.DECALS.fd_puerta_chapa ? null : t.r.pick([[38, 40, 46], [34, 84, 58], [120, 36, 32], [58, 78, 110], [196, 192, 182], [30, 60, 40], [150, 150, 154], [150, 150, 154]]);
-    if (t.blit(kind === "madera" ? "fd_puerta_madera" : "fd_puerta_chapa", x, y, w, h, dc && dc[0] !== 150 ? mul(dc, 1.25) : null)) {
-      const nx = x + w + 3; if (nx + 8 < t.w && R3.DECALS.fd_medidor && t.r() < .35) t.blit("fd_medidor", nx, y + h * .18, px(.45), px(.6)); return; }
+    const pz = kind === "chorizo" ? "fd_puerta_chorizo" : kind === "vidrio" ? "fd_puerta_vidrio" : kind === "madera" ? "fd_puerta_madera" : "fd_puerta_chapa";
+    if (t.blit(R3.DECALS[pz] ? pz : kind === "chapa" ? "fd_puerta_chapa" : "fd_puerta_madera", x, y, w, h, dc && dc[0] !== 150 && pz === "fd_puerta_chapa" ? mul(dc, 1.25) : null)) {
+      const nx = x + w + 3, cuelga = (n, wm, z) => { const d = R3.DECALS[n]; if (d && nx + px(wm) < t.w) { t.blit(n, nx, y + px(z), px(wm), Math.round(px(wm) * d.h / d.w)); return true; } return false; };
+      if (t.r() < .3) cuelga("fd_numero", .18, .55); else if (t.r() < .2) cuelga("fd_azulejo_virgen", .2, .45); else if (t.r() < .3) cuelga(t.r() < .5 ? "fd_medidor" : "fd_nicho_medidor", .4, .4);
+      if (t.r() < .35 && R3.DECALS.fd_farolito) { const d = R3.DECALS.fd_farolito, fw = px(.3); if (x - fw - 3 > 0) t.blit("fd_farolito", x - fw - 3, y - px(.1), fw, Math.round(fw * d.h / d.w)); }
+      return; }
     if (kind === "madera") { const c = mul(WOOD, t.r.uniform(.8, 1.2)); t.rect(x, y, x + w, y + h, c);
       for (const [a0, b0, a1, b1] of [[3, 3, w - 3, (h >> 1) - 2], [3, (h >> 1) + 1, w - 3, h - 3]]) { t.rect(x + a0, y + b0, x + a1, y + b1, mul(c, .86)); t.rect(x + a0, y + b0, x + a1, y + b0 + 1, mul(c, .58)); t.rect(x + a0, y + b0, x + a0 + 1, y + b1, mul(c, .6)); t.rect(x + a0, y + b1 - 1, x + a1, y + b1, mul(c, 1.25)); }
       for (let yy = y; yy < y + h; yy += 2) t.shade(x, yy, x + w, yy + 1, .97); }
@@ -90,6 +94,9 @@ const Houses = (() => {
     t.rect(0, 0, t.w, 2, c); t.rect(0, t.h - 2, t.w, t.h, c); for (let x = 0; x < t.w; x += gap) t.rect(x, 0, x + 1, t.h, c); if (t.h > 14) t.rect(0, t.h >> 1, t.w, (t.h >> 1) + 1, c); return t; }
   function rejaTex(wm, hm, seed) { const t = new Tex(wm, hm, seed, [0, 0, 0], 0), c = [24, 24, 28];
     for (let x = 1; x < t.w; x += 4) t.rect(x, 0, x + 1, t.h, c); for (const y of [1, t.h >> 1, t.h - 2]) t.rect(0, y, t.w, y + 1, c); for (let x = 1; x < t.w; x += 4) { t.p(x - 1, 3, c); t.p(x + 1, 3, c); } return t; }
+  // textura hecha de una pieza de Gemini (lo demás transparente), para usarla en una cara 3D (rejas, barandas de hierro)
+  const decalTex = (name, wm, hm, rep = 1) => { if (!R3.DECALS[name]) return null; const t = Tex.fromPx(px(wm), px(hm), 1); const w = Math.round(t.w / rep);
+    for (let k = 0; k < rep; k++) t.blit(name, k * w, 0, k === rep - 1 ? t.w - k * w : w, t.h); return t; };
   const solid = (wm, hm, c, seed, kind = "concrete") => { const t = new Tex(wm, hm, seed); if (kind === "concrete") t.concrete(c); else if (kind === "stucco") t.stucco(c); else t.rect(0, 0, t.w, t.h, c); return t; };
 
   // ---------- objetos
@@ -186,6 +193,9 @@ const Houses = (() => {
     const stx = new Tex(D, Htot, spec.seed + 3);
     if (finish === "hueco" || r() < .25) stx.hueco(); else if (r() < .5) { stx.stucco(mix(wall, [190, 186, 178], .6), wear * 1.3); stx.runoff(.8, 1.2); stx.peel(2); } else stx.brick();
     if (r() < .15 && finish !== "hueco") pintada(stx, 4, stx.w - 4, px(Htot - 2.6), r);
+    { const rg = rng(spec.seed ^ 0x2f6b1d3), dg = R3.DECALS.fd_graffiti, dm = R3.DECALS.fd_mural;
+      if (dg && rg() < (spec.wealth < .45 ? .35 : .1)) { const w = px(Math.min(D - .4, rg.uniform(1.6, 2.6))), h = Math.round(w * dg.h / dg.w); stx.blit("fd_graffiti", px(rg.uniform(.1, Math.max(.2, D - 2.8))), stx.h - h - px(rg.uniform(.3, .8)), w, h); }
+      else if (dm && Htot > 5 && rg() < .12) { const w = px(Math.min(D - .3, rg.uniform(3, 5))), h = Math.min(px(Htot - 1), Math.round(w * dm.h / dm.w)); stx.blit("fd_mural", px(.15), stx.h - h - px(.5), w, h); } }
     // zócalos / estructura de hormigón
     for (const t of [ft, bt]) {
       if (finish !== "hueco" && !(t === ft && revest && revest !== "salpicre")) { t.rect(0, zt(.45), t.w, t.h, [122, 118, 112]); t.rect(0, zt(.45), t.w, zt(.45) + 1, [156, 152, 146]); t.humidity(1.1); }
@@ -219,7 +229,8 @@ const Houses = (() => {
         if (kind === "ph") { const gx2 = gx > W / 2 ? .35 : W - gw - .35; shutterDecal(ft, X(gx2), zt(2.4), X(gw), px(1.95)); free = [Math.min(gx, gx2) + gw + .3, Math.max(gx, gx2) - .3]; } }
       const span = free[1] - free[0], dw = .95;
       const dx = span < 3.4 ? free[0] + (span - dw) / 2 : free[0] + r.pick([.3, span - dw - .3]);
-      if (span > dw) doorDecal(ft, X(dx), zt(2.15), X(dw), px(2.13), r.pick(["madera", "madera", "chapa"]), wall);
+      if (span > dw) { const dk = spec.wealth > .62 && r() < .45 ? r.pick(["chorizo", "vidrio"]) : r.pick(["madera", "madera", "chapa"]);
+        if (dk === "chorizo") doorDecal(ft, X(dx - .1), zt(2.55), X(dw + .2), px(2.53), dk, wall); else doorDecal(ft, X(dx), zt(2.15), X(dw), px(2.13), dk, wall); }
       const style = r.pick(["postigo", "persiana", "persiana", "cerrado"]), reja = r() < (spec.wealth < .6 ? .85 : .6);
       for (const [a, b] of [[free[0], dx - .25], [dx + dw + .25, free[1]]]) { const ww = 1.25, need = ww + (style === "postigo" ? 1.4 : .2);
         if (b - a >= need) { const xm = a + (b - a - ww) / 2; windowDecal(ft, X(xm), zt(2.15), X(ww), px(1.15), style === "postigo" ? "none" : style, wall); wins.push([xm, 1, ww, 1.15, reja, style]); } }
@@ -313,7 +324,8 @@ const Houses = (() => {
     }
     for (const zb of balconies) {
       sc.box(0, y0 - .85, zb - .02, W, y0, zb + .14, { front: [222, 218, 208], top: [236, 232, 222], right: [190, 186, 178], left: [200, 196, 188] });
-      sc.box(.05, y0 - .85, zb + .14, W - .05, y0 - .83, zb + 1.1, { front: railingTex(W - .1, .96, spec.seed), back: railingTex(W - .1, .96, spec.seed), cast: false });
+      const orn = spec.wealth > .5 && r() < .6 ? decalTex("fd_balcon_hierro", W - .1, .96, Math.max(1, Math.round((W - .1) / 2))) : null;
+      sc.box(.05, y0 - .85, zb + .14, W - .05, y0 - .83, zb + 1.1, { front: orn || railingTex(W - .1, .96, spec.seed), back: orn || railingTex(W - .1, .96, spec.seed), cast: false });
       for (const xx of [.05, W - .07]) sc.box(xx, y0 - .85, zb + .14, xx + .02, y0, zb + 1.1, { right: railingTex(.85, .96, spec.seed), left: railingTex(.85, .96, spec.seed), cast: false });
       for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), y0 - .7, zb + .14, r.int(0, 99999));
       if (r() < .4) clothes(sc, .3, W - .3, y0 - .45, zb + 2.0, r.int(0, 99999));
@@ -347,7 +359,8 @@ const Houses = (() => {
       const mw = solid(W / 2, .55, [228, 224, 212], spec.seed, "stucco");
       sc.box(0, 0, 0, W / 2 - .55, .25, .55, { front: mw, top: [240, 236, 226], right: [190, 186, 176], left: [200, 196, 186] });
       sc.box(W / 2 + .55, 0, 0, W, .25, .55, { front: mw, top: [240, 236, 226], right: [190, 186, 176], left: [200, 196, 186] });
-      sc.box(0, .08, .55, W, .1, 1.35, { front: rejaTex(W, .8, spec.seed), back: rejaTex(W, .8, spec.seed), cast: false });
+      const rj = decalTex("fd_reja", W, .8, Math.max(1, Math.round(W / 2)));
+      sc.box(0, .08, .55, W, .1, 1.35, { front: rj || rejaTex(W, .8, spec.seed), back: rj || rejaTex(W, .8, spec.seed), cast: false });
       for (const xp of [0, W / 2 - .55, W / 2 + .15, W - .4]) { const p_ = new Tex(.4, 1.5, spec.seed + 63); p_.brick(); sc.box(xp, 0, 0, xp + .4, .3, 1.5, { front: p_, top: [226, 222, 212], right: [150, 80, 56], left: [160, 86, 60] }); }
     }
     if (kind === "obra") { for (const xc of [.15, W - .3]) for (let k = 0; k < 3; k++) sc.box(xc + k * .06, y0 + .05, zr + .3, xc + k * .06 + .03, y0 + .08, zr + 1.3 + k * .15, { front: [150, 78, 46], right: [110, 56, 36], left: [120, 60, 40], cast: false });
@@ -484,12 +497,13 @@ const Houses = (() => {
     for (let yy = zt(GF2); yy < zt(.5); yy += px(.32)) ft.shade(0, yy, ft.w, yy + 1, .78);            // buñado
     ft.rect(0, zt(.5), ft.w, ft.h, mul(wall, .72)); ft.humidity(.5);
     const dw = 1.5, dx = r.pick([.6, W - dw - .6, (W - dw) / 2]);
-    doorDecal(ft, X(dx), zt(2.9), X(dw / 2), px(2.88), "madera", wall); doorDecal(ft, X(dx + dw / 2), zt(2.9), X(dw / 2), px(2.88), "madera", wall);
+    if (R3.DECALS.fd_puerta_chorizo) doorDecal(ft, X(dx), zt(2.9), X(dw), px(2.88), "chorizo", wall);
+    else { doorDecal(ft, X(dx), zt(2.9), X(dw / 2), px(2.88), "madera", wall); doorDecal(ft, X(dx + dw / 2), zt(2.9), X(dw / 2), px(2.88), "madera", wall); }
     ft.rect(X(dx) - 3, zt(3.25), X(dx + dw) + 3, zt(2.9) - 2, add(wall, 18));                          // frontis
     const wins = []; const cols = Math.max(2, Math.floor(W / 2.3));
     for (let k = 0; k < n; k++) { const zb = k === 0 ? 0 : GF2 + (k - 1) * UF2, hh = k === 0 ? 2.1 : 2.4, zw = zb + (k === 0 ? .9 : .5);
       for (let i = 0; i < cols; i++) { const cx = W * (i + .5) / cols; if (k === 0 && Math.abs(cx - (dx + dw / 2)) < 1.4) continue;
-        windowDecal(ft, X(cx - .55), zt(zw + hh), X(1.1), px(hh), k === 0 ? "persiana" : r.pick(["none", "persiana"]), wall); wins.push([cx - .55, zw, 1.1, hh, k]); } }
+        windowDecal(ft, X(cx - .55), zt(zw + hh), X(1.1), px(hh), k === 0 ? "persiana" : r.pick(["arco", "persiana", "persiana"]), wall); wins.push([cx - .55, zw, 1.1, hh, k]); } }
     const stx = new Tex(D, Htot, spec.seed + 3); stx.stucco(mix(wall, [200, 196, 188], .5), 1); stx.runoff(.8, 1);
     const bt = new Tex(W, Htot, spec.seed + 1); bt.stucco(mix(wall, [196, 192, 186], .4), 1);
     const ftc = (a, b) => ft.crop(zt(b), zt(a)), btc = (a, b) => bt.crop(zt(b), zt(a)), stc = (a, b) => stx.crop(zt(b), zt(a));
@@ -508,7 +522,8 @@ const Houses = (() => {
       sc.box(xm - .12, -.08, zw + hh, xm + ww + .12, 0, zw + hh + .22, { front: add(wall, 20), top: add(wall, 30), right: dk, left: dk });
       sc.box(xm + ww / 2 - .1, -.11, zw + hh - .05, xm + ww / 2 + .1, 0, zw + hh + .28, { front: add(wall, 28), right: dk, left: dk });
       if (k > 0) { sc.box(xm - .2, -.55, zw - .1, xm + ww + .2, 0, zw + .02, { front: lt, top: add(wall, 24), right: dk, left: dk });
-        sc.box(xm - .18, -.55, zw + .02, xm + ww + .18, -.53, zw + .95, { front: railingTex(ww + .36, .93, spec.seed + k, [30, 30, 34], 3), back: railingTex(ww + .36, .93, spec.seed, [30, 30, 34], 3), cast: false });
+        const orn = decalTex("fd_balcon_hierro", ww + .36, .93);
+        sc.box(xm - .18, -.55, zw + .02, xm + ww + .18, -.53, zw + .95, { front: orn || railingTex(ww + .36, .93, spec.seed + k, [30, 30, 34], 3), back: orn || railingTex(ww + .36, .93, spec.seed, [30, 30, 34], 3), cast: false });
         if (r() < .5) plant(sc, xm + r.uniform(0, ww - .35), -.45, zw + .02, r.int(0, 9999)); }
       else sc.box(xm - .1, -.1, zw - .08, xm + ww + .1, 0, zw, { front: [232, 228, 218], top: [244, 240, 232], right: [196, 192, 184], left: [206, 202, 194] }); }
     tank(sc, r.uniform(1, W - 1), D * .6, zr, spec.seed + 90, "gris");

@@ -1,0 +1,148 @@
+{
+ "img": "fachada_02.png",
+ "bg": "cyan",
+ "ref": 1584,
+ "grow": 0,
+ "objs": [
+  {
+   "name": "fd_reja",
+   "w": 1,
+   "box": [
+    130,
+    40,
+    420,
+    232
+   ]
+  },
+  {
+   "name": "fd_porton_reja",
+   "w": 1,
+   "box": [
+    456,
+    40,
+    575,
+    232
+   ]
+  },
+  {
+   "name": "fd_ventana_arco",
+   "w": 1,
+   "box": [
+    150,
+    305,
+    345,
+    635
+   ]
+  },
+  {
+   "name": "fd_cornisa",
+   "w": 1,
+   "box": [
+    603,
+    272,
+    868,
+    375
+   ]
+  },
+  {
+   "name": "fd_balcon_hierro",
+   "w": 1,
+   "box": [
+    610,
+    78,
+    863,
+    220
+   ]
+  },
+  {
+   "name": "fd_puerta_vidrio",
+   "w": 1,
+   "box": [
+    900,
+    40,
+    1062,
+    425
+   ]
+  },
+  {
+   "name": "fd_farolito",
+   "w": 1,
+   "box": [
+    543,
+    488,
+    616,
+    605
+   ]
+  },
+  {
+   "name": "fd_numero",
+   "w": 1,
+   "box": [
+    650,
+    505,
+    736,
+    597
+   ]
+  },
+  {
+   "name": "fd_nicho_medidor",
+   "w": 1,
+   "box": [
+    773,
+    500,
+    853,
+    600
+   ]
+  },
+  {
+   "name": "fd_azulejo_virgen",
+   "w": 1,
+   "box": [
+    890,
+    505,
+    966,
+    597
+   ]
+  },
+  {
+   "name": "fd_graffiti",
+   "w": 1,
+   "box": [
+    998,
+    483,
+    1228,
+    605
+   ]
+  },
+  {
+   "name": "fd_persiana_madera",
+   "w": 1,
+   "box": [
+    1108,
+    40,
+    1292,
+    425
+   ]
+  },
+  {
+   "name": "fd_puerta_chorizo",
+   "w": 1,
+   "box": [
+    1331,
+    40,
+    1536,
+    442
+   ]
+  },
+  {
+   "name": "fd_mural",
+   "w": 1,
+   "box": [
+    1264,
+    480,
+    1536,
+    636
+   ]
+  }
+ ]
+}
