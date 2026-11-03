@@ -103,7 +103,8 @@ const Barrio = (() => {
         if (s.sw > 1 && r() < .7) for (let t = r.uni(2, 10); t < s.len; t += r.uni(4, 12)) if (r() < (.2 + .25 * (s.type === "ave")) * C.gente) {
           const p = at(s, t, side * (s.hw + r.uni(.4, s.sw - .3))); const c = W.classify(p[0], p[1]); if (c && c.k === "walk") person(p[0], p[1], false); }
       }
-      if (s.mat !== "tierra") for (let t = r.uni(5, 20), k = 0; t < s.len - 3; t += r.uni(26, 34), k++) {
+      // faroles: cada 16 a 22 m alternando vereda (en tierra alumbran las lámparas de los postes de madera)
+      if (s.mat !== "tierra") for (let t = r.uni(4, 12), k = 0; t < s.len - 3; t += r.uni(16, 22) * (C.faroles ? 1 / C.faroles : 1), k++) {
         if (crossNear(t)) continue; const side = k % 2 ? 1 : -1, p = at(s, t, side * (s.hw + .35)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk") continue;
         const q = at(s, t, 0); put(s.type === "ave" || s.w > .55 ? "u_farol_doble" : "u_farola", p[0], p[1], { face: [q[0] - p[0], q[1] - p[1]] }); }
       if (s.type !== "ave" && s.sw > 1) {

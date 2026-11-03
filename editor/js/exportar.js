@@ -90,6 +90,7 @@ const Exportar = (() => {
       const rec = { o: it.hoja, a: "o" + o.e.id, x: r1(fx), y: r1(fy), k: o.kind };
       if (o.collider) rec.col = o.collider.map(([x, y]) => { const q = PW(x, y); return [r1(q[0] - fx), r1(q[1] - fy)]; });
       else rec.r = r1(.15 * 13.5);
+      if (o.e.spec.t === "poste" && o.e.spec.l) rec.l = 1;           // poste de madera con lámpara
       if (it.casters.length) { const pts = [];
         for (const cs of it.casters) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
           const p = [0, 1, 2].map(k => cs.c[k] + sx * cs.h[0] * cs.ax[0][k] + sy * cs.h[1] * cs.ax[1][k] + sz * cs.h[2] * cs.ax[2][k]);

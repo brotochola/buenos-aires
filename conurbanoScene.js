@@ -42,7 +42,9 @@ export class PersonaComp extends Component {
 }
 export class AutoComp extends Component {
   static ARRAY_SCHEMA = { active: Uint8Array, driveForce: Float32Array, lateralFriction: Float32Array, turnTorque: Float32Array, minSteerSpeed: Float32Array,
-    minSteerFactor: Float32Array, maxSteerSpeed: Float32Array, lastKey: Int16Array };
+    minSteerFactor: Float32Array, maxSteerSpeed: Float32Array, lastKey: Int16Array,
+    // estado de la IA: en componentes (no en campos del objeto), porque una entidad puede pasar de un worker de lógica a otro
+    sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array };
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -60,10 +62,10 @@ export class Casa extends GameObject {
       if (!this.collider.makePolygon(flat)) { this.collider.shapeType = ShapeType.Circle; this.collider.radius = 6; }
     } else { this.collider.shapeType = ShapeType.Circle; this.collider.radius = c.r || 3; }
     this.collider.visualRange = 260;
-    // luz de las ventanas: de día se pierde en la luz del sol, de noche ilumina la vereda (como la House de predatorScene)
-    const L = this.lightEmitter, on = c.k === 'house' && rng() < .4;
-    L.lightColor = LUZ; L.height = 30; L.hasGlowSprite = 0;
-    L.lightIntensity = on ? 220 + rng() * 260 : 0; L.active = on ? 1 : 0;
+    // las casas no alumbran; los postes de madera con lámpara (calles de tierra y villas) sí
+    const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
+    L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
+    L.lightIntensity = on ? 1500 : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
   }
 }
 // una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
@@ -188,7 +190,7 @@ export class Persona extends GameObject {
 
 // ---------- autos (Box2D, patrón de carScene; el cuadro del sprite "desaplasta" la y de la pantalla)
 const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
-const _keys = new Map();
+const _keys = new Map(), _keys0 = [];
 function angleKeys(sheet) {
   let k = _keys.get(sheet); if (k) return k;
   const names = SpriteSheetRegistry.getAnimationNames(sheet) || [];
@@ -199,8 +201,7 @@ export class Auto extends GameObject {
   static deriveSpeed = true;
   static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, ShadowCaster, LightEmitter, AutoComp];
   onSpawned(c = {}) {
-    this._sheet = 'auto_' + (c.color || 'red');
-    this.setSpritesheet(this._sheet); this.setAnimation('0');
+    this.setSpritesheet('auto_' + (c.color || 'red')); this.setAnimation('0');
     this.spriteRenderer.anchorX = .5; this.spriteRenderer.anchorY = .62;
     this.spriteRenderer.inheritTransformRotation = 0; this.spriteRenderer.spriteRotation = 0;
     const A = this.autoComp;
@@ -234,7 +235,7 @@ export class Auto extends GameObject {
   // y no cambia de cuadro hasta pasar la mitad del paso (sin titileo)
   _frame() {
     const i = this.index, c = Transform.rotC ? Transform.rotC[i] : 1, s = Transform.rotS ? Transform.rotS[i] : 0;
-    const ks = angleKeys(this._sheet); if (!ks.length) return;
+    const sid = SpriteRenderer.spritesheetId[i], ks = sid ? angleKeys(SpriteSheetRegistry.getSpritesheetName(sid)) : _keys0; if (!ks.length) return;
     const last = AutoComp.lastKey[i]; if (last >= 0 && c * ks[last].c + s * ks[last].s >= Math.cos(Math.PI / ks.length)) return;
     let best = 0, bd = -2; for (let k = 0; k < ks.length; k++) { const d = c * ks[k].c + s * ks[k].s; if (d > bd) { bd = d; best = k; } }
     if (last !== best) { AutoComp.lastKey[i] = best; this.setAnimation(ks[best].n); }
@@ -247,27 +248,29 @@ export class Chatarra extends Auto {}
 // IA: sigue el flowfield de carriles (mano derecha), frena por gente y autos adelante (patrón de littleCity)
 const _probe = [[0, 0], [24, 0], [-24, 0], [0, 12], [0, -12], [24, 12], [24, -12], [-24, 12], [-24, -12], [48, 0], [-48, 0], [0, 24], [0, -24]];
 export class AutoIA extends Auto {
-  onSpawned(c = {}) { super.onSpawned(c); this._lx = Math.cos(c.rot || 0); this._ly = Math.sin(c.rot || 0); this._stuck = 0; this._libre = 0; this._parado = 0; this._sx = c.x; this._sy = c.y; this._sr = c.rot || 0; }
+  onSpawned(c = {}) { super.onSpawned(c); const A = this.autoComp, rot = c.rot || 0;
+    A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; }
   _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v); if (_v.x * _v.x + _v.y * _v.y >= .01) return true; } return false; }
   tick(dtRatio, dt) {
     super.tick();
     const i = this.index;
     const dts = (dt || 16) / 1000;
     if (this.x < 0 || this.y < 0 || this.x > META.WW || this.y > META.WH) { _v.x = META.WW / 2 - this.x; _v.y = META.WH / 2 - this.y; }   // se fue del mapa: volver
-    else if (this._sample(this.x, this.y)) { this._lx = _v.x; this._ly = _v.y; } else { _v.x = this._lx; _v.y = this._ly; }
+    else if (this._sample(this.x, this.y)) { AutoComp.lx[i] = _v.x; AutoComp.ly[i] = _v.y; } else { _v.x = AutoComp.lx[i]; _v.y = AutoComp.ly[i]; }
     const l2 = _v.x * _v.x + _v.y * _v.y; if (l2 < .01) return;
     const inv = 1 / Math.sqrt(l2), nx = _v.x * inv, ny = _v.y * inv, fx = this.forwardX, fy = this.forwardY;
     const cross = fx * ny - fy * nx, align = fx * nx + fy * ny;
     let turn = Math.max(-1, Math.min(1, cross * 2)) * .8, fwd = align > .15 ? .5 : RigidBody.speed[i] < 30 ? .25 : 0;   // desalineado: sólo avanza despacito para poder girar
     // ¿alguien adelante en el carril?
     // trabado más de 5 s (dos autos que se frenan mutuamente en un cruce): 3 s sin mirar a los demás
-    if (RigidBody.speed[i] < 10) { this._stuck += dts; this._parado += dts; if (this._stuck > 5) { this._stuck = 0; this._libre = 3; } } else { this._stuck = 0; this._parado = 0; }
+    const A = AutoComp;
+    if (RigidBody.speed[i] < 10) { A.stuck[i] += dts; A.parado[i] += dts; if (A.stuck[i] > 5) { A.stuck[i] = 0; A.libre[i] = 3; } } else { A.stuck[i] = 0; A.parado[i] = 0; }
     // parado más de 12 s (se metió en un lote, quedó contra un poste): fuera de cámara, vuelve a su carril de salida
-    if (this._parado > 12 && !this.isOnScreen) { this._parado = 0; this.x = this._sx; this.y = this._sy; this.rotation = this._sr;
-      RigidBody.vx[i] = 0; RigidBody.vy[i] = 0; this._lx = Math.cos(this._sr); this._ly = Math.sin(this._sr); return; }
-    if (this._libre > 0) this._libre -= dts;
+    if (A.parado[i] > 12 && !this.isOnScreen) { A.parado[i] = 0; this.x = A.sx[i]; this.y = A.sy[i]; this.rotation = A.sr[i];
+      RigidBody.vx[i] = 0; RigidBody.vy[i] = 0; A.lx[i] = Math.cos(A.sr[i]); A.ly[i] = Math.sin(A.sr[i]); return; }
+    if (A.libre[i] > 0) A.libre[i] -= dts;
     let brake = 0, steer = 0;
-    if (this._libre <= 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
+    if (A.libre[i] <= 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
       const isCar = AutoComp.active[j] === 1, isPerson = !isCar && PersonaComp.vel[j] > 0; if (!isCar && !isPerson) continue;
       const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? 95 : 70;
       if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? 22 : 16; if (as > corr) continue;
@@ -317,7 +320,7 @@ export class ConurbanoScene extends Scene {
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
-      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 192,
+      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 512,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
@@ -362,7 +365,7 @@ export class ConurbanoScene extends Scene {
     // ---- objetos
     const w = await (await fetch(BARRIO + 'mundo.json')).json();
     const { Decoration } = WEED;
-    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
       const fr = w.franjas[h.a], tex = 'casas' + h.o + '_' + h.a + '_';
       for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2], e: META.escalaCasas || 1 }); }
     for (const p of w.props) {
