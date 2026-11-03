@@ -18,6 +18,10 @@ const Houses = (() => {
   const PINTADAS = ["EL BARRIO ES NUESTRO", "NO AL AJUSTE", "VAMOS ARGENTINA", "AGUANTE EL BARRIO", "LOS PIBES DEL BARRIO", "TE AMO MARU",
     "PAN Y TRABAJO", "SE VENDE", "ALQUILO", "NO ESTACIONAR", "CUMBIA", "VOLVE NENA", "FELIZ CUMPLE MICA", "ACA NO SE RINDE NADIE"];
   let GF = 3.2, UF = 2.9; const PAR = 0.85;
+  // frente de local de Gemini para cada rubro
+  const LOC = { PANADERIA: "panaderia", CARNICERIA: "carniceria", POLLERIA: "carniceria", FIAMBRERIA: "carniceria", VERDULERIA: "verduleria", FERRETERIA: "ferreteria",
+    CERRAJERIA: "ferreteria", GOMERIA: "ferreteria", TALLER: "ferreteria", KIOSCO: "kiosco", LIBRERIA: "kiosco", FOTOCOPIAS: "kiosco", FARMACIA: "farmacia", VETERINARIA: "farmacia",
+    PELUQUERIA: "peluqueria", ALMACEN: "almacen", DESPENSA: "almacen", AUTOSERVICIO: "almacen", BAR: "almacen", ROTISERIA: "almacen", PIZZERIA: "panaderia", MERCERIA: "kiosco" };
 
   // ---------- piezas pintadas
   function glass(t, x0, y0, x1, y1, curtains = true) {
@@ -210,9 +214,7 @@ const Houses = (() => {
       const dw = .95, dx = r.pick([.35, W - dw - .35]);
       const [g0, g1] = dx < W / 2 ? [dx + dw + .25, W - .35] : [.35, dx - .25];
       // frente de local de Gemini según el rubro (panadería, carnicería, verdulería...); si no hay, el dibujo de siempre
-      const LOC = { PANADERIA: "panaderia", CARNICERIA: "carniceria", POLLERIA: "carniceria", FIAMBRERIA: "carniceria", VERDULERIA: "verduleria", FERRETERIA: "ferreteria",
-        CERRAJERIA: "ferreteria", GOMERIA: "ferreteria", TALLER: "ferreteria", KIOSCO: "kiosco", LIBRERIA: "kiosco", FOTOCOPIAS: "kiosco", FARMACIA: "farmacia", VETERINARIA: "farmacia",
-        PELUQUERIA: "peluqueria", ALMACEN: "almacen", DESPENSA: "almacen", AUTOSERVICIO: "almacen", BAR: "almacen", ROTISERIA: "almacen", PIZZERIA: "panaderia", MERCERIA: "kiosco" };
+
       const loc = spec.wealth < .3 && r() < .25 ? "cerrado" : LOC[name] || r.pick(["kiosco", "almacen"]);
       if (R3.DECALS["fd_local_" + loc] && W >= 3.2) { const lw = Math.min(W - .3, r.uniform(3, 4.2)), lx = (W - lw) / 2; ft.blit("fd_local_" + loc, X(lx), zt(2.55), X(lw), zt(0) - zt(2.55)); }
       else { goodsDecal(ft, X(g0), zt(2.35), X(g1), zt(.5), name); doorDecal(ft, X(dx), zt(2.25), X(dw), px(2.23), "chapa", wall); }
@@ -436,28 +438,40 @@ const Houses = (() => {
     for (let xx = 0; xx < ft.w; xx += px(.9)) ft.shade(xx, zt(GF2), xx + 1, ft.h, .86);
     const hall = Math.min(2.2, W * .3), hx = r.pick([.5, (W - hall) / 2, W - hall - .5]);
     // hall: puerta vidriada de dos hojas con marco de metal y portero
-    ft.rect(X(hx) - 2, zt(2.6) - 2, X(hx + hall) + 2, ft.h, [40, 40, 44]); glass(ft, X(hx), zt(2.6), X(hx + hall), zt(.05), false);
+    const hallG = R3.DECALS.fd_ed_hall;
+    if (hallG) ft.blit("fd_ed_hall", X(hx - .2), zt(2.75), X(hall + .9), zt(0) - zt(2.75));
+    else { ft.rect(X(hx) - 2, zt(2.6) - 2, X(hx + hall) + 2, ft.h, [40, 40, 44]); glass(ft, X(hx), zt(2.6), X(hx + hall), zt(.05), false); }
+    if (!hallG) {
     ft.rect(X(hx + hall / 2), zt(2.6), X(hx + hall / 2) + 2, zt(.05), [40, 40, 44]); ft.rect(X(hx) - 2, zt(2.75), X(hx + hall) + 2, zt(2.6), [196, 170, 90]);
     text(ft, String(100 + (spec.seed % 3900)), X(hx + hall / 2) - (textW(String(100 + (spec.seed % 3900))) >> 1), zt(2.92), [40, 36, 30], true);
-    ft.rect(X(hx + hall) + 4, zt(1.6), X(hx + hall) + 4 + px(.18), zt(1.2), [180, 180, 176]); for (let k = 0; k < 4; k++) ft.p(X(hx + hall) + 6, zt(1.55) + k * 3, [40, 40, 44]);
+    ft.rect(X(hx + hall) + 4, zt(1.6), X(hx + hall) + 4 + px(.18), zt(1.2), [180, 180, 176]); for (let k = 0; k < 4; k++) ft.p(X(hx + hall) + 6, zt(1.55) + k * 3, [40, 40, 44]); }
+    else text(ft, String(100 + (spec.seed % 3900)), X(hx + hall / 2) - (textW(String(100 + (spec.seed % 3900))) >> 1), zt(3.05), [40, 36, 30], true);
     // el resto de la planta baja: local, cochera o ventanas con reja
     const lado = hx < W / 2 ? [hx + hall + .6, W - .3] : [.3, hx - .6], lw = lado[1] - lado[0];
     let shop = null;
     if (lw > 2.5) { const que = spec.wealth > .7 && r() < .4 ? "cochera" : r() < .6 ? "local" : "ventanas";
-      if (que === "cochera") shutterDecal(ft, X(lado[0]), zt(2.5), X(Math.min(3, lw)), px(2.3));
-      else if (que === "local") { shop = SHOPS[spec.seed % SHOPS.length]; goodsDecal(ft, X(lado[0]), zt(2.5), X(lado[1]), zt(.4), shop[0]); }
+      if (que === "cochera") { if (!ft.blit("fd_ed_cochera", X(lado[0]), zt(2.6), X(Math.min(3.4, lw)), px(2.6))) shutterDecal(ft, X(lado[0]), zt(2.5), X(Math.min(3, lw)), px(2.3)); }
+      else if (que === "local") { shop = SHOPS[spec.seed % SHOPS.length]; const lc = "fd_local_" + (LOC[shop[0]] || "almacen");
+        if (!ft.blit(lc, X(lado[0]), zt(2.55), X(Math.min(lw, 4.2)), zt(0) - zt(2.55))) goodsDecal(ft, X(lado[0]), zt(2.5), X(lado[1]), zt(.4), shop[0]); }
       else for (let xm = lado[0] + .3; xm + 1.3 < lado[1]; xm += 1.9) windowDecal(ft, X(xm), zt(2.3), X(1.3), px(1.3), "persiana", pb); }
     // pisos
     const bal = estilo !== "moderno" && estilo !== "ladrillo" ? true : estilo === "ladrillo" ? r() < .5 : false;
     for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2;
       if (estilo === "moderno") { ft.rect(0, zt(zb + UF2 - .25), ft.w, zt(zb + .1), [52, 66, 80]); glass(ft, 2, zt(zb + UF2 - .3), ft.w - 2, zt(zb + .15), r() < .3);
         for (let xx = X(.05); xx < ft.w; xx += X(1.35)) ft.rect(xx, zt(zb + UF2 - .25), xx + 2, zt(zb + .1), frame); }
-      else if (bal) slidingDecal(ft, X(.5), zt(zb + 2.3), X(W - 1.4), px(2.2), frame);
-      else { const m = Math.max(1, Math.floor(W / 2.4)); for (let i = 0; i < m; i++) windowDecal(ft, X(W * (i + .5) / m - .65), zt(zb + 2.1), X(1.3), px(1.3), r.pick(["persiana", "none", "persiana"]), wall); }
+      else if (bal) { if (R3.DECALS.fd_ed_balcon_puerta) { const m = Math.max(1, Math.floor((W - .6) / 2.8)), ww = (W - .6) / m;
+          for (let i = 0; i < m; i++) ft.blit("fd_ed_balcon_puerta", X(.3 + i * ww + .1), zt(zb + 2.35), X(ww - .2), px(2.25)); }
+        else slidingDecal(ft, X(.5), zt(zb + 2.3), X(W - 1.4), px(2.2), frame); }
+      else { const m = Math.max(1, Math.floor(W / 2.4));
+        for (let i = 0; i < m; i++) { const vx = W * (i + .5) / m - .75, g = r.pick(["fd_ed_ventana_persiana", "fd_ed_ventana_persiana", "fd_ed_ventana_cortina", "fd_ed_ventana_aire"]);
+          if (!R3.DECALS[g]) windowDecal(ft, X(vx + .1), zt(zb + 2.1), X(1.3), px(1.3), r.pick(["persiana", "none", "persiana"]), wall);
+          else if (g === "fd_ed_ventana_aire") ft.blit(g, X(vx - .05), zt(zb + 2.25), X(1.6), px(1.5));
+          else ft.blit(g, X(vx), zt(zb + 2.2), X(1.5), px(1.3)); } }
       ft.rect(0, zt(zb) - 2, ft.w, zt(zb) + 2, estilo === "ladrillo" ? [198, 196, 190] : add(wall, 14)); ft.shade(0, zt(zb) + 2, ft.w, zt(zb) + 3, .75); }
     // medianeras y contrafrente
     const stx = new Tex(D, Htot, spec.seed + 3); if (r() < .3) stx.brick(); else { stx.stucco(mix(wall, [200, 196, 188], .5), wear * 1.3); stx.runoff(1.5, wear * 1.4); stx.humidity(1.2); }
     if (r() < .25) { const c = r.pick([[200, 40, 40], [40, 90, 170], [230, 190, 40]]), y = zt(zr - .5); stx.rect(px(1), y, stx.w - px(1), y + px(2.4), c); text(stx, r.pick(["ALQUILA", "VENDE", "FERNET", "COCA"]), px(1.4), y + px(.6), [250, 250, 245], true); }
+    if (R3.DECALS.fd_ed_manchas && r() < .5) { const w = stx.w, h = Math.round(w * .6); stx.blit("fd_ed_manchas", 0, px(1.1), w, Math.min(h, stx.h - px(1.1)), mix(wall, [200, 196, 188], .5)); }
     const bt = new Tex(W, Htot, spec.seed + 1); bt.stucco(mix(wall, [196, 192, 186], .4), wear * 1.4); bt.runoff(1, 1.3);
     for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2; for (let xm = .6; xm + 1 < W; xm += 2.6) windowDecal(bt, X(xm), zt(zb + 2), X(1), px(1.1), r.pick(["persiana", "cerrado", "none"]), wall); }
     const ftc = (a, b) => ft.crop(zt(b), zt(a)), btc = (a, b) => bt.crop(zt(b), zt(a)), stc = (a, b) => stx.crop(zt(b), zt(a));
@@ -474,7 +488,11 @@ const Houses = (() => {
     if (bal) for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2, vidrio = estilo === "balcones" && r() < .5;
       sc.box(0, -1.2, zb - .05, W, 0, zb + .15, { front: add(wall, 10), top: [214, 210, 202], right: mul(wall, .8), left: mul(wall, .86) });
       const rt = vidrio ? (() => { const t = new Tex(W, 1, spec.seed + k, [0, 0, 0], 0); t.rect(0, 0, t.w, 2, frame); for (let xx = 0; xx < t.w; xx += px(1.4)) t.rect(xx, 0, xx + 1, t.h, frame); for (let xx = 3; xx < t.w; xx += 11) for (let j = 0; j < 4; j++) t.p(xx + j, 4 + j, [220, 236, 246]); return t; })() : railingTex(W, 1, spec.seed + k, frame.map(v => v * .4));
-      sc.box(0, -1.2, zb + .15, W, -1.18, zb + 1.15, { front: rt, back: rt, cast: false });
+      const cerr = R3.DECALS.fd_ed_balcon_cerrado && r() < .18, para = !vidrio && R3.DECALS.fd_ed_parapeto && r() < .35;
+      if (cerr) { const ct = decalTex("fd_ed_balcon_cerrado", W, 2.2, Math.max(1, Math.round(W / 3))); sc.box(0, -1.2, zb + .15, W, -1.18, zb + 2.35, { front: ct, back: ct, cast: false });
+        sc.box(0, -1.2, zb + 2.35, W, 0, zb + 2.5, { front: add(wall, 10), top: [214, 210, 202], right: mul(wall, .8), left: mul(wall, .86) }); continue; }
+      const gv = vidrio && R3.DECALS.fd_ed_baranda_vidrio ? decalTex("fd_ed_baranda_vidrio", W, 1, Math.max(1, Math.round(W / 3))) : para ? decalTex("fd_ed_parapeto", W, 1.2, Math.max(1, Math.round(W / 3))) : null;
+      sc.box(0, -1.2, zb + .15, W, -1.18, zb + (para ? 1.35 : 1.15), { front: gv || rt, back: gv || rt, cast: !!para });
       for (const xx of [0, W - .03]) sc.box(xx, -1.2, zb + .15, xx + .03, 0, zb + 1.15, { right: railingTex(1.2, 1, spec.seed), left: railingTex(1.2, 1, spec.seed), cast: false });
       for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), -1, zb + .15, r.int(0, 99999), r() < .4);
       if (r() < .35) ac(sc, r.uniform(.3, W - 1.1), -.35, zb + .15, r.int(0, 9999), false);

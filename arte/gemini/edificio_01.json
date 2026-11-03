@@ -1,0 +1,118 @@
+{
+ "img": "edificio_01.png",
+ "bg": "cyan",
+ "ref": 1584,
+ "grow": 0,
+ "objs": [
+  {
+   "name": "fd_ed_ventana_persiana",
+   "w": 1,
+   "box": [
+    260,
+    30,
+    442,
+    201
+   ]
+  },
+  {
+   "name": "fd_ed_ventana_cortina",
+   "w": 1,
+   "box": [
+    533,
+    30,
+    716,
+    202
+   ]
+  },
+  {
+   "name": "fd_ed_ventana_aire",
+   "w": 1,
+   "box": [
+    826,
+    30,
+    1060,
+    248
+   ]
+  },
+  {
+   "name": "fd_ed_bano",
+   "w": 1,
+   "box": [
+    1174,
+    42,
+    1298,
+    168
+   ]
+  },
+  {
+   "name": "fd_ed_balcon_puerta",
+   "w": 1,
+   "box": [
+    122,
+    236,
+    418,
+    503
+   ]
+  },
+  {
+   "name": "fd_ed_parapeto",
+   "w": 1,
+   "box": [
+    445,
+    250,
+    798,
+    411
+   ]
+  },
+  {
+   "name": "fd_ed_baranda_vidrio",
+   "w": 1,
+   "box": [
+    826,
+    318,
+    1176,
+    411
+   ]
+  },
+  {
+   "name": "fd_ed_hall",
+   "w": 1,
+   "box": [
+    447,
+    432,
+    713,
+    641
+   ]
+  },
+  {
+   "name": "fd_ed_cochera",
+   "w": 1,
+   "box": [
+    741,
+    432,
+    1178,
+    641
+   ]
+  },
+  {
+   "name": "fd_ed_balcon_cerrado",
+   "w": 1,
+   "box": [
+    1204,
+    206,
+    1553,
+    411
+   ]
+  },
+  {
+   "name": "fd_ed_manchas",
+   "w": 1,
+   "box": [
+    1204,
+    432,
+    1553,
+    641
+   ]
+  }
+ ]
+}
