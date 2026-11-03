@@ -73,7 +73,7 @@ const Barrio = (() => {
       for (const n of ["pz_hamacas", "pz_tobogan", "pz_subibaja", "pz_calesita"]) { if (!F[n]) continue; const q = enCuarto(cuartos[0], n, n === "pz_calesita" ? 2.5 : 1.6); if (q) put(n, q[0], q[1], { noClaim: true }); }
       for (const n of ["pz_aparato", "pz_aparato", "pz_pingpong", "pz_ajedrez", "pz_bebedero"]) { if (!F[n]) continue; const q = enCuarto(cuartos[1], n, 1.4); if (q) put(n, q[0], q[1], { noClaim: true }); }
       for (let k = 0; k < 6; k++) { const n = rx2.pick(["pz_cantero", "plm_agapanto", "plm_lantana", "pl_boj", "plm_rosal", "plm_yuyos"]); if (!F[n]) continue; const q = enCuarto(cuartos[2 + (k & 1)], n, .9); if (q) put(n, q[0], q[1], { noClaim: true }); }
-      for (const n of ["c_palomas", "c_palomas", "c_perro", "c_perro_duerme", "c_gato"]) { if (!F[n] || rx2() > .7) continue; const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) put(n, q[0], q[1], { noCollide: true }); }
+      for (const n of ["c_palomas", "c_palomas", "c_perro", "c_perro_duerme", "c_gato"]) { if (!F[n] || rx2() > .7) continue; const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (n !== "c_perro" && (sendero(q) || pasto(q))) put(n, q[0], q[1], { noCollide: true }); }   // sin el perro parado (el sorteo queda igual)
       if (F.c_chori && rx2() < .6) { const q = at2(rx2.pick([-1, 1]) * (hA + 4), rx2.uni(-hB * .5, hB * .5)); put("c_chori", q[0], q[1]); }
       if (F.pz_glorieta && rx2() < .4) { const q = enCuarto(cuartos[2], "pz_glorieta", 3); if (q) put("pz_glorieta", q[0], q[1], { noClaim: true }); }
       for (let k = 0; k < Math.round(P.bA * P.bB / 900) * C.gente; k++) { const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) person(q[0], q[1], rx2() < .5); }
@@ -153,7 +153,7 @@ const Barrio = (() => {
         // vida en la vereda: mesas de bar frente a los negocios, motos y bicis estacionadas, perros y gatos
         if (F.c_mesa_bar && (lot.kind === "negocio" || lot.kind === "negocio_casa") && s.sw >= 2.6 && rx() < .3) put("c_mesa_bar", ...nearX(rx.uni(1.5, 1.8), rx.uni(-lot.fw / 4, lot.fw / 4)), { rad: .75 });
         if (F.c_moto && rx() < (lot.kind === "negocio" ? .12 : .04)) put(rx() < .6 ? "c_moto" : "c_bici", ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .4 });
-        if (F.c_perro && rx() < (lot.w < .35 ? .07 : .025)) put(rx.pick(["c_perro", "c_perro_duerme", "c_perro_duerme", "c_gato"]), ...nearX(rx.uni(.95, 1.5), rx.uni(-lot.fw / 3, lot.fw / 3)), { noCollide: true, rad: .25 });
+        if (F.c_perro && rx() < (lot.w < .35 ? .07 : .025)) put(rx.pick(["c_gato", "c_perro_duerme", "c_perro_duerme", "c_gato"]), ...nearX(rx.uni(.95, 1.5), rx.uni(-lot.fw / 3, lot.fw / 3)), { noCollide: true, rad: .25 });
         // kioscos y almacenes: heladera de bebidas, cajones de envases, sillas apiladas, pizarra de helados
         if (F.k_heladera && (lot.kind === "negocio" || lot.kind === "negocio_casa") && rx() < .35) put(rx.pick(["k_heladera", "k_cajones_botellas", "k_cajones_botellas", "k_sillas_pila", "k_pizarra_helado"]), ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .3 });
         // devoción popular: el Gauchito Gil (rojo) y la Virgen, en las esquinas y frentes de los barrios pobres
