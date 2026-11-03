@@ -72,7 +72,8 @@ export class Franja extends GameObject {
   static components = [];
   onSpawned(c = {}) {
     const p = c.p || [];
-    for (let j = 0; j < p.length; j++) this.addDecoration(c.t + j, p[j][0], p[j][1], 1, 1, 0, { anchorX: .5, anchorY: .5 });
+    const e = c.e || 1;   // las casas vienen dibujadas con más detalle: se muestran a esta escala
+    for (let j = 0; j < p.length; j++) this.addDecoration(c.t + j, p[j][0], p[j][1], e, e, 0, { anchorX: .5, anchorY: .5 });
   }
 }
 // sombra de cada casa al piso: un polígono convexo en una capa de mallas
@@ -305,6 +306,8 @@ const PACK = typeof globalThis.location?.search === 'string' && new URLSearchPar
 export class ConurbanoScene extends Scene {
   static config = {
     worldWidth: META.WW, worldHeight: META.WH, seed: 7,
+    // atlas de hasta 8192×4096 (128 MB de video): casas con más detalle + personajes + autos
+    assets: { maxAtlasWidth: 8192, maxAtlasHeight: 4096 },
     spatial: { cellSize: 64, maxNeighbors: 48, maxEntitiesPerCell: 192, numberOfSpatialWorkers: HC >= 6 ? 2 : 1 },
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
@@ -361,7 +364,7 @@ export class ConurbanoScene extends Scene {
     const { Decoration } = WEED;
     for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k }); if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
       const fr = w.franjas[h.a], tex = 'casas' + h.o + '_' + h.a + '_';
-      for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2] }); }
+      for (let k = 0; k < fr.length; k++) Franja.spawn({ x: h.x + fr[k][0], y: h.y + fr[k][1], t: tex + k + '_', p: fr[k][2], e: META.escalaCasas || 1 }); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });

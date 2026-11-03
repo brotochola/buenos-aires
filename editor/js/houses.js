@@ -140,6 +140,8 @@ const Houses = (() => {
   // spec: {kind, W, seed, wealth}
   function build(spec, phi = 0) {
     GF = CFG.v.pb; UF = CFG.v.piso;
+    if (spec.kind === "edificio") return edificio(spec, phi);
+    if (spec.kind === "petit") return petit(spec, phi);
     const r = rng(spec.seed), kind = spec.kind, W = spec.W;
     const sc = new Scene(); sc.setXform(phi);
     const wall = r.pick(WALLS);
@@ -266,6 +268,7 @@ const Houses = (() => {
     // ---- relieves
     for (const [xm, zm, ww, hh, reja, st] of wins) {
       sc.box(xm - .1, y0 - .1, zm - .08, xm + ww + .1, y0, zm, { front: [232, 228, 218], top: [244, 240, 232], right: [196, 192, 184], left: [206, 202, 194] });
+      if (st !== "x" && finish !== "hueco") sc.box(xm - .06, y0 - .05, zm + hh + .02, xm + ww + .06, y0, zm + hh + .13, { front: add(wall, 14), top: add(wall, 26), right: mul(wall, .8), left: mul(wall, .86) });   // dintel
       if (reja) sc.box(xm - .05, y0 - .2, zm, xm + ww + .05, y0 - .18, zm + hh + .1, { front: rejaTex(ww + .1, hh + .1, spec.seed), cast: false });
       if (st === "postigo") { const pc = r.pick(SHUTTER);
         for (const sx of [xm - ww / 2 - .05, xm + ww + .05]) { const t = new Tex(ww / 2, hh, spec.seed + 31, pc); for (let yy = 1; yy < t.h; yy += 2) t.shade(0, yy, t.w, yy + 1, .72); t.shade(0, 0, 1, t.h, .6);
@@ -327,6 +330,128 @@ const Houses = (() => {
     if (r() < .3 && flat) ac(sc, r.uniform(.3, Math.max(.4, W - 1.1)), y0 + D * .35, zr, spec.seed + 91, false);
     if (flat && r() < .25 && storeys === 1) clothes(sc, .4, W - .4, y0 + D * .5, zr + 1.6, spec.seed + 92);
     return { sc, storeys, depth: y0 + D, shop: shop && shop[0], height: zr };
+  }
+
+  // ---------- edificio de departamentos (zonas ricas y avenidas): planta baja con hall (y a veces local o cochera),
+  // pisos con balcones corridos o ventanas, medianeras lisas, terraza con sala de máquinas y tanques.
+  const CLAROS = [[236, 230, 216], [226, 220, 206], [214, 210, 202], [232, 222, 196], [206, 200, 190], [222, 214, 200], [196, 204, 210], [228, 212, 190]];
+  function slidingDecal(t, x, y, w, h, frame) {        // puerta-ventana corrediza de aluminio
+    t.rect(x - 1, y - 1, x + w + 1, y + h + 1, mul(frame, .55)); t.rect(x, y, x + w, y + h, frame);
+    const n = w > px(2.2) ? 3 : 2, pw = (w - 2) / n;
+    for (let i = 0; i < n; i++) { const a = x + 1 + Math.round(i * pw), b = x + 1 + Math.round((i + 1) * pw) - 1; glass(t, a + 1, y + 2, b - 1, y + h - 2, t.r() < .5); }
+    t.shade(x, y, x + w, y + 2, .7);
+  }
+  function edificio(spec, phi) {
+    const r = rng(spec.seed), W = spec.W, D = spec.D, n = spec.p || 6, GF2 = 3.4, UF2 = 2.8;
+    const sc = new Scene(); sc.setXform(phi);
+    const estilo = spec.e || r.pick(["balcones", "balcones", "ladrillo", "moderno"]);
+    const wall = estilo === "ladrillo" ? [196, 120, 86] : r.pick(CLAROS), frame = r.pick([[214, 214, 210], [60, 62, 68], [150, 120, 84], [196, 196, 192]]);
+    const zr = GF2 + (n - 1) * UF2, Htot = zr + 1.1, zt = (z) => px(Htot - z), X = (m) => px(m), wear = (spec.wealth < .5 ? 1 : .6) * CFG.v.desgaste;
+    // frente
+    const ft = new Tex(W, Htot, spec.seed); if (estilo === "ladrillo") ft.brick([182, 96, 64]); else { ft.stucco(wall, wear * .7); ft.runoff(.9, wear); }
+    // planta baja: revestimiento de piedra o granito
+    const pb = r.pick([[112, 110, 108], [150, 140, 128], [70, 72, 78], [180, 170, 156]]);
+    ft.rect(0, zt(GF2), ft.w, ft.h, pb); for (let yy = zt(GF2); yy < ft.h; yy += px(.45)) ft.shade(0, yy, ft.w, yy + 1, .8);
+    for (let xx = 0; xx < ft.w; xx += px(.9)) ft.shade(xx, zt(GF2), xx + 1, ft.h, .86);
+    const hall = Math.min(2.2, W * .3), hx = r.pick([.5, (W - hall) / 2, W - hall - .5]);
+    // hall: puerta vidriada de dos hojas con marco de metal y portero
+    ft.rect(X(hx) - 2, zt(2.6) - 2, X(hx + hall) + 2, ft.h, [40, 40, 44]); glass(ft, X(hx), zt(2.6), X(hx + hall), zt(.05), false);
+    ft.rect(X(hx + hall / 2), zt(2.6), X(hx + hall / 2) + 2, zt(.05), [40, 40, 44]); ft.rect(X(hx) - 2, zt(2.75), X(hx + hall) + 2, zt(2.6), [196, 170, 90]);
+    text(ft, String(100 + (spec.seed % 3900)), X(hx + hall / 2) - (textW(String(100 + (spec.seed % 3900))) >> 1), zt(2.92), [40, 36, 30], true);
+    ft.rect(X(hx + hall) + 4, zt(1.6), X(hx + hall) + 4 + px(.18), zt(1.2), [180, 180, 176]); for (let k = 0; k < 4; k++) ft.p(X(hx + hall) + 6, zt(1.55) + k * 3, [40, 40, 44]);
+    // el resto de la planta baja: local, cochera o ventanas con reja
+    const lado = hx < W / 2 ? [hx + hall + .6, W - .3] : [.3, hx - .6], lw = lado[1] - lado[0];
+    let shop = null;
+    if (lw > 2.5) { const que = spec.wealth > .7 && r() < .4 ? "cochera" : r() < .6 ? "local" : "ventanas";
+      if (que === "cochera") shutterDecal(ft, X(lado[0]), zt(2.5), X(Math.min(3, lw)), px(2.3));
+      else if (que === "local") { shop = SHOPS[spec.seed % SHOPS.length]; goodsDecal(ft, X(lado[0]), zt(2.5), X(lado[1]), zt(.4), shop[0]); }
+      else for (let xm = lado[0] + .3; xm + 1.3 < lado[1]; xm += 1.9) windowDecal(ft, X(xm), zt(2.3), X(1.3), px(1.3), "persiana", pb); }
+    // pisos
+    const bal = estilo !== "moderno" && estilo !== "ladrillo" ? true : estilo === "ladrillo" ? r() < .5 : false;
+    for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2;
+      if (estilo === "moderno") { ft.rect(0, zt(zb + UF2 - .25), ft.w, zt(zb + .1), [52, 66, 80]); glass(ft, 2, zt(zb + UF2 - .3), ft.w - 2, zt(zb + .15), r() < .3);
+        for (let xx = X(.05); xx < ft.w; xx += X(1.35)) ft.rect(xx, zt(zb + UF2 - .25), xx + 2, zt(zb + .1), frame); }
+      else if (bal) slidingDecal(ft, X(.5), zt(zb + 2.3), X(W - 1.4), px(2.2), frame);
+      else { const m = Math.max(1, Math.floor(W / 2.4)); for (let i = 0; i < m; i++) windowDecal(ft, X(W * (i + .5) / m - .65), zt(zb + 2.1), X(1.3), px(1.3), r.pick(["persiana", "none", "persiana"]), wall); }
+      ft.rect(0, zt(zb) - 2, ft.w, zt(zb) + 2, estilo === "ladrillo" ? [198, 196, 190] : add(wall, 14)); ft.shade(0, zt(zb) + 2, ft.w, zt(zb) + 3, .75); }
+    // medianeras y contrafrente
+    const stx = new Tex(D, Htot, spec.seed + 3); if (r() < .3) stx.brick(); else { stx.stucco(mix(wall, [200, 196, 188], .5), wear * 1.3); stx.runoff(1.5, wear * 1.4); stx.humidity(1.2); }
+    if (r() < .25) { const c = r.pick([[200, 40, 40], [40, 90, 170], [230, 190, 40]]), y = zt(zr - .5); stx.rect(px(1), y, stx.w - px(1), y + px(2.4), c); text(stx, r.pick(["ALQUILA", "VENDE", "FERNET", "COCA"]), px(1.4), y + px(.6), [250, 250, 245], true); }
+    const bt = new Tex(W, Htot, spec.seed + 1); bt.stucco(mix(wall, [196, 192, 186], .4), wear * 1.4); bt.runoff(1, 1.3);
+    for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2; for (let xm = .6; xm + 1 < W; xm += 2.6) windowDecal(bt, X(xm), zt(zb + 2), X(1), px(1.1), r.pick(["persiana", "cerrado", "none"]), wall); }
+    const ftc = (a, b) => ft.crop(zt(b), zt(a)), btc = (a, b) => bt.crop(zt(b), zt(a)), stc = (a, b) => stx.crop(zt(b), zt(a));
+    sc.box(0, 0, 0, W, D, zr, { front: ftc(0, zr), back: btc(0, zr), left: stc(0, zr), right: stc(0, zr), top: roofTex(W, D, r.pick(["membrana", "piedra", "losa"]), spec.seed + 5) });
+    // parapeto
+    const cap = [230, 226, 216], inner = mix(wall, [204, 200, 192], .5), PH = 1.1;
+    sc.box(0, 0, zr, W, .2, zr + PH, { front: ftc(zr, Htot), back: inner, top: cap, left: [150, 146, 140], right: [150, 146, 140] });
+    sc.box(0, D - .2, zr, W, D, zr + PH, { front: inner, back: btc(zr, Htot), top: cap });
+    sc.box(0, .2, zr, .2, D - .2, zr + PH, { left: stc(zr, Htot), right: inner, top: cap }); sc.box(W - .2, .2, zr, W, D - .2, zr + PH, { right: stc(zr, Htot), left: inner, top: cap });
+    sc.box(-.08, -.16, zr + PH - .06, W + .08, .2, zr + PH + .1, { front: [238, 234, 224], top: [246, 242, 234], left: [204, 200, 192], right: [184, 180, 172] });
+    // marquesina del hall
+    sc.box(hx - .3, -1.1, 2.75, hx + hall + .3, 0, 2.95, { front: [58, 58, 62], top: [80, 80, 86], right: [44, 44, 48], left: [50, 50, 54] });
+    // balcones: losa saliente + baranda (metal o vidrio) + macetas, aires y ropa
+    if (bal) for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2, vidrio = estilo === "balcones" && r() < .5;
+      sc.box(0, -1.2, zb - .05, W, 0, zb + .15, { front: add(wall, 10), top: [214, 210, 202], right: mul(wall, .8), left: mul(wall, .86) });
+      const rt = vidrio ? (() => { const t = new Tex(W, 1, spec.seed + k, [0, 0, 0], 0); t.rect(0, 0, t.w, 2, frame); for (let xx = 0; xx < t.w; xx += px(1.4)) t.rect(xx, 0, xx + 1, t.h, frame); for (let xx = 3; xx < t.w; xx += 11) for (let j = 0; j < 4; j++) t.p(xx + j, 4 + j, [220, 236, 246]); return t; })() : railingTex(W, 1, spec.seed + k, frame.map(v => v * .4));
+      sc.box(0, -1.2, zb + .15, W, -1.18, zb + 1.15, { front: rt, back: rt, cast: false });
+      for (const xx of [0, W - .03]) sc.box(xx, -1.2, zb + .15, xx + .03, 0, zb + 1.15, { right: railingTex(1.2, 1, spec.seed), left: railingTex(1.2, 1, spec.seed), cast: false });
+      for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), -1, zb + .15, r.int(0, 99999), r() < .4);
+      if (r() < .35) ac(sc, r.uniform(.3, W - 1.1), -.35, zb + .15, r.int(0, 9999), false);
+      if (r() < .06) { const c0 = r.uniform(.4, W * .5); clothes(sc, c0, c0 + Math.min(2.2, W * .4), -.7, zb + 1.9, r.int(0, 99999)); } }
+    else for (let k = 1; k < n; k++) if (r() < .4) ac(sc, r.uniform(.3, W - 1.1), 0, GF2 + (k - 1) * UF2 + .3, r.int(0, 9999));
+    // terraza: sala de máquinas con tanques, antenas, aire
+    const mw = Math.min(3, W * .4), mx = r.uniform(.4, W - mw - .4), my = D * r.uniform(.35, .55), mt = new Tex(mw, 2.4, spec.seed + 60); mt.stucco(mix(wall, [210, 206, 198], .5), 1.2); mt.runoff(.8, 1.4);
+    doorDecal(mt, px(.3), px(.4), px(.8), px(1.9), "chapa", wall);
+    sc.box(mx, my, zr, mx + mw, my + 2.4, zr + 2.4, { front: mt, back: mt, left: mt, right: mt, top: roofTex(mw, 2.4, "losa", spec.seed + 61) });
+    tank(sc, mx + mw * .3, my + 1.2, zr + 2.4, spec.seed + 62, "negro"); if (mw > 2) tank(sc, mx + mw * .75, my + 1.2, zr + 2.4, spec.seed + 63, "negro");
+    if (r() < .7) antenna(sc, r.uniform(.4, W - .4), D * .8, zr); if (r() < .5) ac(sc, r.uniform(.3, W - 1.1), D * .2, zr, spec.seed + 64, false);
+    if (shop) { const [name, scol] = shop, sw = Math.min(lw, 6), st = new Tex(sw, .55, spec.seed + 40); st.stucco(scol, .2);
+      text(st, name, Math.max(1, (st.w - textW(name)) >> 1), 3, [252, 250, 244], true, mul(scol, .45));
+      sc.box(lado[0], -.16, 2.6, lado[0] + sw, 0, 3.15, { front: st, top: add(scol, 20), right: mul(scol, .6), left: mul(scol, .7) }); }
+    return { sc, storeys: n, depth: D, shop: shop && shop[0], height: zr };
+  }
+
+  // ---------- petit hotel / casa de estilo (zonas ricas): fachada clásica con pilastras, buñado en planta baja,
+  // ventanas altas con balconcitos, cornisa con dentículos y puerta de madera de dos hojas.
+  function petit(spec, phi) {
+    const r = rng(spec.seed), W = spec.W, D = spec.D, n = spec.p || 2, GF2 = 3.8, UF2 = 3.4;
+    const sc = new Scene(); sc.setXform(phi);
+    const wall = r.pick([[226, 214, 190], [214, 206, 192], [232, 224, 206], [204, 196, 184], [222, 206, 180]]), zr = GF2 + (n - 1) * UF2, Htot = zr + 1.2;
+    const zt = (z) => px(Htot - z), X = (m) => px(m);
+    const ft = new Tex(W, Htot, spec.seed); ft.stucco(wall, .5);
+    for (let yy = zt(GF2); yy < zt(.5); yy += px(.32)) ft.shade(0, yy, ft.w, yy + 1, .78);            // buñado
+    ft.rect(0, zt(.5), ft.w, ft.h, mul(wall, .72)); ft.humidity(.5);
+    const dw = 1.5, dx = r.pick([.6, W - dw - .6, (W - dw) / 2]);
+    doorDecal(ft, X(dx), zt(2.9), X(dw / 2), px(2.88), "madera", wall); doorDecal(ft, X(dx + dw / 2), zt(2.9), X(dw / 2), px(2.88), "madera", wall);
+    ft.rect(X(dx) - 3, zt(3.25), X(dx + dw) + 3, zt(2.9) - 2, add(wall, 18));                          // frontis
+    const wins = []; const cols = Math.max(2, Math.floor(W / 2.3));
+    for (let k = 0; k < n; k++) { const zb = k === 0 ? 0 : GF2 + (k - 1) * UF2, hh = k === 0 ? 2.1 : 2.4, zw = zb + (k === 0 ? .9 : .5);
+      for (let i = 0; i < cols; i++) { const cx = W * (i + .5) / cols; if (k === 0 && Math.abs(cx - (dx + dw / 2)) < 1.4) continue;
+        windowDecal(ft, X(cx - .55), zt(zw + hh), X(1.1), px(hh), k === 0 ? "persiana" : r.pick(["none", "persiana"]), wall); wins.push([cx - .55, zw, 1.1, hh, k]); } }
+    const stx = new Tex(D, Htot, spec.seed + 3); stx.stucco(mix(wall, [200, 196, 188], .5), 1); stx.runoff(.8, 1);
+    const bt = new Tex(W, Htot, spec.seed + 1); bt.stucco(mix(wall, [196, 192, 186], .4), 1);
+    const ftc = (a, b) => ft.crop(zt(b), zt(a)), btc = (a, b) => bt.crop(zt(b), zt(a)), stc = (a, b) => stx.crop(zt(b), zt(a));
+    sc.box(0, 0, 0, W, D, zr, { front: ftc(0, zr), back: btc(0, zr), left: stc(0, zr), right: stc(0, zr), top: roofTex(W, D, "piedra", spec.seed + 5) });
+    // pilastras y cornisa
+    const lt = add(wall, 16), dk = mul(wall, .82);
+    for (const xx of [0, W - .35]) sc.box(xx, -.14, .5, xx + .35, 0, zr, { front: lt, right: dk, left: mul(wall, .88), top: lt });
+    for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2; sc.box(-.04, -.12, zb - .12, W + .04, 0, zb + .05, { front: lt, top: add(wall, 26), right: dk, left: dk }); }
+    const dent = new Tex(W, .22, spec.seed + 9, lt); for (let xx = 0; xx < dent.w; xx += px(.25)) dent.shade(xx, dent.h >> 1, xx + px(.12), dent.h, .7);
+    sc.box(-.1, -.25, zr - .25, W + .1, 0, zr, { front: dent, top: lt, right: dk, left: dk });
+    sc.box(-.18, -.42, zr, W + .18, .1, zr + .18, { front: add(wall, 22), top: add(wall, 30), right: dk, left: dk });
+    const par = new Tex(W, 1, spec.seed + 11, lt); for (let xx = px(.2); xx < par.w - px(.2); xx += px(.32)) par.rect(xx, px(.25), xx + px(.12), par.h - 2, mul(wall, .55));
+    sc.box(0, -.05, zr + .18, W, .15, zr + 1.2, { front: par, back: par, top: lt, left: dk, right: dk });
+    // ventanas: dintel con clave y balconcito en los pisos altos
+    for (const [xm, zw, ww, hh, k] of wins) {
+      sc.box(xm - .12, -.08, zw + hh, xm + ww + .12, 0, zw + hh + .22, { front: add(wall, 20), top: add(wall, 30), right: dk, left: dk });
+      sc.box(xm + ww / 2 - .1, -.11, zw + hh - .05, xm + ww / 2 + .1, 0, zw + hh + .28, { front: add(wall, 28), right: dk, left: dk });
+      if (k > 0) { sc.box(xm - .2, -.55, zw - .1, xm + ww + .2, 0, zw + .02, { front: lt, top: add(wall, 24), right: dk, left: dk });
+        sc.box(xm - .18, -.55, zw + .02, xm + ww + .18, -.53, zw + .95, { front: railingTex(ww + .36, .93, spec.seed + k, [30, 30, 34], 3), back: railingTex(ww + .36, .93, spec.seed, [30, 30, 34], 3), cast: false });
+        if (r() < .5) plant(sc, xm + r.uniform(0, ww - .35), -.45, zw + .02, r.int(0, 9999)); }
+      else sc.box(xm - .1, -.1, zw - .08, xm + ww + .1, 0, zw, { front: [232, 228, 218], top: [244, 240, 232], right: [196, 192, 184], left: [206, 202, 194] }); }
+    tank(sc, r.uniform(1, W - 1), D * .6, zr, spec.seed + 90, "gris");
+    if (r() < .6) { const cx = r.uniform(.5, W - .8); sc.box(cx, D * .8, zr, cx + .45, D * .8 + .45, zr + 1.4, { front: [172, 96, 70], back: [172, 96, 70], right: [140, 76, 56], left: [150, 80, 60], top: [80, 70, 64] }); }
+    return { sc, storeys: n, depth: D, shop: null, height: zr };
   }
 
   // tapial / alambrado de baldío

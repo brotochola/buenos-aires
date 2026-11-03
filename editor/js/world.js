@@ -221,10 +221,11 @@ const World = (() => {
       const nearEnd = t < 8 || t > s.len - 18;
       let kind;
       if (villa) kind = r() < .07 * Math.min(1, C.baldios) ? "baldio" : "villa";
-      else if (s.type === "ave") kind = pickW(r, [["negocio", 30], ["negocio_casa", 30], ["ph", 14], ["galpon", 7], ["casa2", 10], ["casa", 6], ["baldio", 3 * C.baldios]]);
+      else if (s.type === "ave") kind = pickW(r, [["negocio", 30], ["negocio_casa", 30], ["ph", 14], ["galpon", 7], ["casa2", 10], ["casa", 6], ["baldio", 3 * C.baldios], ["edificio", 22 * (C.edificios ?? 1) * (.3 + w)]]);
       else if (w < .3) kind = pickW(r, [["casa", 26], ["obra", 24], ["villa", 14], ["casa2", 8], ["negocio", nearEnd ? 18 : 6], ["galpon", 4], ["baldio", 15 * C.baldios]]);
       else if (w < .55) kind = pickW(r, [["casa", 34], ["casa2", 20], ["obra", 10], ["negocio", nearEnd ? 20 : 8], ["negocio_casa", nearEnd ? 14 : 6], ["chalet", 5], ["galpon", 3], ["baldio", 7 * C.baldios]]);
-      else kind = pickW(r, [["casa", 22], ["casa2", 26], ["chalet", 28], ["ph", 4], ["negocio", nearEnd ? 12 : 4], ["negocio_casa", nearEnd ? 8 : 3], ["baldio", 2 * C.baldios]]);
+      else kind = pickW(r, [["casa", 22], ["casa2", 26], ["chalet", 28], ["ph", 4], ["negocio", nearEnd ? 12 : 4], ["negocio_casa", nearEnd ? 8 : 3], ["baldio", 2 * C.baldios],
+        ["edificio", 16 * (C.edificios ?? 1) * (w - .45)], ["petit", 12 * (C.edificios ?? 1) * (w - .45)]]);
       const phi = Math.atan2(ux[1], ux[0]);   // local x -> ux ; local -y -> hacia la calle
       return { id, q, o, ux, nOut, fw, ld, seg: s, side, w, kind, phi, seed: (r() * 1e9) | 0,
         vereda: w < .3 ? pickW(r, [["tierra", 4], ["cem", 2], ["vain_d", 1.5], ["pasto", 3]]) : pickW(r, [["vain", 5], ["vain_d", 1.6], ["gris", 2.5], ["cem", 2.5], ["roja", 1], ["tierra", w < .5 ? .6 : 0]]),

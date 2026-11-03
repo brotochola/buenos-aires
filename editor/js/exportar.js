@@ -20,7 +20,10 @@ const Exportar = (() => {
     const png = async (cv) => new Uint8Array(await (await new Promise(ok => cv.toBlob(ok, "image/png"))).arrayBuffer());
 
     // ---------- 1. catálogo de casas, tapiales y postes: render R3 y franjas verticales
-    const entries = [...B.cat.values()], rendered = [], TOL = 8, PIEZA = 64, ANCHO = 64;
+    // las casas se dibujan con más detalle (DET px por px de mundo) y el juego las muestra a 1/DET, como a los personajes LPC
+    const DET = opts.detalle || 5 / 3, TDp = SF * DET; R3.setDetalle(DET);
+    const entries = [...B.cat.values()], rendered = [], TOL = Math.round(8 * DET), PIEZA = Math.round(64 * DET), ANCHO = Math.round(64 * DET);
+    try {
     for (let n = 0; n < entries.length; n++) {
       const e = entries[n]; if (n % 8 === 0) { progreso("casas " + n + "/" + entries.length, n / entries.length * .55); await espera(); }
       const built = Barrio.build3D(e.spec), res = built.sc.render({ groundShadow: false }), cv = res.canvas, d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
@@ -37,7 +40,7 @@ const Exportar = (() => {
       const cax = res.ax - x0, cay = res.ay - y0, base = new Float32Array(w).fill(NaN), top = new Int32Array(w).fill(-1), bot = new Int32Array(w).fill(-1);
       for (const cs of built.sc.casters) { if (cs.c[2] - cs.h[2] > .3) continue;
         const q = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => { const px = cs.c[0] + sx * cs.h[0] * cs.ax[0][0] + sy * cs.h[1] * cs.ax[1][0], py = cs.c[1] + sx * cs.h[0] * cs.ax[0][1] + sy * cs.h[1] * cs.ax[1][1];
-          return [cax + (px + K * py) * SF, cay - py * SYN * SF]; });
+          return [cax + (px + K * py) * TDp, cay - py * SYN * TDp]; });
         for (let c = 0; c < w; c++) { const xc = c + .5; let yb = -Infinity;
           for (let k = 0; k < 4; k++) { const a = q[k], b = q[(k + 1) & 3]; if ((xc < a[0]) === (xc < b[0])) continue; yb = Math.max(yb, a[1] + (b[1] - a[1]) * (xc - a[0]) / (b[0] - a[0])); }
           if (yb > -Infinity && !(base[c] >= yb)) base[c] = yb; } }
@@ -60,7 +63,7 @@ const Exportar = (() => {
         const nlo = Math.min(lo, base[c]), nhi = Math.max(hi, base[c]);
         if (nhi - nlo > TOL || c - c0 >= ANCHO) { cerrar(c); c0 = c; lo = hi = base[c]; } else { lo = nlo; hi = nhi; } }
       rendered.push({ e, crop, ax: cax, ay: cay, w, h, casters, foot, strips });
-    }
+    } } finally { R3.setDetalle(1); }
     // hojas de casas (estantes de 2048 de ancho, hasta 2040 de alto)
     progreso("hojas de casas", .58); await espera();
     const hojas = []; let cur = null;
@@ -76,10 +79,10 @@ const Exportar = (() => {
         it.strips.forEach((s, k) => s.pieces.forEach((q, j) => { frames["o" + it.e.id + "_" + k + "_" + j] = fr(it.sx + s.x, it.sy + q.t, s.w, q.h); })); }
       archivos.push(["img/casas" + si + ".png", await png(cv)], ["img/casas" + si + ".json", json(hoja(frames, "casas" + si + ".png", cv))]);
     }
-    // catálogo de franjas, relativo al pie: [dx (borde izq.), dy (base = y de orden), piezas [[cx, cy] centro respecto del borde y la base]]
+    // catálogo de franjas, relativo al pie y en px de mundo: [dx (borde izq.), dy (base = y de orden), piezas [[cx, cy] centro respecto del borde y la base]]
     const franjas = {};
-    for (const it of rendered) { const axF = it.ax + (it.foot[0] + K * it.foot[1]) * SF, ayF = it.ay - it.foot[1] * SYN * SF;
-      franjas["o" + it.e.id] = it.strips.map(s => [r2(s.x - axF), r2(s.g - ayF), s.pieces.map(q => [r2(s.w / 2), r2(q.t + q.h / 2 - s.g)])]); }
+    for (const it of rendered) { const axF = it.ax + (it.foot[0] + K * it.foot[1]) * TDp, ayF = it.ay - it.foot[1] * SYN * TDp;
+      franjas["o" + it.e.id] = it.strips.map(s => [r2((s.x - axF) / DET), r2((s.g - ayF) / DET), s.pieces.map(q => [r2(s.w / 2 / DET), r2((q.t + q.h / 2 - s.g) / DET)])]); }
     // ---------- 2. instancias de casas, tapiales y postes
     const byId = new Map(rendered.map(it => [it.e.id, it])), SUN = R3.SUN, casas = [];
     for (const o of B.objs) {
@@ -186,7 +189,7 @@ const Exportar = (() => {
     archivos.push(["piso.bin", piso]);
     // ---------- 8. meta y mundo
     const nFranjas = casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
-    const meta = { formato: 1, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
+    const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas };

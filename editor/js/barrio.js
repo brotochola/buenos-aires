@@ -55,6 +55,15 @@ const Barrio = (() => {
         if (r() < .5) put("bolsas_" + r.int(0, 1), c[0] + r.uni(-2, 2), c[1] + r.uni(-2, 2));
         continue;
       }
+      // edificios: sólo en lotes hondos; si no entra, casa de dos plantas
+      if ((lot.kind === "edificio" || lot.kind === "petit") && lot.ld < (lot.kind === "edificio" ? 14 : 11)) lot.kind = "casa2";
+      if (lot.kind === "edificio" || lot.kind === "petit") {
+        const ed = lot.kind === "edificio", D = ed ? (lot.ld > 20 ? 14 : 11) : 9, wq = Math.min(lot.fw, Wb(lot.fw, 2)), o = LP((lot.fw - wq) / 2, 0);
+        const p = ed ? (lot.w > .75 || lot.seg.type === "ave" ? r.pick([6, 8, 10]) : r.pick([4, 6])) : r.pick([2, 3]);
+        addObj("house", { t: "casa", k: lot.kind, W: wq, D, a: aIdx(lot.phi), wb: 1, v: 0, p }, lot, o[0], o[1], phiQ, { u0: 0, uw: lot.fw, v0: 0 }, rect(0, lot.fw, 0, D));
+        for (let u = .2; u < lot.fw; u += .4) for (let v = -.6; v < D + 1.5; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); }
+        continue;
+      }
       const deep = ["casa", "casa2", "obra", "negocio", "negocio_casa", "ph"].includes(lot.kind);
       let D = lot.kind === "chalet" ? 4.6 : lot.kind === "villa" ? Math.min(lot.ld - .4, r.uni(3.6, 5.5)) : deep ? Math.max(4.2, Math.min(lot.ld - 2.5, r.uni(6, 12))) : lot.kind === "galpon" ? Math.min(lot.ld - 1, r.uni(8, 14)) : 5;
       D = lot.kind === "villa" ? (D < 4.5 ? 4 : 5) : lot.kind === "galpon" ? (D < 11 ? 9 : 12) : Db(D, deep);
@@ -146,7 +155,7 @@ const Barrio = (() => {
       const kept = hs.filter(e => keep.has(e.id));
       for (const o of objs) { if (o.e.spec.t !== "casa" || keep.has(o.e.id)) continue; const sp = o.e.spec; let best = null, bs = 1e9;
         for (const e of kept) { const q = e.spec; if (q.a !== sp.a) continue;
-          const sc = (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") ? 50 : 4) + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0);
+          const ed = (k) => k === "edificio" || k === "petit", sc = (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0);
           if (sc < bs) { bs = sc; best = e; } }
         if (!best || bs > 40) { keep.add(o.e.id); kept.push(o.e); continue; }
         o.e.n--; best.n++; o.e = best;
@@ -157,7 +166,7 @@ const Barrio = (() => {
   // la casa/tapial/poste 3D de una clave del catálogo (misma semilla en el visor y en la exportación)
   function build3D(spec) {
     const phi = spec.a * Q;
-    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17, wealth: [.25, .7][spec.wb] }, phi);
+    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17, wealth: [.25, .7][spec.wb] }, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
     return Houses.poste(7, phi, !!spec.l);
   }

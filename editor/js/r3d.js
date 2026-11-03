@@ -2,7 +2,11 @@
 // Mundo en metros: x = este, y = norte, z = arriba. Proyección oblicua a 30° con leve corrimiento al este:
 //   sx = (x + K*y) * S      sy = -(z*cos30 + y*sin30) * S       (S = 18 px/m en el sprite final)
 const R3 = (() => {
-  const SF = 18, SS = 2, S = SF * SS, K = 0.16, CZ = Math.cos(Math.PI / 6), SYN = 0.5;
+  const SF = 18, SS = 2, K = 0.16, CZ = Math.cos(Math.PI / 6), SYN = 0.5;
+  // detalle: las texturas y los sprites se dibujan a SF·DET px/m (el juego los muestra a 1/DET, como a los personajes LPC).
+  // DET = 1 deja todo como antes (el visor 3D del editor); la exportación sube a 5/3 (30 px/m).
+  let DET = 1, TD = SF, S = TD * SS;
+  function setDetalle(d) { DET = d; TD = SF * d; S = TD * SS; }
   const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -34,7 +38,7 @@ const R3 = (() => {
   const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
   // ---------- texturas pintadas (18 px/m)
-  const px = (m) => Math.round(m * SF);
+  const px = (m) => Math.round(m * TD);
   class Tex {
     constructor(wm, hm, seed, col = [200, 200, 200], a = 255) {
       this.w = Math.max(1, px(wm)); this.h = Math.max(1, px(hm));
@@ -70,7 +74,7 @@ const R3 = (() => {
         }
       }
     }
-    brick(col = [174, 92, 62], y0 = 0, y1 = this.h, course = 3, blen = 8, mortar = [198, 186, 164]) {
+    brick(col = [174, 92, 62], y0 = 0, y1 = this.h, course = Math.max(3, Math.round(3 * DET)), blen = Math.max(8, Math.round(8 * DET)), mortar = [198, 186, 164]) {
       for (let y = y0; y < y1; y++) { const row = (y / course) | 0, off = (row % 2) * (blen >> 1);
         for (let x = 0; x < this.w; x++) {
           const i = (y * this.w + x) * 4, mm = (y % course) === course - 1 || ((x + off) % blen) === 0;
@@ -81,15 +85,16 @@ const R3 = (() => {
           this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = 255;
         } }
     }
-    hueco(y0 = 0, y1 = this.h) {
-      for (let y = y0; y < y1; y++) { const row = (y / 5) | 0, off = (row % 2) * 6, ly = y % 5;
+    hueco(y0 = 0, y1 = this.h) {      // ladrillo hueco: bloques con agujeros, juntas desprolijas
+      const CH = Math.max(5, Math.round(5 * DET)), CL = Math.max(12, Math.round(12 * DET)), hy0 = Math.round(CH * .25), hy1 = Math.round(CH * .6), step = Math.max(3, Math.round(3 * DET));
+      for (let y = y0; y < y1; y++) { const row = (y / CH) | 0, off = (row % 2) * (CL >> 1), ly = y % CH;
         for (let x = 0; x < this.w; x++) {
-          const lx = (x + off) % 12, i = (y * this.w + x) * 4;
+          const lx = (x + off) % CL, i = (y * this.w + x) * 4;
           let c;
-          if ((ly === 4 || lx === 0) && this.r() < 0.92) c = mul([168, 162, 150], 0.85 + 0.25 * this.r());
-          else { const bid = row * 7919 + (((x + off) / 12) | 0) * 104729, v0 = (Math.sin(bid * 0.00731) * 9341.53) % 1, v = v0 < 0 ? v0 + 1 : v0;
+          if ((ly === CH - 1 || lx === 0) && this.r() < 0.92) c = mul([168, 162, 150], 0.85 + 0.25 * this.r());
+          else { const bid = row * 7919 + (((x + off) / CL) | 0) * 104729, v0 = (Math.sin(bid * 0.00731) * 9341.53) % 1, v = v0 < 0 ? v0 + 1 : v0;
             c = mul([214, 124, 82], 0.82 + 0.28 * v);
-            if (ly >= 1 && ly <= 2 && lx % 3 === 2 && lx > 1 && lx < 11) c = mul(c, 0.52);
+            if (ly >= hy0 && ly <= hy1 && lx % step === step - 1 && lx > 1 && lx < CL - 1) c = mul(c, 0.52);
             if (ly === 0) c = mul(c, 1.08);
             if (ly === 0 && this.r() < 0.12) c = [176, 170, 158]; }
           this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = 255;
@@ -221,7 +226,7 @@ const R3 = (() => {
       }
       // ---- oclusión de rincones (por profundidad de pantalla)
       const occ = new Float32Array(N);
-      const OFF = [[0, -3], [-3, 0], [3, 0], [0, 3], [-2, -2], [2, -2], [0, -7], [-6, -2], [6, -2]];
+      const OFF = [[0, -3], [-3, 0], [3, 0], [0, 3], [-2, -2], [2, -2], [0, -7], [-6, -2], [6, -2]].map(([a, b]) => [Math.round(a * DET), Math.round(b * DET)]);
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const k = y * W + x; if (fi[k] < 0) continue;
         let o = 0; for (const [ox, oy] of OFF) { const xx = x + ox, yy = y + oy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
           const kk = yy * W + xx; if (fi[kk] >= 0 && zb[kk] < zb[k] - 0.25 && zb[kk] > zb[k] - 3) o++; }
@@ -291,12 +296,15 @@ const R3 = (() => {
     "4": "00010 00110 01010 10010 11111 00010 00010", "5": "11111 10000 11110 00001 00001 10001 01110", "6": "00110 01000 10000 11110 10001 10001 01110",
     "7": "11111 00001 00010 00100 01000 01000 01000", "8": "01110 10001 10001 01110 10001 10001 01110", "9": "01110 10001 10001 01111 00001 00010 01100",
     "!": "00100 00100 00100 00100 00100 00000 00100", "-": "00000 00000 00000 11111 00000 00000 00000", ".": "00000 00000 00000 00000 00000 00000 00100", " ": "00000 00000 00000 00000 00000 00000 00000" };
-  const textW = (s, bold = true) => s.length * (bold ? 7 : 6) - 1;
+  const TS = () => DET >= 1.5 ? 2 : 1;
+  const textW = (s, bold = true) => (s.length * (bold ? 7 : 6) - 1) * TS();
   function text(t, s, x0, y0, c, bold = true, shadow = null, wobble = 0) {
     let x = x0;
     for (const ch of s) { const rows = (FONT[ch] || FONT[" "]).split(" "), dy = wobble ? t.r.int(-wobble, wobble) : 0;
-      rows.forEach((row, gy) => { for (let gx = 0; gx < 5; gx++) if (row[gx] === "1") for (const bx of bold ? [0, 1] : [0]) { if (shadow) t.p(x + gx + bx + 1, y0 + gy + dy + 1, shadow); t.p(x + gx + bx, y0 + gy + dy, c); } });
-      x += bold ? 7 : 6; }
+      const k = TS();
+      rows.forEach((row, gy) => { for (let gx = 0; gx < 5; gx++) if (row[gx] === "1") for (const bx of bold ? [0, 1] : [0]) for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) {
+        const X = x + (gx + bx) * k + a, Y = y0 + (gy + dy) * k + b; if (shadow) t.p(X + k, Y + k, shadow); t.p(X, Y, c); } });
+      x += (bold ? 7 : 6) * k; }
   }
-  return { SF, K, CZ, SYN, proj, norm, dot, cross, LIGHT, SUNC, SKY, BOUNCE, hull, rng, vnoise, mul, add, mix, clamp, px, Tex, Scene, text, textW, setLight, get SUN() { return SUN; } };
+  return { SF, K, CZ, SYN, setDetalle, get DET() { return DET; }, get TD() { return TD; }, proj, norm, dot, cross, LIGHT, SUNC, SKY, BOUNCE, hull, rng, vnoise, mul, add, mix, clamp, px, Tex, Scene, text, textW, setLight, get SUN() { return SUN; } };
 })();

@@ -29,6 +29,7 @@ const CFG = (() => {
     ["Lotes", "fondoConstr", "Construcciones al fondo", 0, 2, .05, 1, "×", "world", ""],
     ["Lotes", "baldios", "Baldíos", 0, 3, .1, 1, "×", "world", ""],
     ["Casas", "variedad", "Variedad de casas (tope)", 40, 400, 10, 200, "", "world", "Cuántas casas distintas se hornean; las demás repiten la más parecida. Con más, el atlas del juego pesa más."],
+    ["Casas", "edificios", "Edificios y petit hoteles", 0, 3, .1, 1, "×", "world", "En zonas ricas y avenidas: edificios de departamentos (4 a 10 pisos) y casas de estilo."],
     ["Casas", "pb", "Altura planta baja", 2.6, 4.5, .1, 3.2, "m", "bake", ""],
     ["Casas", "piso", "Altura pisos altos", 2.5, 4, .1, 2.9, "m", "bake", ""],
     ["Casas", "desgaste", "Desgaste y suciedad", 0, 3, .1, 1, "×", "bake", ""],
