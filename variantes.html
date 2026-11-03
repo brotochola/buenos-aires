@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Variantes · Barrio Conurbano</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #28301f; font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #eee; }
+  #hud { position: fixed; left: 10px; top: 10px; z-index: 10; background: rgba(20, 22, 28, .86); border-radius: 8px; padding: 8px 10px; max-width: calc(100vw - 20px); box-sizing: border-box; }
+  #hud b { color: #f2c14e; } .m { color: #9aa0aa; font-size: 12px; }
+  #hud button, #hud a { font: inherit; background: #2d313b; color: #eee; border: 1px solid #444b57; border-radius: 6px; padding: 5px 9px; margin: 6px 4px 0 0; text-decoration: none; display: inline-block; }
+  #hud .on { background: #f2c14e; color: #222; }
+  #err { color: #ff8a80; white-space: pre-wrap; }
+</style></head>
+<body>
+<div id="hud"><b>VARIANTES</b> <span class="m">cómo achicar los dibujos de Gemini · arrastrar / WASD: mover · rueda: zoom</span><br>
+  filtro del juego: <a data-f="linear" href="?filtro=linear">linear (hoy)</a><a data-f="nearest" href="?filtro=nearest">nearest</a><a data-f="mip" href="?filtro=mip">linear + mipmaps</a><br>
+  objeto: <button id="bA">◀</button><button id="bS">▶</button> <span id="obj"></span><br>
+  zoom: <button data-z="1">1</button><button data-z="1.75">1,75</button><button data-z="2.5">2,5</button><button data-z="4">4</button> <span id="zz" class="m"></span>
+  <div id="err"></div></div>
+<script type="module">
+  import WEED from './weed/weed.bundle.esm.min.js';
+  const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search), F = q.get('filtro') || 'linear';
+  for (const a of document.querySelectorAll('[data-f]')) a.classList.toggle('on', a.dataset.f === F);
+  addEventListener('error', (e) => { $('err').textContent = 'Error: ' + (e.message || e.error); });
+  try {
+    const game = new WEED.GameEngine({ debug: false, autoResize: true });
+    await game.loadScene(new URL('./variantesScene.js', import.meta.url).href);
+    const { VARIANTES } = await import('./pruebas/variantes/variantes.js');
+    const sc = () => window.__variantes;
+    const show = () => { const b = VARIANTES.blocks[sc().i]; $('obj').textContent = (sc().i + 1) + '/' + VARIANTES.blocks.length + ' ' + b.name; };
+    $('bA').onclick = () => { sc().go(sc().i - 1); show(); }; $('bS').onclick = () => { sc().go(sc().i + 1); show(); };
+    for (const b of document.querySelectorAll('[data-z]')) b.onclick = () => { sc().zoomT = +b.dataset.z; };
+    setInterval(() => { if (sc()) $('zz').textContent = 'zoom ' + (WEED.Camera.zoom || 0).toFixed(2); }, 300);
+    show();
+  } catch (e) { console.error(e); $('err').textContent = 'Error: ' + e.message; }
+</script>
+</body></html>
