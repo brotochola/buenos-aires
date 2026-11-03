@@ -159,7 +159,7 @@ const Exportar = (() => {
       W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); })]);
     // autos: a lo largo de su carril (mano derecha), tirando hacia el centro del carril
     archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (x < 0 || y < 0 || x > MW || y > MH) return null; W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
-      if (s.mat === "pasillo" || (s.type === "ave" && Math.abs(cl.ds) < s.med + .2)) return null;
+      if (s.mat === "pasillo" || s.type === "pasaje" || (s.type === "ave" && Math.abs(cl.ds) < s.med + .2)) return null;   // los pasajes (angostos, de tierra en la villa) no son para el tránsito
       const fwd = cl.ds < 0 ? 1 : -1, lane = laneOff(s), off = cl.ds - (-fwd * lane), pull = Math.max(-.6, Math.min(.6, -off * .35));
       return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); })]);
     // ---------- 7. piso (shader de WeedJS)
