@@ -209,8 +209,13 @@ const Houses = (() => {
       shop = SHOPS[spec.seed % SHOPS.length]; const [name] = shop;
       const dw = .95, dx = r.pick([.35, W - dw - .35]);
       const [g0, g1] = dx < W / 2 ? [dx + dw + .25, W - .35] : [.35, dx - .25];
-      goodsDecal(ft, X(g0), zt(2.35), X(g1), zt(.5), name);
-      doorDecal(ft, X(dx), zt(2.25), X(dw), px(2.23), "chapa", wall);
+      // frente de local de Gemini según el rubro (panadería, carnicería, verdulería...); si no hay, el dibujo de siempre
+      const LOC = { PANADERIA: "panaderia", CARNICERIA: "carniceria", POLLERIA: "carniceria", FIAMBRERIA: "carniceria", VERDULERIA: "verduleria", FERRETERIA: "ferreteria",
+        CERRAJERIA: "ferreteria", GOMERIA: "ferreteria", TALLER: "ferreteria", KIOSCO: "kiosco", LIBRERIA: "kiosco", FOTOCOPIAS: "kiosco", FARMACIA: "farmacia", VETERINARIA: "farmacia",
+        PELUQUERIA: "peluqueria", ALMACEN: "almacen", DESPENSA: "almacen", AUTOSERVICIO: "almacen", BAR: "almacen", ROTISERIA: "almacen", PIZZERIA: "panaderia", MERCERIA: "kiosco" };
+      const loc = spec.wealth < .3 && r() < .25 ? "cerrado" : LOC[name] || r.pick(["kiosco", "almacen"]);
+      if (R3.DECALS["fd_local_" + loc] && W >= 3.2) { const lw = Math.min(W - .3, r.uniform(3, 4.2)), lx = (W - lw) / 2; ft.blit("fd_local_" + loc, X(lx), zt(2.55), X(lw), zt(0) - zt(2.55)); }
+      else { goodsDecal(ft, X(g0), zt(2.35), X(g1), zt(.5), name); doorDecal(ft, X(dx), zt(2.25), X(dw), px(2.23), "chapa", wall); }
       if (r() < .5) ft.rect(X(.3), zt(2.57), X(W - .3), zt(2.35), [118, 120, 124]);
     } else if (kind === "galpon") {
       const gw = Math.min(W - 1.6, 4.2); shutterDecal(ft, X((W - gw) / 2), zt(3.0), X(gw), px(2.55), r.pick([0, 0, .55]));
@@ -335,7 +340,8 @@ const Houses = (() => {
       st.rect(0, 0, st.w, 1, add(scol, 40)); st.rect(0, st.h - 1, st.w, st.h, mul(scol, .6));
       if (textW(name) > st.w - 6) text(st, name, (st.w - textW(name, false)) >> 1, 2, [252, 250, 244], false, mul(scol, .45)); else text(st, name, (st.w - textW(name)) >> 1, 2, [252, 250, 244], true, mul(scol, .45));
       sc.box(.15, y0 - .16, 2.55, .15 + sw, y0, 3.17, { front: st, top: add(scol, 20), right: mul(scol, .6), left: mul(scol, .7) });
-      if (!["FARMACIA", "LAVADERO", "PELUQUERIA", "REMIS"].includes(name) || r() < .3) {
+      // toldo sólo en algunos (desde arriba tapa la vidriera, que es lo que cuenta qué local es)
+      if ((!["FARMACIA", "LAVADERO", "PELUQUERIA", "REMIS"].includes(name) || r() < .3) && r() < (R3.DECALS.fd_local_kiosco ? .35 : 1)) {
         const c2 = r.pick([[240, 236, 226], [240, 236, 226], [40, 40, 44]]), c1 = r() < .6 ? scol : r.pick([[204, 46, 40], [38, 116, 58], [36, 78, 156], [220, 120, 30]]);
         const at = new Tex(W, 1.1, spec.seed + 41); for (let xx = 0; xx < at.w; xx++) { const c = ((xx / 7) | 0) % 2 === 0 ? c1 : c2; for (let yy = 0; yy < at.h; yy++) at.p(xx, yy, mul(c, 1.04 - .18 * yy / at.h)); }
         sc.quad([-.05, y0 - .16, 2.5], [W + .1, 0, 0], [0, -1.1, -.55], at, { both: true });

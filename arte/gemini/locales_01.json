@@ -1,0 +1,98 @@
+{
+ "img": "locales_01.png",
+ "bg": "cyan",
+ "ref": 1584,
+ "grow": 0,
+ "objs": [
+  {
+   "name": "fd_local_panaderia",
+   "w": 3,
+   "box": [
+    37,
+    36,
+    378,
+    327
+   ]
+  },
+  {
+   "name": "fd_local_carniceria",
+   "w": 3,
+   "box": [
+    380,
+    36,
+    678,
+    327
+   ]
+  },
+  {
+   "name": "fd_local_verduleria",
+   "w": 3,
+   "box": [
+    711,
+    36,
+    1074,
+    327
+   ]
+  },
+  {
+   "name": "fd_local_ferreteria",
+   "w": 3,
+   "box": [
+    1206,
+    36,
+    1548,
+    327
+   ]
+  },
+  {
+   "name": "fd_local_kiosco",
+   "w": 3,
+   "box": [
+    37,
+    346,
+    346,
+    611
+   ]
+  },
+  {
+   "name": "fd_local_farmacia",
+   "w": 3,
+   "box": [
+    346,
+    346,
+    648,
+    611
+   ]
+  },
+  {
+   "name": "fd_local_peluqueria",
+   "w": 3,
+   "box": [
+    648,
+    346,
+    913,
+    611
+   ]
+  },
+  {
+   "name": "fd_local_almacen",
+   "w": 3,
+   "box": [
+    913,
+    346,
+    1238,
+    611
+   ]
+  },
+  {
+   "name": "fd_local_cerrado",
+   "w": 3,
+   "box": [
+    1238,
+    346,
+    1548,
+    611
+   ]
+  }
+ ]
+}
