@@ -1,0 +1,23 @@
+{
+ "img": "yuyos_01.png",
+ "bg": "cyan",
+ "grow": 2,
+ "objs": [
+  {
+   "name": "yy_grieta",
+   "w": 0.7,
+   "at": [
+    309,
+    294
+   ]
+  },
+  {
+   "name": "yy_cordon",
+   "w": 1.6,
+   "at": [
+    513,
+    294
+   ]
+  }
+ ]
+}

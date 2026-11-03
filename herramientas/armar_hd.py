@@ -19,24 +19,24 @@ ART = os.path.join(ROOT, "arte")
 PXM_W = 30.0
 
 cfg = json.load(open(os.path.join(ART, "hd.json")))
-depth = {}
-for sp in glob.glob(os.path.join(ART, "gemini", "*.json")):
-    for o in json.load(open(sp)).get("objs", []):
-        depth[o["name"]] = o.get("d", 0.3)
+# per-object metadata written by pixelar.py: native size, k (scale to 30 px/m), depth d (m)
+info = {}
+for sp in glob.glob(os.path.join(ART, "gemini", "limpio", "*.json")):
+    info.update(json.load(open(sp)))
 
 items = []
 for name, src in cfg["frames"].items():
     im = Image.open(os.path.join(ART, "gemini", "limpio", src + ".png")).convert("RGBA")
-    d = depth.get(src, 0.3)
-    oy = max(0, im.height - 1 - int(round(d * PXM_W * 0.5 * 0.5)))
-    items.append((name, im, im.width // 2, oy))
+    k, d = info[src]["k"], info[src].get("d", 0.3)
+    oy = max(0, im.height - 1 - int(round(d * PXM_W * 0.5 * 0.5 / k)))   # anchor: center of the footprint (d/2 m deep)
+    items.append((name, im, im.width // 2, oy, k))
 
 # shelf packing, tallest first, 2 px gap
-W = 1024
+W = 2048
 items.sort(key=lambda t: -t[1].height)
 x = y = rowh = 0
 pos = {}
-for name, im, ox, oy in items:
+for name, im, ox, oy, k in items:
     if x + im.width > W:
         x, y, rowh = 0, y + rowh + 2, 0
     pos[name] = (x, y)
@@ -45,10 +45,10 @@ for name, im, ox, oy in items:
 H = y + rowh
 sheet = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 frames = {}
-for name, im, ox, oy in items:
+for name, im, ox, oy, k in items:
     px, py = pos[name]
     sheet.paste(im, (px, py))
-    frames[name] = {"x": px, "y": py, "w": im.width, "h": im.height, "ox": ox, "oy": oy}
+    frames[name] = {"x": px, "y": py, "w": im.width, "h": im.height, "ox": ox, "oy": oy, "e": round(cfg["escala"] * k, 4)}
 out = os.path.join(ROOT, "editor", "recursos")
 sheet.save(os.path.join(out, "hd_props.png"), optimize=True)
 with open(os.path.join(out, "hd_props.js"), "w") as f:
@@ -58,10 +58,10 @@ print(f"hd_props.png {W}x{H}, {len(frames)} frames")
 
 
 # ---------- facade decals (front elevation, 30 px/m): every arte/gemini/limpio/fd_*.png -> editor/recursos/fachada.png/js
-dec = sorted(glob.glob(os.path.join(ART, "gemini", "limpio", "fd_*.png")))
+dec = sorted(glob.glob(os.path.join(ART, "gemini", "limpio", "fd_*.png")))   # blit stretches them to their size on the wall
 ims = [(os.path.basename(f)[:-4], Image.open(f).convert("RGBA")) for f in dec]
 ims.sort(key=lambda t: -t[1].height)
-x = y = rowh = 0; W = 512; pos = {}
+x = y = rowh = 0; W = 1024; pos = {}
 for n, im in ims:
     if x + im.width > W:
         x, y, rowh = 0, y + rowh + 1, 0

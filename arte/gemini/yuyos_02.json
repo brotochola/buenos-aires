@@ -1,0 +1,155 @@
+{
+ "img": "yuyos_02.png",
+ "bg": "cyan",
+ "grow": 1,
+ "persona": [
+  67,
+  279
+ ],
+ "objs": [
+  {
+   "name": "yy_diente_leon",
+   "h": 0.5,
+   "at": [
+    153,
+    320
+   ]
+  },
+  {
+   "name": "yy_diente_leon_b",
+   "h": 0.5,
+   "at": [
+    237,
+    320
+   ]
+  },
+  {
+   "name": "yy_gramilla",
+   "h": 0.5,
+   "at": [
+    342,
+    320
+   ]
+  },
+  {
+   "name": "yy_cola_zorro",
+   "h": 0.5,
+   "at": [
+    458,
+    320
+   ]
+  },
+  {
+   "name": "yy_cardo",
+   "h": 0.5,
+   "at": [
+    569,
+    320
+   ]
+  },
+  {
+   "name": "yy_trebol",
+   "h": 0.5,
+   "at": [
+    673,
+    320
+   ]
+  },
+  {
+   "name": "yy_seco_alto",
+   "h": 0.5,
+   "at": [
+    804,
+    320
+   ]
+  },
+  {
+   "name": "yy_mostacilla",
+   "h": 0.5,
+   "at": [
+    934,
+    320
+   ]
+  },
+  {
+   "name": "yy_ortiga",
+   "h": 0.5,
+   "at": [
+    71,
+    499
+   ]
+  },
+  {
+   "name": "yy_ortiga_b",
+   "h": 0.5,
+   "at": [
+    164,
+    499
+   ]
+  },
+  {
+   "name": "yy_ortiga_c",
+   "h": 0.5,
+   "at": [
+    246,
+    499
+   ]
+  },
+  {
+   "name": "yy_llanten",
+   "h": 0.5,
+   "at": [
+    342,
+    499
+   ]
+  },
+  {
+   "name": "yy_avena",
+   "h": 0.5,
+   "at": [
+    461,
+    499
+   ]
+  },
+  {
+   "name": "yy_pasto_seco",
+   "h": 0.5,
+   "at": [
+    558,
+    499
+   ]
+  },
+  {
+   "name": "yy_seco_alto_b",
+   "h": 0.5,
+   "at": [
+    655,
+    499
+   ]
+  },
+  {
+   "name": "yy_mostacilla_b",
+   "h": 0.5,
+   "at": [
+    759,
+    499
+   ]
+  },
+  {
+   "name": "yy_brotes",
+   "h": 0.5,
+   "at": [
+    845,
+    499
+   ]
+  },
+  {
+   "name": "yy_musgo",
+   "h": 0.5,
+   "at": [
+    941,
+    499
+   ]
+  }
+ ]
+}

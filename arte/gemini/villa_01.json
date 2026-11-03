@@ -1,12 +1,95 @@
-{"img": "villa_01.png", "colors": 120, "grow": 4, "objs": [
- {"name": "hd_tanque", "h": 2.0, "d": 1.0, "at": [125,155]},
- {"name": "hd_garrafa", "h": 0.62, "d": 0.3, "at": [300,185]},
- {"name": "hd_carro_cartonero", "w": 2.1, "at": [490,160]},
- {"name": "hd_chango", "h": 1.05, "d": 0.9, "at": [735,165]},
- {"name": "hd_antena", "h": 1.4, "d": 0.2, "at": [925,150]},
- {"name": "hd_parrilla_tambor", "h": 0.95, "d": 0.6, "at": [125,440]},
- {"name": "hd_silla", "h": 0.85, "d": 0.5, "at": [305,440]},
- {"name": "hd_cajones", "h": 1.3, "d": 0.4, "at": [470,430]},
- {"name": "hd_gomas", "h": 1.0, "d": 1.0, "at": [675,440]},
- {"name": "hd_chapas", "h": 1.9, "d": 0.4, "at": [905,420]}
-]}
+{
+ "img": "villa_01.png",
+ "objs": [
+  {
+   "name": "hd_tanque",
+   "h": 2.0,
+   "d": 1.0,
+   "at": [
+    125,
+    155
+   ]
+  },
+  {
+   "name": "hd_garrafa",
+   "h": 0.62,
+   "d": 0.3,
+   "at": [
+    300,
+    185
+   ]
+  },
+  {
+   "name": "hd_carro_cartonero",
+   "w": 2.1,
+   "at": [
+    490,
+    160
+   ]
+  },
+  {
+   "name": "hd_chango",
+   "h": 1.05,
+   "d": 0.9,
+   "at": [
+    735,
+    165
+   ]
+  },
+  {
+   "name": "hd_antena",
+   "h": 1.4,
+   "d": 0.2,
+   "at": [
+    925,
+    150
+   ]
+  },
+  {
+   "name": "hd_parrilla_tambor",
+   "h": 0.95,
+   "d": 0.6,
+   "at": [
+    125,
+    440
+   ]
+  },
+  {
+   "name": "hd_silla",
+   "h": 0.85,
+   "d": 0.5,
+   "at": [
+    305,
+    440
+   ]
+  },
+  {
+   "name": "hd_cajones",
+   "h": 1.3,
+   "d": 0.4,
+   "at": [
+    470,
+    430
+   ]
+  },
+  {
+   "name": "hd_gomas",
+   "h": 1.0,
+   "d": 1.0,
+   "at": [
+    675,
+    440
+   ]
+  },
+  {
+   "name": "hd_chapas",
+   "h": 1.9,
+   "d": 0.4,
+   "at": [
+    905,
+    420
+   ]
+  }
+ ],
+ "uniforme": true
+}

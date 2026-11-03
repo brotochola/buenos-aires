@@ -1,7 +1,5 @@
 {
  "img": "fachada_01.png",
- "colors": 120,
- "grow": 4,
  "out": "limpio",
  "objs": [
   {

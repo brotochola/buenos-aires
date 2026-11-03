@@ -10,9 +10,9 @@
     for (const t of Arboles.TIPOS) { const v = Arboles.render(t).vista; if (x + v.w > 2048) { x = 0; y += rowH + 2; rowH = 0; }
       g.drawImage(v.canvas, x, y); ASSETS.frames["arbol_" + t] = { x, y, w: v.w, h: v.h, ox: Math.round(v.ox), oy: Math.round(v.oy) }; x += v.w + 2; rowH = Math.max(rowH, v.h); }
     // props HD (Gemini, 30 px/m): el visor los usa achicados a la escala del barrio; el exportador copia el original (f.hd)
-    if (typeof HD_ASSETS !== "undefined") { const hi = await loadImg(HD_PNG), e = HD_ASSETS.escala; x = 0; y += rowH + 2; rowH = 0;
+    if (typeof HD_ASSETS !== "undefined") { const hi = await loadImg(HD_PNG); x = 0; y += rowH + 2; rowH = 0;
       g.imageSmoothingQuality = "high";
-      for (const [n, h] of Object.entries(HD_ASSETS.frames)) { const w = Math.ceil(h.w * e), hh = Math.ceil(h.h * e); if (x + w > 2048) { x = 0; y += rowH + 2; rowH = 0; }
+      for (const [n, h] of Object.entries(HD_ASSETS.frames)) { const e = h.e || HD_ASSETS.escala, w = Math.ceil(h.w * e), hh = Math.ceil(h.h * e); if (x + w > 2048) { x = 0; y += rowH + 2; rowH = 0; }
         g.drawImage(hi, h.x, h.y, h.w, h.h, x, y, h.w * e, h.h * e);
         ASSETS.frames[n] = { x, y, w, h: hh, ox: Math.round(h.ox * e), oy: Math.round(h.oy * e), hd: { img: hi, ...h, e } }; x += w + 2; rowH = Math.max(rowH, hh); } }
     // piezas de fachada (Gemini): R3 las pega en las paredes al hornear las casas

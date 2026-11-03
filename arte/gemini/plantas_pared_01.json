@@ -1,0 +1,86 @@
+{
+ "img": "plantas_pared_01.png",
+ "bg": "cyan",
+ "objs": [
+  {
+   "name": "fd_hiedra",
+   "w": 2.0,
+   "at": [
+    141,
+    171
+   ]
+  },
+  {
+   "name": "fd_santarita",
+   "w": 2.5,
+   "at": [
+    402,
+    171
+   ]
+  },
+  {
+   "name": "fd_jazmin",
+   "w": 1.0,
+   "at": [
+    580,
+    171
+   ]
+  },
+  {
+   "name": "fd_mburucuya",
+   "w": 2.0,
+   "at": [
+    778,
+    171
+   ]
+  },
+  {
+   "name": "fd_potus",
+   "w": 0.6,
+   "at": [
+    956,
+    171
+   ]
+  },
+  {
+   "name": "fd_jardinera",
+   "w": 1.0,
+   "at": [
+    127,
+    461
+   ]
+  },
+  {
+   "name": "fd_helecho_colgante",
+   "w": 0.8,
+   "at": [
+    339,
+    447
+   ]
+  },
+  {
+   "name": "fd_grieta",
+   "w": 0.7,
+   "at": [
+    521,
+    461
+   ]
+  },
+  {
+   "name": "fd_estante",
+   "w": 1.0,
+   "at": [
+    703,
+    454
+   ]
+  },
+  {
+   "name": "fd_pasto_pared",
+   "w": 1.0,
+   "at": [
+    908,
+    476
+   ]
+  }
+ ]
+}

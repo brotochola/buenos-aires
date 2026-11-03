@@ -1,215 +1,180 @@
 #!/usr/bin/env python3
-"""Clean up Gemini sprite sheets into true pixel art at the game's density.
+"""Clean up Gemini sprite sheets into true pixel art, keeping Gemini's own pixel grid.
 
-Input: a sheet on a flat magenta background + a JSON spec listing the objects
-left to right with their real height in meters.  Output: one PNG per object,
-re-pixelized so that 1 art pixel = 1/30 m wide and 1/26 m tall (the density of
-the LPC characters and of the houses, which the game shows at scale 0.6).
+  python3 herramientas/pixelar.py arte/gemini/<sheet>.json [...]
 
-  python3 herramientas/pixelar.py arte/gemini/postes_01.json
-
-Spec example (arte/gemini/postes_01.json):
-  {"img": "postes_01.png", "objs": [
-     {"name": "u_led", "h": 9.0, "light": "auto"}, ...]}
+Input: arte/gemini/<sheet>.png (Gemini's original, 1376x768, flat magenta or cyan background) and a JSON spec:
+  {"img": "<sheet>.png", "bg": "magenta"|"cyan", "objs": [
+     {"name": "hd_led", "h": 9.0, "d": 0.3, "at": [x, y]},      # height and depth (m) seen in the oblique view
+     {"name": "hd_banco", "w": 1.9, "at": [x, y]},               # or the width (m)
+     {"name": "fd_ventana", "w": 1.2, "box": [x0, y0, x1, y1]}]} # explicit crop (e.g. without the wall around it)
+  "at" / "box" are in the coordinates of the 1024-px preview ("ref": 1024); they're scaled to the real image.
 
 Steps
-  1. chroma key: magenta-ish pixels (and magenta fringe) become transparent;
-  2. objects = connected blobs (dilated, so wires stay with their pole), sorted by x;
-  3. art pixel size of the source is estimated from the color-change spacing;
-  4. each object is resampled to its target height with a "mode" filter
-     (every target pixel takes the most common palette color of its footprint),
-     so edges stay hard and there's no blending;
-  5. palette: the sheet is reduced to N colors first, so noise disappears;
-  6. outline: any opaque pixel touching transparency that isn't already dark is
-     replaced by a darker, cooler version of itself (colored outline, never black);
-  7. magenta fringe left on the outline is recolored from its neighbors.
+  1. chroma key (magenta or cyan, plus the background-colored fringe);
+  2. Gemini's pixel size and phase: color changes repeat every P px (comb over the autocorrelation of the
+     edge profile; the smallest P whose score is close to the best one, so harmonics don't win);
+  3. each cell of that grid becomes ONE pixel: the median color of the cell's center (no blending across cells),
+     opaque if most of the cell is. That's the drawing at its own resolution: nothing is shrunk past its grid;
+  4. palette: the sheet is reduced to N colors (noise goes away); isolated pixels removed;
+     leftover background-colored pixels take their neighbors' color;
+  5. objects = blobs on the native grid, matched to the spec by position.
+Each object is saved at native resolution; its "k" says how much the game has to scale it so it measures what the
+spec says at 30 px/m (the density of the LPC characters and the houses): the frame is drawn at 0.6·k.
 """
 import json, sys, os
 import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-PXM_W, PXM_H = 30.0, 30.0 * 0.8660254   # art px per meter (width, height)
+PXM_W, PXM_H = 30.0, 30.0 * 0.8660254   # art px per meter at the target density (width, height)
 
 
-def magenta_mask(a):
+def key_mask(a, key="magenta"):
     r, g, b = a[..., 0].astype(int), a[..., 1].astype(int), a[..., 2].astype(int)
-    # pure-ish magenta, and blends of magenta with darker colors (fringe)
-    mag = (r > 140) & (b > 140) & (g < 110) & (np.abs(r - b) < 90)
-    # chroma test: strong magenta hue even when darker (outline blended with bg)
-    chroma = np.minimum(r, b) - g
-    fringe = (chroma > 70) & (np.abs(r - b) < 70) & (g < 120)
-    return mag, fringe
+    if key == "cyan":                        # cyan: same test with red <-> green swapped, tighter (blue flowers aren't cyan)
+        r, g = g, r
+        bg = (r > 170) & (b > 170) & (g < 90) & (np.abs(r - b) < 45)
+        fringe = (np.minimum(r, b) - g > 90) & (np.abs(r - b) < 40) & (g < 110)
+        return bg | fringe
+    bg = (r > 140) & (b > 140) & (g < 110) & (np.abs(r - b) < 90)
+    fringe = (np.minimum(r, b) - g > 70) & (np.abs(r - b) < 70) & (g < 120)
+    return bg | fringe
 
 
-def estimate_pixel(a, fg):
-    """Art pixel size of the source: spacing of color changes (autocorrelation)."""
+def bgish(c, key):
+    r, g, b = c[..., 0].astype(int), c[..., 1].astype(int), c[..., 2].astype(int)
+    if key == "cyan":
+        r, g = g, r
+    return (np.minimum(r, b) - g > 60) & (np.abs(r - b) < 70)
+
+
+def grid(a, fg):
+    """Pixel size P and phase (ox, oy) of the drawing's grid."""
     f = a[..., :3].astype(float)
-    best = []
-    for axis in (0, 1):
-        d = np.abs(np.diff(f, axis=1 - axis)).sum(-1)
-        m = fg[:, 1:] & fg[:, :-1] if axis == 0 else fg[1:, :] & fg[:-1, :]
-        d = (d * m)
-        prof = d.sum(axis=axis)            # change strength per column (axis 0) / row (axis 1)
-        prof = prof - prof.mean()
-        ac = np.correlate(prof, prof, mode="full")[len(prof) - 1:]
-        ac /= ac[0] + 1e-9
-        lags = np.arange(len(ac))
-        # first strong local max after lag 1.5
-        cand = [(ac[k], k) for k in range(2, 16) if ac[k] > ac[k - 1] and ac[k] >= ac[k + 1]]
-        if cand:
-            v, k = max(cand)
-            # sub-pixel refine with a parabola
-            y0, y1, y2 = ac[k - 1], ac[k], ac[k + 1]
-            den = (y0 - 2 * y1 + y2)
-            off = 0.5 * (y0 - y2) / den if den != 0 else 0
-            best.append(k + off)
-    return float(np.median(best)) if best else 4.0
+    res = []
+    for axis in (1, 0):                      # axis 1: changes along x (per column), axis 0: along y (per row)
+        d = np.abs(np.diff(f, axis=axis)).sum(-1)
+        m = (fg[:, 1:] & fg[:, :-1]) if axis == 1 else (fg[1:, :] & fg[:-1, :])
+        prof = (d * m).sum(axis=1 - axis)
+        p = prof - prof.mean()
+        ac = np.correlate(p, p, mode="full")[len(p) - 1:]
+        ac = ac / (ac[0] + 1e-9)
+        res.append((prof, ac))
+    Ps = np.arange(2.5, 12.0, 0.01)
 
-
-def build_palette(rgb, n):
-    img = Image.fromarray(rgb.reshape(1, -1, 3).astype(np.uint8))
-    q = img.quantize(colors=n, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    pal = np.array(q.getpalette()[: n * 3], dtype=float).reshape(-1, 3)
-    return pal
-
-
-def nearest(pal, px):
-    d = ((px[:, None, :] - pal[None, :, :]) ** 2).sum(-1)
-    return d.argmin(1)
-
-
-def to_hsv_dark(c):
-    """Outline color: darker and cooler version of c."""
-    r, g, b = c / 255.0
-    v = max(r, g, b)
-    # darken strongly, push hue toward blue/purple a bit
-    k = 0.32
-    out = np.array([r * k + 0.035, g * k + 0.02, b * k + 0.075])
-    return np.clip(out * 255, 0, 255)
-
-
-def lum(c):
-    return 0.299 * c[..., 0] + 0.587 * c[..., 1] + 0.114 * c[..., 2]
+    def comb(P):
+        s = 0
+        for prof, ac in res:
+            ks = np.arange(1, 7) * P
+            ks = ks[ks < len(ac) - 1]
+            s += np.interp(ks, np.arange(len(ac)), ac).mean()
+        return s
+    sc = np.array([comb(P) for P in Ps])
+    P = float(Ps[np.nonzero(sc >= sc.max() * 0.9)[0][0]])      # smallest period close to the best: the fundamental
+    loc = (Ps > P - .3) & (Ps < P + .3)
+    P = float(Ps[loc][sc[loc].argmax()])
+    ph = []
+    for prof, _ in res:                       # phase: where the edges line up (edge between pixel i-1 and i sits at i)
+        best_o, best_s = 0.0, -1
+        for o in np.arange(0, P, 0.1):
+            pos = np.arange(o, len(prof) - 1, P)
+            s = np.interp(pos - 1, np.arange(len(prof)), prof).sum()
+            if s > best_s:
+                best_s, best_o = s, float(o)
+        ph.append(best_o)
+    return P, ph[0], ph[1]
 
 
 def process(spec_path):
     spec = json.load(open(spec_path))
     base = os.path.dirname(spec_path)
+    key = spec.get("bg", "magenta")
     src = np.array(Image.open(os.path.join(base, spec["img"])).convert("RGBA"))
     H, W = src.shape[:2]
-    mag, fringe = magenta_mask(src)
-    bg = mag | fringe
-    fg = ~bg
-    fg = ndimage.binary_opening(fg, iterations=1)
-    px = estimate_pixel(src, fg)
-    print(f"{spec['img']}: {W}x{H}, art pixel ≈ {px:.2f} src px")
+    S = W / spec.get("ref", 1024)                               # spec coordinates -> real image
+    fg = ndimage.binary_opening(~key_mask(src, key), iterations=1)
+    P, ox, oy = spec.get("grid") or grid(src, fg)
+    nw, nh = int((W - ox) // P), int((H - oy) // P)
+    print(f"{spec['img']}: {W}x{H}, Gemini pixel = {P:.2f} px (phase {ox:.1f}, {oy:.1f}) -> {nw}x{nh} native")
 
-    # objects: blobs after a generous dilation (keeps wires attached), sorted left to right
-    grow = ndimage.binary_dilation(fg, iterations=int(spec.get("grow", px * 3)))
-    lab, n = ndimage.label(grow)
-    sl = ndimage.find_objects(lab)
+    # 3. one pixel per cell: median of the cell's center, opaque if most of the cell is
+    rgb = src[..., :3].astype(float)
+    out = np.zeros((nh, nw, 3)); alpha = np.zeros((nh, nw), bool)
+    for j in range(nh):
+        y0, y1 = oy + j * P, oy + (j + 1) * P
+        fy0, fy1 = int(round(y0)), max(int(round(y0)) + 1, int(round(y1)))
+        cy0 = int(round(y0 + P * .25)); cy1 = max(cy0 + 1, int(round(y1 - P * .25)))
+        for i in range(nw):
+            x0, x1 = ox + i * P, ox + (i + 1) * P
+            fx0, fx1 = int(round(x0)), max(int(round(x0)) + 1, int(round(x1)))
+            if fg[fy0:fy1, fx0:fx1].mean() < .5:
+                continue
+            cx0 = int(round(x0 + P * .25)); cx1 = max(cx0 + 1, int(round(x1 - P * .25)))
+            m = fg[cy0:cy1, cx0:cx1]
+            c = rgb[cy0:cy1, cx0:cx1][m] if m.any() else rgb[fy0:fy1, fx0:fx1][fg[fy0:fy1, fx0:fx1]]
+            out[j, i] = np.median(c, axis=0); alpha[j, i] = True
+
+    # 4. palette, isolated pixels, background-colored leftovers
+    ncol = spec.get("colors", 96)
+    q = Image.fromarray(out[alpha].reshape(1, -1, 3).astype(np.uint8)).quantize(colors=ncol, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    pal = np.array(q.getpalette()[: ncol * 3], float).reshape(-1, 3)
+    out[alpha] = pal[np.array(q).reshape(-1)]
+    nb = ndimage.convolve(alpha.astype(int), np.ones((3, 3)), mode="constant") - alpha
+    alpha &= ~(nb == 0)
+    bad = alpha & bgish(out, key)
+    for (yy, xx) in zip(*np.nonzero(bad)):
+        ys, xs = slice(max(0, yy - 1), yy + 2), slice(max(0, xx - 1), xx + 2)
+        ok = alpha[ys, xs] & ~bad[ys, xs]
+        if ok.any():
+            out[yy, xx] = out[ys, xs][ok].mean(0)
+        else:
+            alpha[yy, xx] = False
+
+    # 5. objects
+    g = spec.get("grow", 1)
+    lab, n = ndimage.label(ndimage.binary_dilation(alpha, iterations=g) if g > 0 else alpha)
     blobs = []
-    for i, s in enumerate(sl):
-        m = (lab[s] == i + 1) & fg[s]
-        if m.sum() < (px * 6) ** 2:
+    for k, s in enumerate(ndimage.find_objects(lab)):
+        m = (lab[s] == k + 1) & alpha[s]
+        if m.sum() < 12:
             continue
         ys, xs = np.nonzero(m)
-        y0, y1, x0, x1 = s[0].start + ys.min(), s[0].start + ys.max() + 1, s[1].start + xs.min(), s[1].start + xs.max() + 1
-        blobs.append((x0, x1, y0, y1, i + 1))
-    blobs.sort()
-    objs = spec["objs"]
-    if all("at" in o for o in objs):        # match by approximate center given in the spec
-        cen = [((b[0] + b[1]) / 2, (b[2] + b[3]) / 2) for b in blobs]
-        pick = []
-        for o in objs:
-            k = min(range(len(blobs)), key=lambda k: (cen[k][0] - o["at"][0]) ** 2 + (cen[k][1] - o["at"][1]) ** 2)
-            pick.append(blobs[k])
-        blobs = pick
-    if len(blobs) != len(objs):
-        print(f"  ! found {len(blobs)} blobs, spec lists {len(objs)}: " + ", ".join(f"[{b[0]}-{b[1]}]" for b in blobs))
-    # palette from all opaque pixels of the sheet
-    pal = build_palette(src[..., :3][fg], spec.get("colors", 48))
-
+        blobs.append((s[1].start + xs.min(), s[1].start + xs.max() + 1, s[0].start + ys.min(), s[0].start + ys.max() + 1, k + 1))
     out_dir = os.path.join(base, spec.get("out", "limpio"))
     os.makedirs(out_dir, exist_ok=True)
-    res = {}
-    for (x0, x1, y0, y1, li), o in zip(blobs, objs):
-        if "box" in o:                       # explicit crop (e.g. a window without the wall drawn around it)
-            x0, y0, x1, y1 = o["box"]
-            m = fg[y0:y1, x0:x1].copy()
+    meta = {}
+    kref = None
+    if "persona" in spec:                     # reference person (1.7 m = 44 px at the target density) drawn in the sheet
+        ax, ay = (spec["persona"][0] * S - ox) / P, (spec["persona"][1] * S - oy) / P
+        b = min(blobs, key=lambda b: ((b[0] + b[1]) / 2 - ax) ** 2 + ((b[2] + b[3]) / 2 - ay) ** 2)
+        kref = 1.7 * PXM_H / (b[3] - b[2])
+        print(f"  reference person {b[3] - b[2]} px tall -> k = {kref:.2f} for the whole sheet")
+    for o in spec["objs"]:
+        if "box" in o:
+            x0, y0, x1, y1 = [int(round((v * S - (ox if k % 2 == 0 else oy)) / P)) for k, v in enumerate(o["box"])]
+            m = alpha[y0:y1, x0:x1]
         else:
-            m = (lab[y0:y1, x0:x1] == li) & fg[y0:y1, x0:x1]
-        crop = src[y0:y1, x0:x1, :3].astype(float)
-        ch, cw = crop.shape[:2]
-        # target size in art px: by width ("w", m) or by height ("h", m, plus "d" = depth, m, seen from above)
-        if "w" in o:
-            sy = cw / (o["w"] * PXM_W)
-            th = max(4, int(round(ch / sy)))
+            ax, ay = (o["at"][0] * S - ox) / P, (o["at"][1] * S - oy) / P
+            x0, x1, y0, y1, li = min(blobs, key=lambda b: ((b[0] + b[1]) / 2 - ax) ** 2 + ((b[2] + b[3]) / 2 - ay) ** 2)
+            m = (lab[y0:y1, x0:x1] == li) & alpha[y0:y1, x0:x1]
+        rgba = np.zeros(m.shape + (4,), np.uint8)
+        rgba[..., :3] = out[y0:y1, x0:x1].astype(np.uint8); rgba[..., 3] = m * 255
+        im = Image.fromarray(rgba); bb = im.getbbox(); im = im.crop(bb) if bb else im
+        im.save(os.path.join(out_dir, o["name"] + ".png"))
+        if kref:                              # the sheet has a reference person: every object keeps Gemini's relative size
+            want = kref
         else:
-            th = max(4, int(round(o["h"] * PXM_H + o.get("d", 0) * PXM_W * 0.5)))
-            sy = ch / th                                       # src px per target px
-        sx = sy * o.get("sx", 1.0)                             # the source already has square art pixels
-        tw = max(1, int(round(cw / sx)))
-        idx = np.full((th, tw), -1, int)
-        qi = nearest(pal, crop.reshape(-1, 3)).reshape(ch, cw)
-        for j in range(th):
-            a0 = min(ch - 1, int(round(j * sy))); a1 = min(ch, max(a0 + 1, int(round((j + 1) * sy))))
-            for i in range(tw):
-                b0 = min(cw - 1, int(round(i * sx))); b1 = min(cw, max(b0 + 1, int(round((i + 1) * sx))))
-                mm = m[a0:a1, b0:b1]
-                if mm.mean() < o.get("cover", 0.42):
-                    continue
-                # weight the center of the footprint more (avoids picking the outline everywhere)
-                cy, cx = (a0 + a1 - 1) / 2, (b0 + b1 - 1) / 2
-                yy, xx = np.mgrid[a0:a1, b0:b1]
-                w = np.exp(-(((yy - cy) / max(1, (a1 - a0) * .45)) ** 2 + ((xx - cx) / max(1, (b1 - b0) * .45)) ** 2))
-                vals = qi[a0:a1, b0:b1][mm]
-                ww = w[mm]
-                cnt = np.bincount(vals, weights=ww, minlength=len(pal))
-                idx[j, i] = cnt.argmax()
-        rgba = np.zeros((th, tw, 4), np.uint8)
-        op = idx >= 0
-        rgba[op, :3] = pal[idx[op]].astype(np.uint8)
-        rgba[op, 3] = 255
-        # remove isolated single pixels
-        nb = ndimage.convolve(op.astype(int), np.ones((3, 3)), mode="constant") - op
-        lone = op & (nb == 0)
-        rgba[lone, 3] = 0
-        op = rgba[..., 3] > 0
-        # colored outline on the silhouette
-        if o.get("outline", True):
-            edge = op & ~ndimage.binary_erosion(op, structure=np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]), border_value=0)
-            L = lum(rgba[..., :3].astype(float))
-            for (yy, xx) in zip(*np.nonzero(edge)):
-                c = rgba[yy, xx, :3].astype(float)
-                if L[yy, xx] > 70:
-                    rgba[yy, xx, :3] = to_hsv_dark(c).astype(np.uint8)
-        # leftover magenta-looking pixels: take the mean of opaque non-magenta neighbors
-        r_, g_, b_ = rgba[..., 0].astype(int), rgba[..., 1].astype(int), rgba[..., 2].astype(int)
-        bad = op & (np.minimum(r_, b_) - g_ > 60) & (np.abs(r_ - b_) < 70)
-        if o.get("keepMagenta"):
-            bad[:] = False
-        for (yy, xx) in zip(*np.nonzero(bad)):
-            ys, xs = slice(max(0, yy - 1), yy + 2), slice(max(0, xx - 1), xx + 2)
-            nbm = op[ys, xs] & ~bad[ys, xs]
-            if nbm.any():
-                rgba[yy, xx, :3] = rgba[ys, xs, :3][nbm].mean(0).astype(np.uint8)
-            else:
-                rgba[yy, xx, 3] = 0
-        im = Image.fromarray(rgba)
-        bb = im.getbbox()
-        if bb:
-            im = im.crop(bb)
-        fn = os.path.join(out_dir, o["name"] + ".png")
-        im.save(fn)
-        # anchor: bottom-center of the base (spec may give "ax" as a fraction of width)
-        ax = o.get("ax")
-        res[o["name"]] = {"w": im.width, "h": im.height, "ox": int(round((ax if ax is not None else .5) * im.width)), "oy": im.height - 1,
-                          "h_m": round(im.height / PXM_H, 2), **({k: o[k] for k in ("light", "kind") if k in o})}
-        print(f"  {o['name']:22s} {cw}x{ch} src -> {im.width}x{im.height} art px")
-    json.dump(res, open(os.path.join(out_dir, os.path.basename(spec_path)), "w"), indent=1)
-    return res
+            want = o["w"] * PXM_W / im.width if "w" in o else (o["h"] * PXM_H + o.get("d", 0) * PXM_W * .5) / im.height
+        meta[o["name"]] = {"w": im.width, "h": im.height, "k": round(want, 4), "d": o.get("d", 0.3)}
+        print(f"  {o['name']:22s} {im.width}x{im.height} native, k = {want:.2f}")
+    if spec.get("uniforme"):                  # same pixel density for the whole sheet: the median k (Gemini drew them to scale)
+        km = float(np.median([v["k"] for v in meta.values()]))
+        for v in meta.values():
+            v["k"] = round(km, 4)
+        print(f"  uniform k = {km:.2f}")
+    json.dump(meta, open(os.path.join(out_dir, os.path.basename(spec_path)), "w"), indent=1)
+    return meta
 
 
 if __name__ == "__main__":

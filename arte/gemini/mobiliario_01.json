@@ -1,11 +1,86 @@
-{"img": "mobiliario_01.png", "colors": 120, "grow": 4, "objs": [
- {"name": "hd_contenedor_a", "h": 1.65, "d": 1.2, "at": [140,150]},
- {"name": "hd_contenedor_b", "h": 1.65, "d": 1.2, "at": [140,410]},
- {"name": "hd_campana_a", "h": 1.7, "d": 1.3, "at": [355,160]},
- {"name": "hd_campana_b", "h": 1.7, "d": 1.3, "at": [330,420]},
- {"name": "hd_cesto_a", "h": 1.1, "d": 0.4, "at": [520,190]},
- {"name": "hd_cesto_b", "h": 1.1, "d": 0.4, "at": [485,420]},
- {"name": "hd_kiosco", "h": 2.6, "d": 1.6, "at": [715,190]},
- {"name": "hd_parada", "h": 3.0, "d": 0.1, "at": [930,160]},
- {"name": "hd_banco", "w": 1.9, "at": [870,410]}
-]}
+{
+ "img": "mobiliario_01.png",
+ "objs": [
+  {
+   "name": "hd_contenedor_a",
+   "h": 1.65,
+   "d": 1.2,
+   "at": [
+    140,
+    150
+   ]
+  },
+  {
+   "name": "hd_contenedor_b",
+   "h": 1.65,
+   "d": 1.2,
+   "at": [
+    140,
+    410
+   ]
+  },
+  {
+   "name": "hd_campana_a",
+   "h": 1.7,
+   "d": 1.3,
+   "at": [
+    355,
+    160
+   ]
+  },
+  {
+   "name": "hd_campana_b",
+   "h": 1.7,
+   "d": 1.3,
+   "at": [
+    330,
+    420
+   ]
+  },
+  {
+   "name": "hd_cesto_a",
+   "h": 1.1,
+   "d": 0.4,
+   "at": [
+    520,
+    190
+   ]
+  },
+  {
+   "name": "hd_cesto_b",
+   "h": 1.1,
+   "d": 0.4,
+   "at": [
+    485,
+    420
+   ]
+  },
+  {
+   "name": "hd_kiosco",
+   "h": 2.6,
+   "d": 1.6,
+   "at": [
+    715,
+    190
+   ]
+  },
+  {
+   "name": "hd_parada",
+   "h": 3.0,
+   "d": 0.1,
+   "at": [
+    930,
+    160
+   ]
+  },
+  {
+   "name": "hd_banco",
+   "w": 1.9,
+   "at": [
+    870,
+    410
+   ]
+  }
+ ],
+ "uniforme": true
+}
