@@ -88,5 +88,23 @@ def policia_ba(src="policia", out="policia"):
     print("img/autos/" + out)
 
 
+def colectivos_ba():
+    """Colectivos con los colores de las líneas de Buenos Aires: la carrocería blanca toma el color de la línea (con su
+    sombreado) y la pollera, el segundo color. Los vidrios, las ruedas y el equipo del techo quedan."""
+    org = os.path.join(ROOT, "arte/autos_originales")
+    for hoja, cuerpo, pollera in [("colectivo_amarillo", (246, 200, 46), (36, 132, 70)), ("colectivo_azul", (236, 226, 196), (196, 42, 40))]:
+        a = np.array(Image.open(os.path.join(org, hoja + ".png")).convert("RGBA")).astype(float)
+        H, S, V = hsv(a); op = a[..., 3] > 0
+        edge = op & ~ndimage.binary_erosion(op, iterations=1)
+        blanco = op & ~edge & (S < .16) & (V > .62)
+        pol = op & ~edge & (S > .35) & (V > .2)                               # la pollera de color del paquete (naranja o azul)
+        L = V
+        for c in range(3):
+            a[..., c] = np.where(blanco, np.clip(cuerpo[c] * (.55 + .5 * L), 0, 255), a[..., c])
+            a[..., c] = np.where(pol, np.clip(pollera[c] * (.45 + .75 * L), 0, 255), a[..., c])
+        Image.fromarray(a.astype(np.uint8)).save(os.path.join(ROOT, "img/autos", hoja + ".png"))
+        print("img/autos/" + hoja)
+
+
 if __name__ == "__main__":
-    {"taxi_ba": taxi_ba, "policia_ba": policia_ba}[sys.argv[1]]()
+    {"taxi_ba": taxi_ba, "policia_ba": policia_ba, "colectivos_ba": colectivos_ba}[sys.argv[1]]()
