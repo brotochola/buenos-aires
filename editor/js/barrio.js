@@ -394,7 +394,9 @@ const Barrio = (() => {
       const cands = []; for (const a of [1, -1]) for (const b of [1, -1]) cands.push([p[0] + s.dir[0] * a * (o.hw + o.sw * .5) + s.n[0] * b * (s.hw + s.sw * .5), p[1] + s.dir[1] * a * (o.hw + o.sw * .5) + s.n[1] * b * (s.hw + s.sw * .5)]);
       const ok = cands.filter(q => { const c = W.classify(q[0], q[1]); return c && c.k === "walk"; });
       if (ok.length) put("cartel", ...ok[0]);
-      if ((s.type === "ave" || o.type === "ave" || (s.mat === "asf" && o.mat === "asf" && s.w > .45)) && ok.length > 1) { put("u_semaforo", ...ok[1]); if (ok[2]) put("u_semaforo", ...ok[2]); }
+      // semáforo: el cruce queda semaforizado (los autos lo respetan en el juego) y cada uno muestra la luz de una de las dos calles
+      if ((s.type === "ave" || o.type === "ave" || (s.mat === "asf" && o.mat === "asf" && s.w > .45)) && ok.length > 1) { const e1 = put("u_semaforo", ...ok[1]); if (e1) { it.sem = true; e1.cruce = it; e1.eje = 0; }
+        if (ok[2]) { const e2 = put("u_semaforo", ...ok[2]); if (e2) { it.sem = true; e2.cruce = it; e2.eje = 1; } } }
       if (s.mat !== "tierra" && r() < .25 && ok[3]) put("u_campana", ...ok[3]);
       const asf = s.mat === "asf" && o.mat === "asf", ave = s.type === "ave" || o.type === "ave";
       if (F.c_buzon && asf && rx() < .08 && ok.length > 2) { const q = ok[2]; put("c_buzon", q[0] + o.dir[0] * 1.6, q[1] + o.dir[1] * 1.6); }
@@ -410,6 +412,13 @@ const Barrio = (() => {
         if (W.classify(k[0], k[1])?.k === "walk" && put("u_kiosco", k[0], k[1], { flip: rx() < .5 })) break; } }
     }
     // ---- autos (estacionados y circulando) y contenedores
+    // dónde no se estaciona: las esquinas de cada calle (posición del cruce y cuánto despejar), paradas de colectivo e hidrantes
+    const _esq = new Map();
+    for (const it of W.inters) { if (it.s.type === "pasillo" || it.o.type === "pasillo") continue;
+      for (const [a, b] of [[it.s, it.o], [it.o, it.s]]) { if (!_esq.has(a)) _esq.set(a, []); _esq.get(a).push([(it.p[0] - a.a[0]) * a.dir[0] + (it.p[1] - a.a[1]) * a.dir[1], b.hw + Math.max(0, b.sw) + 5 + 2.3]); } }
+    const esquinas = (s) => _esq.get(s) || [];
+    const paradas = props.filter(e => e.f.startsWith("u_parada")), hidrantes = props.filter(e => e.f.startsWith("c_hidrante"));
+    const cerca = (L, p, d) => L.some(e => (e.x - p[0]) ** 2 + (e.y - p[1]) ** 2 < d * d);
     for (const s of W.segs) {
       if (s.type === "pasillo") continue;
       // cuántos autos entran de ancho (2,45 m cada uno, con el lugar para pasar): por la calle tienen que poder pasar dos, y sólo se
@@ -417,7 +426,8 @@ const Barrio = (() => {
       // cada mano; en la de tierra, sin las zanjas
       const lanes = [], park = parkOff(s), CAR = 2.45, conMed = s.type === "ave" && s.med > .5;
       const ancho = conMed ? s.hw - s.med - .15 : 2 * (s.mat === "tierra" ? s.hw - .9 : s.hw), nCar = Math.floor(ancho / CAR + 1e-6);
-      const lados = s.type === "pasaje" ? [] : conMed ? (nCar >= 3 ? [1, -1] : []) : nCar >= 4 ? [1, -1] : nCar >= 3 ? [s.id % 2 ? 1 : -1] : [];
+      // y la ley (CABA): en las avenidas de doble mano no se estaciona (de 7 a 21, casi todo el día del juego)
+      const lados = s.type === "pasaje" || s.type === "ave" ? [] : nCar >= 4 ? [1, -1] : nCar >= 3 ? [s.id % 2 ? 1 : -1] : [];
       for (const side of lados) lanes.push({ off: side * park, hd: r() < .5 ? 0 : Math.PI, p: (s.mat === "tierra" ? .06 : s.type === "ave" ? .14 : .13) * C.estacionados });
       if (s.type !== "pasaje" && (conMed ? nCar >= 1 : nCar >= 2)) { const lane = laneOff(s); lanes.push({ off: -lane, hd: 0, p: .03 * C.transito, moving: true }); lanes.push({ off: lane, hd: Math.PI, p: .03 * C.transito, moving: true }); }
       const base = Math.atan2(s.dir[1], s.dir[0]);
@@ -425,6 +435,9 @@ const Barrio = (() => {
         if (r() > ln.p) { t += 3; continue; }
         const hd = base + ln.hd, p = at(s, t, ln.off), c = W.classify(p[0], p[1]);
         if (!c || c.k !== "road" || c.s !== s || s.cross.some(x => Math.abs(t - x) < 4)) { t += 2; continue; }
+        // estacionado: no en la esquina (hasta 5 m después de la vereda de la calle que cruza), no en la parada del colectivo ni
+        // junto a un hidrante (Ley 24.449, art. 49; Código de Tránsito de CABA)
+        if (!ln.moving && (esquinas(s).some(([tc, cl]) => Math.abs(t - tc) < cl) || cerca(paradas, p, 10) || cerca(hidrantes, p, 3))) { t += 2; continue; }
         if (!ln.moving && s.mat !== "tierra" && s.w > .3 && r() < .08) { put("u_contenedor", ...p, { flip: r() < .5 }); t += 4; continue; }
         const len = 4.6, ok = [-.45, -.2, 0, .2, .45].every(k => !occ.has(Math.floor((p[0] + Math.cos(hd) * len * k) / OC) * 100000 + Math.floor((p[1] + Math.sin(hd) * len * k) / OC)));
         if (ok) { [-.45, -.2, 0, .2, .45].forEach(k => claim(p[0] + Math.cos(hd) * len * k, p[1] + Math.sin(hd) * len * k, 1.0));

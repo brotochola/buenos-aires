@@ -113,12 +113,39 @@ const Exportar = (() => {
         arbolTipos[t] = { escala: E, alto: r1(R.h * E), piezas: R.piezas.map(p => [(p.i === 0 ? t : base(t)) + "_" + p.i, r1(p.dx * E), r1(p.dy * E), r2(p.ax), r2(p.ay), p.z, p.sway ? 1 : 0]) }; }
       archivos.push(["img/arboles.png", await png(cv)], ["img/arboles.json", json(hoja(frames, "arboles.png", cv))]); }
     const arboles = B.arboles.map(a => { const [x, y] = PW(a.x, a.y); return { t: a.t, x: r1(x), y: r1(y), fl: a.flip ? 1 : 0, r: r1(a.cr * 13.5) }; });
+    // ---------- 3b. tránsito (Ley 24.449 y Código de Tránsito de CABA), para que los autos del juego respeten la ley:
+    // - cruces: los de calles por donde andan autos (no pasajes ni pasillos), con o sin semáforo, el rumbo de pantalla de la
+    //   primera calle (para saber por cuál viene cada auto) y el desfasaje del ciclo del semáforo;
+    // - transito.bin: grilla de 1 m (Uint16): velocidad máxima (bits 0-3: 1 = 20 km/h tierra y pasajes, 2 = 30 llegando a un cruce
+    //   sin semáforo, 3 = 40 calles, 4 = 60 avenidas), zona (bits 4-5: 1 = antes de la senda, donde se para; 2 = el cruce y la
+    //   senda, donde no) y el cruce (bits 6-15: id + 1).
+    const cruces = [], scrDir = (d) => { const x = d[0] + K * d[1], y = -SYN * d[1], l = Math.hypot(x, y) || 1; return [r2(x / l), r2(y / l)]; };
+    const anda = (q) => q.type === "ave" || q.type === "calle";
+    for (const it of W.inters) { it._cid = -1; if (!anda(it.s) || !anda(it.o) || cruces.length >= 1022 || !W.dentro(it.p[0], it.p[1])) continue;
+      if (Math.abs(it.s.dir[0] * it.o.dir[0] + it.s.dir[1] * it.o.dir[1]) > .85) continue;     // casi paralelas: no es un cruce
+      const [x, y] = PW(it.p[0], it.p[1]), h = Math.abs(Math.imul(Math.round(it.p[0] * 10), 73856093) ^ Math.imul(Math.round(it.p[1] * 10), 19349663));
+      it._cid = cruces.length; cruces.push([r1(x), r1(y), it.sem ? 1 : 0, ...scrDir(it.s.dir), h % 40]); }
+    const TW = Math.ceil(MW), TH = Math.ceil(MH), transito = new Uint16Array(TW * TH), clT = { k: 0, s: null, d: 0, t: 0, ds: 0 };
+    for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) { W.classifyInto(i + .5, j + .5, clT); if (clT.k !== 1) continue; const q = clT.s;
+      transito[j * TW + i] = q.type === "pasillo" ? 0 : q.mat === "tierra" || q.type === "pasaje" ? 1 : q.type === "ave" ? 4 : 3; }
+    for (const it of W.inters) { if (it._cid < 0) continue; const { s, o, p } = it, R = Math.max(s.hw, o.hw) + Math.max(s.sw, o.sw, 0) + 10;
+      for (let j = Math.max(0, Math.floor(p[1] - R)); j < Math.min(TH, Math.ceil(p[1] + R)); j++) for (let i = Math.max(0, Math.floor(p[0] - R)); i < Math.min(TW, Math.ceil(p[0] + R)); i++) {
+        const x = i + .5 - p[0], y = j + .5 - p[1], ds = Math.abs(x * s.n[0] + y * s.n[1]), dO = Math.abs(x * o.n[0] + y * o.n[1]), k = j * TW + i, v = transito[k];
+        let zona = 0, lim = v & 15;
+        if (ds < s.hw && dO < o.hw + Math.max(0, o.sw) + .6 || dO < o.hw && ds < s.hw + Math.max(0, s.sw) + .6) zona = 2;           // el cruce y las sendas
+        else if (ds < s.hw && dO < o.hw + Math.max(0, o.sw) + 7.6 || dO < o.hw && ds < s.hw + Math.max(0, s.sw) + 7.6) zona = 1;   // los 7 m antes de la senda
+        if (!zona || !lim) continue;
+        const ya = (v >> 4) & 3; if (ya === 2 && zona === 1) continue;         // el cruce de al lado manda
+        if (zona === 1 && !it.sem && lim > 2) lim = 2;                         // llegando a una esquina sin semáforo: 30 km/h
+        transito[k] = lim | zona << 4 | (it._cid + 1) << 6; } }
+    archivos.push(["transito.bin", new Uint8Array(transito.buffer)]);
     // ---------- 4. props: sólo los cuadros usados del atlas del editor
     // los que miran a algún lado: frente o atrás (los de Gemini que la tienen) y espejo, vistos desde la cámara del juego
+    // (los semáforos llevan su cruce y cuál de las dos calles muestran)
     const props = B.props.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip, f = e.f;
       if (e.face) { const s0 = PW(e.x, e.y), s1 = PW(e.x + e.face[0], e.y + e.face[1]); [f, fl] = Barrio.vista(F, e.f, s1[0] - s0[0], s1[1] - s0[1]); }
-      return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null }; });
-    const anclas = {}, escalas = {};
+      return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null, ...(e.cruce && e.cruce._cid >= 0 ? { cr: e.cruce._cid, ej: e.eje } : {}) }; });
+    const anclas = {}, escalas = {}; let semAlto = 0;
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
       // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
       const S = (n) => F[n].hd || F[n];
@@ -139,7 +166,8 @@ const Exportar = (() => {
       for (const n of ns) { const { cv: c, t, f } = cuadro[n], [px, py] = pos[n]; g.drawImage(c, px, py); frames[n] = fr(px, py, c.width, c.height);
         const oy = crDe[n] ? Math.min(f.oy, f.h - 1 - crDe[n] * SYN * SF / (f.e || 1)) : f.oy;
         anclas[n] = [r2((f.ox + t) / c.width), r2((oy + t) / c.height)];
-        if (f.e) escalas[n] = f.e; }
+        if (f.e) escalas[n] = f.e;
+        if (n === "u_semaforo") semAlto = r1(c.height * anclas[n][1] * (f.e || 1)); }
       archivos.push(["img/props.png", await png(cv)], ["img/props.json", json(hoja(frames, "props.png", cv))]); }
     // ---------- 5. autos y cables
     const scrRot = (hd) => Math.atan2(-SYN * Math.sin(hd), Math.cos(hd) + K * Math.sin(hd));
@@ -230,8 +258,9 @@ const Exportar = (() => {
       MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
-      ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}) };
-    archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables, lineas })]);
+      ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}),
+      transito: { W: TW, H: TH, n: cruces.length, semAlto, nSem: props.filter(p => p.f === "u_semaforo" && p.cr >= 0).length } };
+    archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables, lineas, cruces })]);
     progreso("zip", .98); await espera();
     // el barrio inventado va a barrio/; el real (Carabobo al 1500 y la villa 1-11-14) a carabobo/: el juego tiene los dos
     const carpeta = W.real ? "carabobo/" : "barrio/";

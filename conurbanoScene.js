@@ -52,6 +52,10 @@ const LPC_EXCLUDE = ['spellcast', 'thrust', 'slash', 'shoot', 'jump', 'sit', 'em
 
 // ---------- datos compartidos: piso (para el shader) y estado del juego
 export class PisoData extends SharedResource {}
+// tránsito (transito.bin y los cruces de mundo.json): velocidad máxima, zonas antes de cada esquina y semáforos
+export class Transito extends SharedResource {}
+// las luces de cada semáforo: índices de sus decoraciones (+1; 0 = todavía no), las pone el semáforo y las prende la escena
+export class Semaforos extends SharedResource {}
 export class Estado extends SharedResource {}
 
 // ---------- componentes
@@ -65,7 +69,9 @@ export class AutoComp extends Component {
     ha: Float32Array, hb: Float32Array,   // medio largo y medio ancho de la huella en el piso, en px del dibujo (18 px/m, piso aplastado a AUTO_S)
     faro: Int32Array,                     // la entidad Faro que lleva adelante (-1: sin luces)
     // estado de la IA: en componentes (no en campos del objeto), porque una entidad puede pasar de un worker de lógica a otro
-    sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array };
+    sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array,
+    pf: Float32Array,      // qué tan cerca de la máxima maneja (0,8 a 0,97: nadie se pasa)
+    espera: Float32Array };  // segundos esperando que pase el de la derecha (a los 4 s sigue: nadie se queda trabado)
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -137,7 +143,13 @@ export class Prop extends GameObject {
       L.lightIntensity = 0; L.active = 0;
       // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva);
       // de atrás (u_semaforo_atras) no se ven las luces
-      if (c.f === 'u_semaforo') { const rojo = rng() < .5; this.addDecoration('_lightGradient', 0, -top * (rojo ? .87 : .7), .35, .35, 0, { tint: rojo ? 0xff3b30 : 0x36d96b, alpha: .85, anchorX: .5, anchorY: .5, layer: 'brillos' }); }
+      // con datos de tránsito: rojo, amarillo y verde (y una tapa para la roja, que en el dibujo está prendida), pegados al semáforo
+      // y apagados; la escena los prende según el ciclo de su cruce. Si no, una luz fija
+      if (c.f === 'u_semaforo' && c.sk >= 0 && TR.n) { const dx = (c.fl ? -1 : 1) * .9;
+        [[.862, 0xff3b30], [.773, 0xffb020], [.684, 0x36d96b], [.862, 0x241e1e]].forEach(([k, tint], q) => {
+          const d = this.addDecoration('_whiteCircle', dx, -top * k, q === 3 ? .56 : .42, q === 3 ? .56 : .42, q === 3 ? 2 : 3, { tint, alpha: 0, anchorX: .5, anchorY: .5 });
+          Semaforos.ids[c.sk * 4 + q] = d >= 0 ? d + 1 : 0; }); }
+      else if (c.f === 'u_semaforo' && !TR.n) { const rojo = rng() < .5; this.addDecoration('_lightGradient', 0, -top * (rojo ? .87 : .7), .35, .35, 0, { tint: rojo ? 0xff3b30 : 0x36d96b, alpha: .85, anchorX: .5, anchorY: .5, layer: 'brillos' }); }
     }
   }
 }
@@ -217,7 +229,18 @@ export class Persona extends GameObject {
 }
 
 // ---------- autos (Box2D, patrón de carScene; el cuadro del sprite sale del rumbo de pantalla)
-const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
+const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 }, _h2 = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
+// ---------- tránsito: lo que dice la ley (Ley Nacional de Tránsito 24.449, art. 41 y 51; Código de Tránsito y Transporte de CABA)
+// velocidad máxima por código de la grilla (km/h): 1 tierra y pasajes 20, 2 llegando a una esquina sin semáforo 30, 3 calles 40,
+// 4 avenidas 60. Semáforos: ciclo de 40 s, cada calle 17 s verde, 3 s amarillo y 20 s rojo, desfasado en cada cruce. El reloj es
+// Date.now(), igual en todos los hilos, así las luces que se ven y los autos que frenan van juntos
+const TR = META.transito || { W: 0, H: 0, n: 0, semAlto: 0 }, LIM = [40, 20, 30, 40, 60], CICLO = 40;
+function faseSemaforo(cid, eje) { const t = ((Date.now() / 1000 + Transito.cruces[cid * 6 + 5]) % CICLO + CICLO) % CICLO;
+  return eje === 0 ? (t < 17 ? 0 : t < 20 ? 1 : 2) : (t < 20 ? 2 : t < 37 ? 0 : 1); }   // 0 verde, 1 amarillo, 2 rojo
+function celdaTransito(sx, sy) { if (!TR.W) return 0; const ym = META.MH - sy / (META.SYN * META.SF), xm = sx / META.SF - META.K * ym;
+  if (xm < 0 || ym < 0 || xm >= TR.W || ym >= TR.H) return 0; return Transito.grid[(ym | 0) * TR.W + (xm | 0)]; }
+// metros por px de pantalla en el rumbo (fx, fy): la proyección no es igual en x que en y
+function metrosPorPx(fx, fy) { const dx = fx / META.SF + META.K * fy / (META.SYN * META.SF), dy = -fy / (META.SYN * META.SF); return Math.sqrt(dx * dx + dy * dy); }
 const _vista = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
 const _keys = new Map(), _keys0 = [];
 function angleKeys(sheet) {
@@ -317,7 +340,7 @@ export class Chatarra extends Auto {}
 const _probe = [[0, 0], [0, 8], [0, -8], [16, 0], [-16, 0], [0, 16], [0, -16], [24, 0], [-24, 0], [24, 12], [24, -12], [-24, 12], [-24, -12], [0, 24], [0, -24], [48, 0], [-48, 0], [36, 24], [-36, 24], [36, -24], [-36, -24]];
 export class AutoIA extends Auto {
   onSpawned(c = {}) { super.onSpawned(c); const A = this.autoComp, rot = c.rot || 0;
-    A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; }
+    A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; A.pf = .8 + rng() * .17; A.espera = 0; }
   // el carril bajo el auto; si el auto se salió (cortó una esquina, se subió a la vereda), el carril más cercano de alrededor
   // y un empujón hacia él, así vuelve a la calle en vez de seguir paralelo por la vereda
   _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v);
@@ -331,7 +354,7 @@ export class AutoIA extends Auto {
     const l2 = _v.x * _v.x + _v.y * _v.y; if (l2 < .01) return;
     const inv = 1 / Math.sqrt(l2), nx = _v.x * inv, ny = _v.y * inv, fx = this.forwardX, fy = this.forwardY;
     const cross = fx * ny - fy * nx, align = fx * nx + fy * ny;
-    let turn = Math.max(-1, Math.min(1, cross * 2)) * .8, fwd = align > .15 ? .5 : RigidBody.speed[i] < 30 ? .25 : 0;   // desalineado: sólo avanza despacito para poder girar
+    let turn = Math.max(-1, Math.min(1, cross * 2)) * .8, fwd = align > .15 ? 1 : RigidBody.speed[i] < 30 ? .25 : 0;   // desalineado: sólo avanza despacito para poder girar
     // ¿alguien adelante en el carril?
     // trabado más de 5 s (dos autos que se frenan mutuamente en un cruce): 3 s sin mirar a los demás
     const A = AutoComp;
@@ -341,15 +364,47 @@ export class AutoIA extends Auto {
     if (A.parado[i] > 12 && !this.isOnScreen) { A.parado[i] = 0; this.x = A.sx[i]; this.y = A.sy[i]; this.rotation = A.sr[i];
       RigidBody.vx[i] = 0; RigidBody.vy[i] = 0; A.lx[i] = Math.cos(A.sr[i]); A.ly[i] = Math.sin(A.sr[i]); return; }
     if (A.libre[i] > 0) A.libre[i] -= dts;
+    // ---- la ley: lo que dice la grilla de tránsito un poco adelante del auto
+    const ade = A.hl[i] + 10, cod = celdaTransito(this.x + fx * ade, this.y + fy * ade), zona = (cod >> 4) & 3, cid = (cod >> 6) - 1;
+    const kmh = RigidBody.speed[i] * metrosPorPx(fx, fy) * 3.6, maxKmh = LIM[cod & 15] * A.pf[i];
+    let alto = false;
+    if (zona === 1 && cid >= 0 && cid < TR.n) {
+      const C = Transito.cruces, o = cid * 6, eje = Math.abs(fx * C[o + 3] + fy * C[o + 4]) > .7 ? 0 : 1;
+      if (C[o + 2] > 0) { if (faseSemaforo(cid, eje) !== 0) alto = true; }      // rojo, o amarillo: se para antes de la senda
+      else {
+        // esquina sin semáforo: cede el paso al que cruza desde su derecha (art. 41). Si espera más de 4 s, sigue (si todos esperan
+        // al de la derecha, nadie pasa nunca)
+        const rx = -fy, ry = fx;
+        for (let n = 0; n < this.neighborCount && !alto; n++) { const j = this.getNeighbor(n); if (j === i || !Transform.active[j] || AutoComp.active[j] !== 1) continue;
+          GameObject.getHeadingAxes(j, _h2); if (Math.abs(fx * _h2.frontX + fy * _h2.frontY) > .5) continue;            // no viene cruzado
+          const dx = Transform.x[j] - this.x, dy = Transform.y[j] - this.y; if (dx * rx + dy * ry <= 0) continue;           // no viene de la derecha
+          const dj = AutoComp.hl[j] + 10, cj = celdaTransito(Transform.x[j] + _h2.frontX * dj, Transform.y[j] + _h2.frontY * dj);
+          if (((cj >> 6) - 1) !== cid || !((cj >> 4) & 3)) continue;                                                      // no está en esta esquina
+          if ((C[o] - Transform.x[j]) * _h2.frontX + (C[o + 1] - Transform.y[j]) * _h2.frontY < 0) continue;               // ya pasó
+          alto = true; }
+        if (alto) { A.espera[i] += dts; if (A.espera[i] > 4) alto = false; }
+      }
+      // no quedarse en el medio del cruce: si el de adelante está parado del otro lado, espera antes de la senda
+      if (!alto) { const reach = 22 / metrosPorPx(fx, fy);
+        for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (j === i || !Transform.active[j] || AutoComp.active[j] !== 1 || RigidBody.speed[j] > 12) continue;
+          const dx = Transform.x[j] - this.x, dy = Transform.y[j] - this.y, ah = dx * fx + dy * fy; if (ah < A.hl[i] + 30 || ah > reach) continue;
+          if (Math.abs(fx * dy - fy * dx) < A.hw[i] + AutoComp.hw[j]) { alto = true; break; } } }
+    } else A.espera[i] = 0;
     let brake = 0, steer = 0;
     if (A.libre[i] <= 0) for (let n = 0; n < this.neighborCount; n++) { const j = this.getNeighbor(n); if (!Transform.active[j] || j === i) continue;
       const isCar = AutoComp.active[j] === 1, isPerson = !isCar && PersonaComp.vel[j] > 0; if (!isCar && !isPerson) continue;
       // alcance y ancho del carril según el tamaño de los dos (con dos autos chicos, ~95 y ~22 px)
-      const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? A.hl[i] + A.hl[j] + 35 : A.hl[i] + 40;
-      if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? A.hw[i] + A.hw[j] - 2 : A.hw[i] + 4; if (as > corr) continue;
+      // en la esquina, al peatón que cruza por la senda se lo ve antes y más de costado (art. 41: el peatón tiene prioridad)
+      const dx = Transform.x[j] + RigidBody.vx[j] * .2 - this.x, dy = Transform.y[j] + RigidBody.vy[j] * .2 - this.y, ahead = dx * fx + dy * fy, reach = isCar ? A.hl[i] + A.hl[j] + 35 : A.hl[i] + (zona ? 70 : 40);
+      if (ahead <= 8 || ahead > reach) continue; const side = fx * dy - fy * dx, as = Math.abs(side), corr = isCar ? A.hw[i] + A.hw[j] - 2 : A.hw[i] + (zona ? 16 : 4); if (as > corr) continue;
       const u = (1 - ahead / reach) * (.4 + .6 * (1 - as / corr)); if (u > brake) brake = u; if (isCar) steer += (side >= 0 ? -1 : 1) * u; }   // a la gente se la espera, no se la esquiva (si no, el auto se sube a la vereda)
     if (brake > 0) { turn = Math.max(-1, Math.min(1, turn * (1 - brake * .6) + Math.max(-1, Math.min(1, steer)) * .8)); fwd *= 1 - brake;
       if (brake > .6) { const k = 1 - (brake - .6) * .25; RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; } }   // frena, no da marcha atrás
+    // velocidad máxima (art. 51): acelera de menos cerca del límite y frena si se pasó; en rojo o cediendo el paso, se para
+    // (los frenos van con dtRatio: frenan lo mismo por segundo a 60 o a 20 cuadros por segundo)
+    if (alto) { fwd = 0; const k = Math.pow(.86, dtRatio || 1); RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; }
+    else if (kmh > maxKmh) { fwd = 0; if (kmh > maxKmh * 1.06) { const k = Math.pow(.97, dtRatio || 1); RigidBody.vx[i] *= k; RigidBody.vy[i] *= k; } }
+    else fwd *= Math.max(.2, Math.min(1, (maxKmh - kmh) / (maxKmh * .3)));
     this.applyForces(fwd, turn);
   }
 }
@@ -445,7 +500,7 @@ export class ConurbanoScene extends Scene {
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
     // piezas de casas y árboles, props (y sus sombras), cables y líneas de canchas
-    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 2500, maxAttachedDecorationsPerEntity: 255 },
+    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 8 * ((META.transito && META.transito.n) || 0) + 3000, maxAttachedDecorationsPerEntity: 255 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
@@ -483,6 +538,8 @@ export class ConurbanoScene extends Scene {
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 }, pits: { type: Uint8Array, length: (META.PW || 1) * (META.PH || 1) * 4 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
+    [Transito, { grid: { type: Uint16Array, length: Math.max(1, TR.W * TR.H) }, cruces: { type: Float32Array, length: Math.max(6, TR.n * 6) } }],
+    [Semaforos, { ids: { type: Int32Array, length: Math.max(4, (TR.nSem || 0) * 4) } }],
   ];
   static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1], [Faro, Math.max(8, META.nAutos) + 1]];
 
@@ -501,11 +558,16 @@ export class ConurbanoScene extends Scene {
     // ---- objetos
     const w = await (await fetch(BARRIO + 'mundo.json')).json();
     const { Decoration } = WEED;
+    // ---- tránsito: la grilla (velocidades, esquinas) y los cruces (con o sin semáforo, rumbo de la primera calle, desfasaje)
+    if (TR.n) { const tb = await (await fetch(BARRIO + 'transito.bin')).arrayBuffer(); Transito.grid.set(new Uint16Array(tb));
+      (w.cruces || []).forEach((c, k) => { for (let q = 0; q < 6; q++) Transito.cruces[k * 6 + q] = c[q]; }); }
+    this._sem = [];   // los semáforos: cruce, calle y número (sus luces, en Semaforos.ids)
     for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
       if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
-      if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
+      if (p.r > 0) { let sk = -1; if (p.f === 'u_semaforo' && p.cr >= 0 && this._sem.length < (TR.nSem || 0)) { sk = this._sem.length; this._sem.push({ cid: p.cr, eje: p.ej, sk, f: -1 }); }
+        Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl, sk }); }
       else { const a = META.anclas[p.f], e = (META.escalas && META.escalas[p.f]) || 1, mece = p.f.startsWith('plm_') || p.f.startsWith('yy_');   // plantas que se mecen (skew: la base queda fija)
         Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -e : e, scaleY: e,
           ...(mece ? { swaySkew: 1, swayAmplitude: .05 + rng() * .05, swayFrequency: .5 + rng() * .6 } : {}),
@@ -619,7 +681,14 @@ export class ConurbanoScene extends Scene {
   }
 
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
+  // semáforos: cada cuarto de segundo, la luz de la fase de su cruce (la misma cuenta que usan los autos)
+  luces() { const ahora = Date.now(); if (!this._sem || !this._sem.length || ahora - (this._lucesT || 0) < 250) return; this._lucesT = ahora;
+    const { Decoration } = WEED, al = (i, v) => { const d = i >= 0 ? Decoration.get(i) : null; if (d) d.alpha = v; };
+    for (const S of this._sem) { const f = faseSemaforo(S.cid, S.eje); if (f === S.f) continue; const o = S.sk * 4, ids = Semaforos.ids;
+      if (!ids[o] || !ids[o + 3]) continue; S.f = f;   // el semáforo todavía no armó sus luces
+      al(ids[o] - 1, f === 2 ? .95 : 0); al(ids[o + 1] - 1, f === 1 ? .95 : 0); al(ids[o + 2] - 1, f === 0 ? .95 : 0); al(ids[o + 3] - 1, f === 2 ? 0 : .95); } }
   update(dtRatio = 1) {
+    this.luces();
     this.afinarGente();
     // las sombras horneadas (casas, calcos) se desvanecen con el sol
     const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
