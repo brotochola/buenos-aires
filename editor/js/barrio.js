@@ -48,6 +48,10 @@ const Barrio = (() => {
       props.push(e); return e;
     }
     // árbol: un tipo procedural según la riqueza del lugar (lleva el mismo sorteo que antes, así el resto no cambia)
+    // tronco pintado a la cal (blanco hasta 1,2 m): en buena parte de los árboles de vereda, más en los barrios. Sale de la
+    // posición, no del sorteo, así el resto del barrio no cambia. Devuelve true siempre (va dentro de la condición de arriba)
+    function calTronco(a, s) { const h = Math.abs(Math.imul(Math.round(a.x * 7), 0x27d4eb2d) ^ Math.imul(Math.round(a.y * 7), 0x165667b1)) % 1000 / 1000;
+      if (h < (s.w < .5 ? .55 : .3)) a.t += "_c"; return true; }
     function arbol(x, y, flip) { const t = Arboles.pick(r, W.wealthAt(x, y)); if (!claim(x, y, .4)) return null; const a = { t, x, y, flip: !!flip, cr: .28 }; arboles.push(a); return a; }
     const person = (x, y, stay) => { if (conGente && W.dentro(x, y)) people.push({ x, y, stay: !!stay }); };   // afuera del paredón no hay gente
     const at = (s, t, off) => [s.a[0] + s.dir[0] * t + s.n[0] * off, s.a[1] + s.dir[1] * t + s.n[1] * off];
@@ -92,11 +96,20 @@ const Barrio = (() => {
     const lados = MG > 0 ? [[PX0, PY0, PX1, PY0], [PX0, PY1, PX1, PY1], [PX0, PY0, PX0, PY1], [PX1, PY0, PX1, PY1]] : [];
     for (const [ax, ay, bx, by] of lados) { const L = Math.hypot(bx - ax, by - ay); for (let t = 0; t <= L; t += .4) claim(ax + (bx - ax) * t / L, ay + (by - ay) * t / L, .5); }
     const cruzaParedon = (lot) => { if (!MG || !lot.q) return false; let ins = 0; for (const p of lot.q) if (W.dentro(p[0], p[1])) ins++; return ins > 0 && ins < lot.q.length; };
-    { const SEG = 12, T = .36;
+    // El paredón va sólo sobre tierra: donde cruza una calle o una vereda, la calle está cortada con vallas (como un corte de
+    // calle por obra), que también tienen colisionador. Tramos de hasta 12 m (o lo que quede entre dos calles).
+    { const SEG = 12, T = .36, PASO = .5;
       for (const [ax, ay, bx, by] of lados) { const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, phi = Math.atan2(uy, ux), phiQ = qa(phi), nx = -uy, ny = ux;
-        for (let t = 0, k = 0; t < L - .05; t += SEG, k++) { const w = Math.min(SEG, L - t), sx = ax + ux * t, sy = ay + uy * t;
-          addObj("tapial", { t: "paredon", W: Math.round(w * 10) / 10, a: aIdx(phi), s: k % 4 }, null, sx, sy, phiQ, null,
-            [[sx, sy], [sx + ux * w, sy + uy * w], [sx + ux * w + nx * T, sy + uy * w + ny * T], [sx + nx * T, sy + ny * T]]); } } }
+        const runs = []; let cur = null;
+        for (let t = 0; t <= L; t += PASO) { const tierra = !W.classify(ax + ux * t, ay + uy * t);
+          if (!cur || cur.tierra !== tierra) { if (cur) cur.t1 = t; cur = { tierra, t0: t, t1: L }; runs.push(cur); } }
+        let k = 0;
+        for (const rn of runs) {
+          if (rn.tierra) { for (let t = rn.t0; t < rn.t1 - .3; t += SEG, k++) { const w = Math.min(SEG, rn.t1 - t); if (w < .8) continue; const sx = ax + ux * t, sy = ay + uy * t;
+              addObj("tapial", { t: "paredon", W: Math.round(w * 2) / 2, a: aIdx(phi), s: k % 4 }, null, sx, sy, phiQ, null,
+                [[sx, sy], [sx + ux * w, sy + uy * w], [sx + ux * w + nx * T, sy + uy * w + ny * T], [sx + nx * T, sy + ny * T]]); } }
+          else if (F.u_valla) for (let t = rn.t0 + .35; t < rn.t1 - .2; t += .75) put("u_valla", ax + ux * t, ay + uy * t, { noClaim: true });
+        } } }
 
     // ---- casas y tapiales
     for (const lot of W.lots) {
@@ -146,17 +159,20 @@ const Barrio = (() => {
         addObj("house", { t: "casa", k: k2, W: bw, D: bd, a: aIdx(lot.phi), wb: Math.min(1, wb), v: 0 }, lot, bx, by, phiQ, { u0: bu, uw: bw, v0: bv }, rect(bu, bu + bw, bv, bv + bd), { back: true });
         occRect(bu, bu + bw, bv - .6, bv + bd + .5); backV = bv;
       }
-      if ((backV || lot.ld) - depthTot > 3.5) { const pp = () => LP(r.uni(.8, lot.fw - .8), r.uni(depthTot + 2.2, (backV || lot.ld) - .8));
-        if (r() < .3 * C.arboles) { const p = pp(); arbol(p[0], p[1], r() < .5); }
+      if ((backV || lot.ld) - depthTot > 3.5) { const fin = (backV || lot.ld) - .8, cerca = Math.min(fin, depthTot + 9);
+        // lo del patio cerca de la casa (no perdido en el fondo de un lote de 50 m); la parrilla contra una medianera. Mismas tiradas que antes
+        const pp = () => LP(r.uni(.8, lot.fw - .8), r.uni(depthTot + 2.2, cerca)), ppLado = () => { const iz = r() < .5; return LP(iz ? .7 : lot.fw - .7, r.uni(depthTot + 1.8, Math.min(fin, depthTot + 5))); };
+        const ppLejos = () => LP(r.uni(.8, lot.fw - .8), r.uni(depthTot + 2.2, fin));
+        if (r() < .3 * C.arboles) { const p = ppLejos(); arbol(p[0], p[1], r() < .5); }
         if (F.b_tendedero && rx() < (lot.w < .5 ? .45 : .2)) put("b_tendedero", ...pp());
-        if (F.k_cucha && rx() < .18) put("k_cucha", ...pp());
+        if (F.k_cucha && rx() < .18) put("k_cucha", ...ppLado());
         if (F.k_pelopincho && lot.w > .2 && lot.w < .7 && rx() < .1) put("k_pelopincho", ...pp());
         if (F.b_mesa_patio && rx() < (lot.w < .55 ? .18 : .06)) put("b_mesa_patio", ...pp());
         if (F.b_autito && lot.w < .5 && rx() < .2) put(rx.pick(["b_autito", "b_pelota", "b_perro_bebe", "b_tacho_azul", "b_sombrilla"]), ...pp());
         if (F.plm_rosal && rx() < Math.min(.95, .35 * PL)) put(rx.pick(lot.w < .3 ? ["plm_tomates", "plm_yuyos", "pl_cubierta", "plm_santarita", "plm_lantana", "plm_romero", "plm_banano", "pl_palmera", "pl_suculentas"] : ["plm_rosal", "plm_jazmin", "pl_hortensia", "plm_agapanto", "plm_santarita", "plm_lantana", "plm_romero", "pl_limonero", "plm_pindo", "pl_hibisco", "plm_strelitzia", "plm_banano", "plm_plumbago", "plm_cortadera", "pl_gomero"]), ...pp());
         if (F.plm_rosal && PL > 1 && rx() < .3 * (PL - 1)) put(rx.pick(["plm_agapanto", "pl_hortensia", "plm_lantana", "plm_jazmin", "pl_limonero", "plm_formio", "pl_malvon", "plm_santarita", "plm_banano", "pl_hibisco", "plm_strelitzia", "pl_monstera"]), ...pp());
-        if ((lot.kind === "villa" || lot.w < .25) && rx() < .5) put(rx.pick(["u_tanque", "chapas", "gomas", "parrilla_tambor", "silla", "antena", "garrafa"]), ...pp());
-        if (r() < .2) put("parrilla", ...pp()); if (lot.w > .3 && r() < .1) put("pileta", ...pp()); if (r() < .08 * C.gente) { const p = pp(); person(p[0], p[1], true); } }
+        if ((lot.kind === "villa" || lot.w < .25) && rx() < .5) put(rx.pick(["u_tanque", "chapas", "gomas", "parrilla_tambor", "silla", "antena", "garrafa"]), ...ppLado());
+        if (r() < .2) put("parrilla", ...ppLado()); if (lot.w > .3 && r() < .1) put("pileta", ...pp()); if (r() < .08 * C.gente) { const p = pp(); person(p[0], p[1], true); } }
       const s = lot.seg, side = lot.side, mid = (lot.o[0] - s.a[0]) * s.dir[0] + (lot.o[1] - s.a[1]) * s.dir[1] + (side === 1 ? lot.fw / 2 : -lot.fw / 2);
       if (s.sw > 1) {
         const near = (dd) => at(s, mid + r.uni(-lot.fw / 3, lot.fw / 3), side * (s.hw + s.sw - dd));
@@ -197,7 +213,7 @@ const Barrio = (() => {
       for (const side of [1, -1]) {
         if (s.sw >= 2.2) for (let t = r.uni(3, 9); t < s.len - 3; t += r.uni(7, 13)) {
           if (crossNear(t) || r() > (.3 + .55 * s.w) * C.arboles) continue; const p = at(s, t, side * (s.hw + (s.cantero ? .6 : .55)));
-          const c = W.classify(p[0], p[1]); if (c && c.k === "walk" && c.s === s && arbol(p[0], p[1], r() < .5) && !s.cantero) {
+          let av; const c = W.classify(p[0], p[1]); if (c && c.k === "walk" && c.s === s && (av = arbol(p[0], p[1], r() < .5)) && calTronco(av, s) && !s.cantero) {
             // cazuela: cuadrado de tierra alrededor del árbol (borde de ladrillo, de cemento o sin borde), a veces con plantas o yuyos
             const tipo = s.w < .3 ? rx.pick([2, 3, 3]) : rx.pick([1, 1, 2, 3]), conPasto = rx() < .55;
             pits.push({ x: p[0], y: p[1], ang: Math.atan2(s.dir[1], s.dir[0]), tipo, pasto: conPasto });
