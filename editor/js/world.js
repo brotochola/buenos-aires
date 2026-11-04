@@ -13,7 +13,9 @@ const World = (() => {
   const PAIRS = []; for (let i = 0; i < 48; i++) { const j = angIdx(ANG[i] + Math.PI / 2); if (angDist(ANG[j], ANG[i] + Math.PI / 2) < 1.6 * Math.PI / 180) PAIRS.push([ANG[i], ANG[j]]); }
 
   function generate(seed) {
-    const C = CFG.v, MW = C.mapW, MH = C.mapH, r = rng(seed);
+    // el mundo es el área jugable (mapW × mapH) más el margen de cada lado: ciudad del otro lado del paredón que la cierra
+    const C = CFG.v, MG = Math.max(0, C.margen || 0), MW = C.mapW + 2 * MG, MH = C.mapH + 2 * MG, r = rng(seed);
+    const dentro = (x, y) => x >= MG && y >= MG && x <= MW - MG && y <= MH - MG;
     // ---------- riqueza (0 = pobre, 1 = acomodado)
     const WG = Math.ceil(MW / 10), HG = Math.ceil(MH / 10), n1 = vnoise(WG, HG, Math.max(2, Math.round(C.zonaRiqueza / 10)), r), n2 = vnoise(WG, HG, 6, r);
     const wealthAt = (x, y) => { const gx = Math.max(0, Math.min(WG - 1, (x / 10) | 0)), gy = Math.max(0, Math.min(HG - 1, (y / 10) | 0)), k = gy * WG + gx;
@@ -321,7 +323,7 @@ const World = (() => {
       }
     }
     const lotAt = (x, y) => { const gx = (x * LR) | 0, gy = (y * LR) | 0; if (gx < 0 || gy < 0 || gx >= LW || gy >= LH) return null; const i = lotGrid[gy * LW + gx]; return i >= 0 ? lots[i] : null; };
-    return { MW, MH, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt };
+    return { MW, MH, MG, dentro, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt };
   }
 
   // ---------- red de calles como grafo, con las reglas de Buenos Aires y el conurbano:

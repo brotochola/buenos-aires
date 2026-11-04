@@ -3,8 +3,9 @@
 const CFG = (() => {
   const SCHEMA = [
     // grupo, clave, etiqueta, min, max, paso, valor, unidad, efecto, ayuda
-    ["Mundo", "mapW", "Ancho del mapa", 200, 1400, 20, 480, "m", "world", "Tamaño total este-oeste."],
-    ["Mundo", "mapH", "Alto del mapa", 160, 1000, 20, 340, "m", "world", "Tamaño total norte-sur."],
+    ["Mundo", "mapW", "Ancho del mapa", 200, 1400, 20, 480, "m", "world", "Área jugable este-oeste (adentro del paredón)."],
+    ["Mundo", "mapH", "Alto del mapa", 160, 1000, 20, 340, "m", "world", "Área jugable norte-sur (adentro del paredón)."],
+    ["Mundo", "margen", "Margen afuera del paredón", 0, 120, 5, 45, "m", "world", "Ciudad que se genera alrededor del área jugable, del otro lado del paredón que la cierra: la cámara puede mirar hasta ahí y nunca muestra el borde del mundo. Sin gente ni autos andando ni yuyos."],
     ["Mundo", "loteos", "Loteos", 3, 40, 1, 15, "", "world", "Barrios loteados por separado, cada uno con su grilla."],
     ["Mundo", "desorden", "Desorden de las grillas", 0, 60, 1, 34, "°", "world", "Cuánto puede girar la grilla. Las calles sólo van en los rumbos que tienen los autos (cada 7,5° en pantalla)."],
     ["Mundo", "diagonal", "Loteos a 45°", 0, 1, .05, .2, "prob.", "world", "Chance de que un loteo quede en diagonal (isométrico)."],

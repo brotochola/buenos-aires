@@ -64,6 +64,9 @@ El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el
 - **Villas:** grupos de 2 a 5 manzanas en la zona más pobre, rodeadas de calles comunes (como la 1-11-14). Adentro tienen calles de tierra entre manzanas y pasillos que serpentean y salen a la calle.
 - **Plazas:** una manzana entera cada 5 o 6 cuadras, con senderos de baldosa roja, monumento o fuente, árboles, faroles, bancos y juegos.
 - **Lotes** hasta la mitad de la manzana. En los hondos casi siempre hay algo construido en el fondo.
+- **Borde del mapa:** el área jugable (`mapW` × `mapH`) está cerrada por un **paredón** de 3 m con pilares, pintadas y alambre de púas, con colisionador. Del otro lado se genera ciudad, `margen` m de cada lado (45 por defecto), sin gente, sin autos andando y sin yuyos, para no cargar el juego. Los lotes que el paredón cruza quedan vacíos.
+  - Los flowfields de la gente y de los autos sólo tienen dirección adentro, así que nadie aparece ni camina afuera.
+  - La cámara libre no deja que la vista salga del mapa: en pantalla el mapa es un paralelogramo y la vista entera tiene que quedar adentro (`limitarVista`). Por eso nunca se ve el borde del mundo.
 - **Cazuelas** de tierra (con borde de ladrillo, de cemento o sin borde) alrededor de los árboles de vereda, a veces con plantas o yuyos.
 
 ## Arte con Gemini (props, plantas, yuyos y piezas de fachada)
@@ -89,6 +92,7 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
 - Ese atlas (hasta 8192×4096 píxeles) lleva casas, gente, árboles, props y autos. Con WeedJS ff32c939 o posterior no hay tope de cuadros (antes, con más de 8192, no se dibujaba ningún sprite: N-111). Si un barrio no entra en los píxeles, el juego no carga («Could not fit … into atlas»): bajá la «variedad» de casas.
 - Sin giro de cámara, porque los sprites están horneados para una sola vista. Los props de Gemini tienen frente y espalda (y espejo): cuatro diagonales, no ocho rumbos.
+- Manejando, la cámara sigue al auto sin el límite de la cámara libre: muy alejado y en una esquina del paredón se puede llegar a ver el borde del mundo.
 - Las texturas float (`rgba32float`) de las capas worldRect no suben bien en WebGL en esta versión de WeedJS: se suben como bytes con tipo FLOAT. Por eso la tabla de calles va en RGBA8 con punto fijo.
 
 ## Créditos

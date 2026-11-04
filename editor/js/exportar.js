@@ -162,6 +162,8 @@ const Exportar = (() => {
     for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const l = W.lotAt(x + .5, y + .5);
       if (l && l.kind === "sendero") { cost[y * GW + x] = COST.vereda; vereda[y * GW + x] = 1; }       // los senderos de las plazas se caminan
       else if (cost[y * GW + x] && l) { cost[y * GW + x] = 0; vereda[y * GW + x] = 0; } }
+    // afuera del paredón no camina nadie (ni aparece: el juego pone a la gente donde "veredas" tiene dirección)
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) if (!W.dentro(x + .5, y + .5)) { cost[y * GW + x] = 0; vereda[y * GW + x] = 0; }
     const fg = FlowGrid(GW, GH, cost, COST.calle), nDest = Math.max(3, Math.min(10, Math.round(C.destinos || 6)));
     const targets = fg.pickTargets(nDest, R3.rng(B.SEED ^ 0x2545F491), (c) => c === COST.vereda);
     for (let f = 0; f < targets.length; f++) { progreso("flowfield de peatones " + (f + 1) + "/" + targets.length, .7 + f / targets.length * .12); await espera(); fg.compute(f);
@@ -172,7 +174,7 @@ const Exportar = (() => {
     archivos.push(["ff_veredas.json", ffJson("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
       W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); })]);
     // autos: a lo largo de su carril (mano derecha), tirando hacia el centro del carril
-    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (x < 0 || y < 0 || x > MW || y > MH) return null; W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
+    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null; W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
       if (s.mat === "pasillo" || s.type === "pasaje" || (s.type === "ave" && Math.abs(cl.ds) < s.med + .2)) return null;   // los pasajes (angostos, de tierra en la villa) no son para el tránsito
       const fwd = cl.ds < 0 ? 1 : -1, lane = laneOff(s), off = cl.ds - (-fwd * lane), pull = Math.max(-.6, Math.min(.6, -off * .35));
       return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); })]);
@@ -215,7 +217,7 @@ const Exportar = (() => {
     // ---------- 8. meta y mundo
     const nFranjas = casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
-      MW, MH, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
+      MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas, escalas };
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables })]);

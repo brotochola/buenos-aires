@@ -38,6 +38,7 @@ const Barrio = (() => {
       const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663));
       if (VAR[name]) name = VAR[name][h % VAR[name].length];
       if (!F[name]) return null;
+      if (name.startsWith("yy_") && !W.dentro(x, y)) return null;   // afuera del paredón, sin yuyos (son la mayoría de los props)
       if (!opt.noClaim && !claim(x, y, opt.rad ?? lookup(RAD, name, .3))) return null;
       // face: hacia dónde mira (m del mundo). Lo que tiene vista de atrás y no mira a nada en especial mira a una diagonal
       // sacada del lugar (no del sorteo, así el resto del barrio no cambia)
@@ -47,7 +48,7 @@ const Barrio = (() => {
     }
     // árbol: un tipo procedural según la riqueza del lugar (lleva el mismo sorteo que antes, así el resto no cambia)
     function arbol(x, y, flip) { const t = Arboles.pick(r, W.wealthAt(x, y)); if (!claim(x, y, .4)) return null; const a = { t, x, y, flip: !!flip, cr: .28 }; arboles.push(a); return a; }
-    const person = (x, y, stay) => { if (conGente) people.push({ x, y, stay: !!stay }); };
+    const person = (x, y, stay) => { if (conGente && W.dentro(x, y)) people.push({ x, y, stay: !!stay }); };   // afuera del paredón no hay gente
     const at = (s, t, off) => [s.a[0] + s.dir[0] * t + s.n[0] * off, s.a[1] + s.dir[1] * t + s.n[1] * off];
 
     // ---- plazas: árboles en el borde y sueltos, faroles y bancos sobre los senderos, monumento o fuente en el medio,
@@ -84,9 +85,22 @@ const Barrio = (() => {
       for (let k = 0; k < Math.round(P.bA * P.bB / 900) * C.gente; k++) { const q = at2(rx2.uni(-hA, hA), rx2.uni(-hB, hB)); if (sendero(q) || pasto(q)) person(q[0], q[1], rx2() < .5); }
     }
 
+    // ---- paredón: cierra el área jugable (afuera el mundo sigue, sin gente ni autos andando ni yuyos). Primero se reserva su
+    // línea, así nada se pone encima, y los lotes que lo cruzan quedan vacíos
+    const MG = W.MG, PX0 = MG, PY0 = MG, PX1 = W.MW - MG, PY1 = W.MH - MG;
+    const lados = MG > 0 ? [[PX0, PY0, PX1, PY0], [PX0, PY1, PX1, PY1], [PX0, PY0, PX0, PY1], [PX1, PY0, PX1, PY1]] : [];
+    for (const [ax, ay, bx, by] of lados) { const L = Math.hypot(bx - ax, by - ay); for (let t = 0; t <= L; t += .4) claim(ax + (bx - ax) * t / L, ay + (by - ay) * t / L, .5); }
+    const cruzaParedon = (lot) => { if (!MG || !lot.q) return false; let ins = 0; for (const p of lot.q) if (W.dentro(p[0], p[1])) ins++; return ins > 0 && ins < lot.q.length; };
+    { const SEG = 12, T = .36;
+      for (const [ax, ay, bx, by] of lados) { const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, phi = Math.atan2(uy, ux), phiQ = qa(phi), nx = -uy, ny = ux;
+        for (let t = 0, k = 0; t < L - .05; t += SEG, k++) { const w = Math.min(SEG, L - t), sx = ax + ux * t, sy = ay + uy * t;
+          addObj("tapial", { t: "paredon", W: Math.round(w * 10) / 10, a: aIdx(phi), s: k % 4 }, null, sx, sy, phiQ, null,
+            [[sx, sy], [sx + ux * w, sy + uy * w], [sx + ux * w + nx * T, sy + uy * w + ny * T], [sx + nx * T, sy + ny * T]]); } } }
+
     // ---- casas y tapiales
     for (const lot of W.lots) {
       if (lot.kind === "sendero") continue;
+      if (cruzaParedon(lot)) continue;
       if (lot.kind === "plaza") { plaza(lot); continue; }
       const phiQ = qa(lot.phi);
       const LP = (u, v) => [lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v, lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v];
@@ -262,7 +276,7 @@ const Barrio = (() => {
         const len = 4.6, ok = [-.45, -.2, 0, .2, .45].every(k => !occ.has(Math.floor((p[0] + Math.cos(hd) * len * k) / OC) * 100000 + Math.floor((p[1] + Math.sin(hd) * len * k) / OC)));
         if (ok) { [-.45, -.2, 0, .2, .45].forEach(k => claim(p[0] + Math.cos(hd) * len * k, p[1] + Math.sin(hd) * len * k, 1.0));
           const wreck = !ln.moving && s.w < .32 && r() < .07, color = wreck ? "burnt" : pickW(r, COLORES);
-          if (conAutos) cars.push({ color, x: p[0], y: p[1], hd, moving: !!ln.moving }); }
+          if (conAutos && (!ln.moving || W.dentro(p[0], p[1]))) cars.push({ color, x: p[0], y: p[1], hd, moving: !!ln.moving }); }   // afuera, sólo estacionados
         t += len + r.uni(1, 6);
       }
       if (s.mat === "roto") for (let t = r.uni(5, 30); t < s.len - 5; t += r.uni(25, 60)) if (r() < .5) { const p = at(s, t, r.uni(-s.hw * .5, s.hw * .5)); if (put("u_valla", ...p)) { put("u_cono", p[0] + 1, p[1] - .6); put("u_cono", p[0] - 1, p[1] - .6); } }
@@ -286,6 +300,7 @@ const Barrio = (() => {
   function build3D(spec) {
     const phi = World.ANG[spec.a];
     if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17, wealth: [.25, .7][spec.wb] }, phi);
+    if (spec.t === "paredon") return Houses.paredon(spec.W, 700 + spec.s, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
     return Houses.poste(7, phi, !!spec.l);
   }

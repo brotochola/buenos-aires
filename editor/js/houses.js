@@ -571,6 +571,18 @@ const Houses = (() => {
     }
     return { sc };
   }
+  // paredón del borde del área jugable: revoque gastado de 3 m con pilares cada 4 m, pintadas y alambre de púas arriba
+  // (como los paredones de las vías). Local: a lo largo de x, el espesor hacia +y.
+  function paredon(W, seed, phi = 0) {
+    const sc = new Scene(); sc.setXform(phi); const r = rng(seed), H = 3;
+    const t = new Tex(W, H, seed); t.stucco(r.pick([[176, 170, 158], [196, 186, 166], [168, 160, 150], [190, 176, 150]]), 1.6); t.runoff(.9, 1.6); t.peel(3); t.humidity(.9);
+    for (let x0 = 4 + r.int(0, 30); x0 < t.w - 50;) { const x1 = Math.min(t.w - 4, x0 + r.int(60, 100)); if (r() < .8) pintada(t, x0 + 8, x1 - 8, px(r.uni(.6, 1.5)), r); x0 = x1 + r.int(25, 60); }   // sin pisarse (la letra con borde es más ancha de lo que calcula pintada)
+    sc.box(0, 0, 0, W, .3, H, { front: t, back: t, top: [150, 146, 138], right: [128, 124, 118], left: [138, 134, 128] });
+    for (let xp = 0; xp < W - .1; xp += 4) sc.box(xp, -.06, 0, xp + .4, .36, H + .1, { front: [182, 176, 164], back: [182, 176, 164], top: [204, 198, 186], right: [140, 136, 128], left: [150, 146, 138] });
+    for (let xp = .2; xp < W; xp += 2) sc.box(xp, .12, H, xp + .05, .17, H + .5, { front: [70, 66, 62], back: [70, 66, 62], right: [56, 52, 50], left: [60, 56, 52], top: [80, 76, 72], cast: false });
+    for (const z of [H + .2, H + .34, H + .47]) sc.box(0, .13, z, W, .16, z + .03, { front: [96, 92, 88], back: [96, 92, 88], top: [120, 116, 110], cast: false });
+    return { sc };
+  }
   // poste de madera (cruceta perpendicular a la calle) — local: calle a lo largo de x
   function poste(seed, phi, luz) {
     const sc = new Scene(); sc.setXform(phi);
@@ -582,5 +594,5 @@ const Houses = (() => {
       sc.box(-.2, -1.3, 6.62, .2, -.85, 6.85, { front: [70, 72, 78], right: [56, 58, 62], left: [60, 62, 66], top: [96, 98, 104] }); }
     return { sc, cable: [[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]] };
   }
-  return { build, tapial, poste, WALLS };
+  return { build, tapial, paredon, poste, WALLS };
 })();
