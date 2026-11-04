@@ -148,6 +148,13 @@ const Arboles = (() => {
         for (const a of hojas) hoja(buf, X, Y, Math.cos(a), Math.sin(a) * .78, e.L * (.85 + r() * .3), Math.max(1.2, e.L * .3), T, e.brillo && Math.sin(a) < .2);
       }
     }
+    // tronco pintado a la cal ("<tipo>_c", árboles de vereda): la corteza del tronco, blanca hasta 1,2 m, con el borde de arriba
+    // desparejo (pincelada a mano) y la cal gastada en los surcos
+    if (tipo.endsWith("_c")) { const [fx, fy] = PX(0, 0, 0), c0 = capas[0], top = fy - y0 - 1.2 * CZ * SF;
+      const CAL = [[240, 238, 230], [222, 220, 212], [180, 180, 176], [84, 82, 78], [200, 198, 190]];
+      for (let y = Math.max(0, Math.floor(top - 3)); y < Hc; y++) for (let x = 0; x < Wc; x++) { const i = (y * Wc + x) * 4; if (!c0[i + 3]) continue;
+        if (y < top + ((x * 7 + 3) % 5) - 2) continue;
+        for (let k = 0; k < 5; k++) if (c0[i] === BARK[k][0] && c0[i + 1] === BARK[k][1] && c0[i + 2] === BARK[k][2]) { const c = CAL[k]; c0[i] = c[0]; c0[i + 1] = c[1]; c0[i + 2] = c[2]; break; } } }
     // piezas: recortadas a su contenido, con el ancla en la base de la rama (el tronco, en el pie)
     const bases = [[0, 0, 0]]; for (let i = 1; i <= n; i++) { const sg = segs.find(q => q.rama === i); bases.push(sg ? sg.a : [0, 0, 0]); }
     const piezas = [];

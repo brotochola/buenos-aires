@@ -156,7 +156,7 @@
     for (const e of B.props) { let name = e.f, flip = e.flip;
       if (e.face) [name, flip] = Barrio.vista(F, e.f, Cam.C.ax * e.face[0] + Cam.C.ay * e.face[1], Cam.C.bx * e.face[0] + Cam.C.by * e.face[1]);
       const sp = put(name, e.x, e.y, { noClaim: true, flip, shadow: e.sh }); if (sp && e.face) yawDeps.push({ s: sp, f: e.f, dx: e.face[0], dy: e.face[1] }); }
-    for (const a of B.arboles) put("arbol_" + a.t, a.x, a.y, { noClaim: true, flip: a.flip, shadow: "sh_tree", cat: "trees" });
+    for (const a of B.arboles) put("arbol_" + a.t.replace(/_c$/, ""), a.x, a.y, { noClaim: true, flip: a.flip, shadow: "sh_tree", cat: "trees" });
     // ---- cables (tramos 3D)
     const cables = []; for (const c of B.cables) cables.push(c[0], c[1], c[2], c[3], c[4], c[5]); Gfx.setCables(cables);
     // ---- autos
