@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Sombras · Barrio Conurbano</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #28301f; font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #eee; }
+  #hud { position: fixed; left: 10px; top: 10px; z-index: 10; background: rgba(20, 22, 28, .86); border-radius: 8px; padding: 8px 10px; max-width: calc(100vw - 20px); box-sizing: border-box; }
+  #hud b { color: #f2c14e; } .m { color: #9aa0aa; font-size: 12px; }
+  #hud button { font: inherit; background: #2d313b; color: #eee; border: 1px solid #444b57; border-radius: 6px; padding: 5px 9px; margin: 6px 4px 0 0; }
+  #err { color: #ff8a80; white-space: pre-wrap; }
+</style></head>
+<body>
+<div id="hud"><b>SOMBRAS</b> <span class="m">banco de pruebas · arrastrar / WASD: mover · rueda: zoom</span><br>
+  hora: <button id="hM">−1 h</button><button id="hP">+1 h</button> <span id="hh"></span>
+  <div id="err"></div></div>
+<script type="module">
+  import WEED from './weed/weed.prod.bundle.esm.min.js';
+  const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search);
+  addEventListener('error', (e) => { $('err').textContent = 'Error: ' + (e.message || e.error); });
+  try {
+    const game = new WEED.GameEngine({ debug: false, autoResize: true });
+    await game.loadScene(new URL('./sombrasScene.js?barrio=' + (q.get('barrio') || 'parquechas') + (q.get('piso') ? '&piso=' + q.get('piso') : ''), import.meta.url).href);
+    const sc = () => window.__sombras, show = () => { const S = WEED.Sun; $('hh').textContent = sc().hora + ' h · elevación ' + S.elevation.toFixed(0) + '° · rumbo ' + S.angle.toFixed(0) + '°'; };
+    $('hM').onclick = () => { sc().setHora(sc().hora - 1); show(); }; $('hP').onclick = () => { sc().setHora(sc().hora + 1); show(); };
+    show();
+  } catch (e) { console.error(e); $('err').textContent = 'Error: ' + e.message; }
+</script>
+</body></html>
