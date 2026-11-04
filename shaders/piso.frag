@@ -31,12 +31,21 @@ vec3 asphalt(int ix, int iy) {
   float v = .86 + .3 * (NC(ix >> 2, iy >> 2) - .5) + .16 * (NA(ix, iy) - .5) + .14 * (NG(ix, iy) - .5);
   if (NG(ix * 7, iy * 3) > .95) return vec3(118, 116, 112); return vec3(70, 71, 76) * v;
 }
+// Las juntas de las baldosas son líneas de 2 a 5 cm: de lejos miden menos de un píxel y, muestreadas punto a punto, salen
+// cortadas o en franjas (muaré). Se filtran: cada píxel toma la parte de junta que cae dentro de él (filtro de caja analítico)
+// y de lejos la baldosa se funde con su junta. PXM: metros por píxel de pantalla (de las derivadas, en main).
+float PXM = .055;
+// fracción de junta en un píxel de ancho w (en baldosas) centrado en x (en baldosas); la junta ocupa [0, j) de cada baldosa
+float junta(float x, float j, float w) {
+  w = max(w, 1e-4); float a = x - w * .5, b = x + w * .5;
+  return clamp((floor(b) * j + min(fract(b), j) - floor(a) * j - min(fract(a), j)) / w, 0.0, 1.0);
+}
+float juntas(float cu, float cv) { return 1.0 - (1.0 - cu) * (1.0 - cv); }
 vec3 adoquin(float u, float v, int ix, int iy) {   // adoquines de granito: hileras a lo ancho, juntas oscuras
   float bw = .3, bh = .2, row = floor(v / bh), uu = u + fmod_(row, 2.0) * bw * .5, cu = floor(uu / bw), lu = uu / bw - cu, lv = v / bh - row;
-  float h = hash2(int(cu) * 13 + 5, int(row) * 7 + 11);
-  if (lu < .13 || lv < .17) return vec3(58, 56, 54) * (.9 + .2 * NG(ix, iy));
+  float h = hash2(int(cu) * 13 + 5, int(row) * 7 + 11), cj = juntas(junta(uu / bw, .13, PXM / bw), junta(v / bh, .17, PXM / bh));
   float f = (1.0 + (.5 - lv) * .14 - (lu - .5) * .06) * (.94 + .1 * NA(ix, iy));
-  return vec3(96.0 + 36.0 * h, 98.0 + 30.0 * h, 104.0 + 18.0 * h) * f;
+  return mix(vec3(96.0 + 36.0 * h, 98.0 + 30.0 * h, 104.0 + 18.0 * h) * f, vec3(58, 56, 54) * (.9 + .2 * NG(ix, iy)), cj);
 }
 vec3 grass(int ix, int iy, float dry) {
   float t = .45 + (NA(ix, iy) - .5) * .7 + (NB(ix, iy) - .5) * .3 + (NG(ix, iy) - .5) * .35;
@@ -54,18 +63,29 @@ vec3 yuyo(int ix, int iy) { return NC(ix, iy) > .6 ? dirt(ix, iy) : grass(ix, iy
 vec3 tiles(float u, float v, int ix, int iy, int kind, bool dmg) {
   if (kind == 5) return grass(ix, iy, .4);
   if (kind == 1) return NB(ix, iy) > .55 ? grass(ix, iy, .9) : dirt(ix, iy);
-  if (kind == 4) { bool jt = fmod_(u, 1.5) < .05 || fmod_(v, 1.5) < .05; if (jt) return vec3(138, 136, 128);
-    float f = .95 + .1 * (NA(ix, iy) - .5) + (fmod_(u * 8.0, 1.0) < .25 ? -.04 : 0.0); return vec3(190, 188, 180) * f; }
-  float size = kind == 6 ? .25 : .4, tu = floor(u / size), tv = floor(v / size), lu = u / size - tu, lv = v / size - tv;
+  if (kind == 4) {   // cemento: paños de 1,5 m con junta de 5 cm, peinado cada 12,5 cm
+    float cj = juntas(junta(u / 1.5, .05 / 1.5, PXM / 1.5), junta(v / 1.5, .05 / 1.5, PXM / 1.5));
+    float f = .95 + .1 * (NA(ix, iy) - .5) - .04 * junta(u * 8.0, .25, PXM * 8.0);
+    return mix(vec3(190, 188, 180) * f, vec3(138, 136, 128), cj); }
+  float size = kind == 6 ? .25 : .4, tu = floor(u / size), tv = floor(v / size), lu = u / size - tu, lv = v / size - tv, w = PXM / size;
   float h = hash2(int(tu) * 31 + 7, int(tv) * 17 + 3);
   vec3 base = kind == 6 ? vec3(176, 86, 62) : kind == 3 ? vec3(188, 186, 178) : vec3(228, 212, 168);
-  if (lu < .07 || lv < .07) return kind == 6 ? vec3(212, 196, 176) : vec3(base.r * .74, base.g * .74, base.b * .72);
-  if (dmg && h < .1) return dirt(ix, iy);
-  if (dmg && h < .2) { float f = .95 + .1 * NG(ix, iy); return vec3(176, 174, 166) * f; }
-  float f = 1.0 + (h - .5) * .08 + (NA(ix, iy) - .5) * .12 * (dmg ? 2.0 : 1.0);
-  if (kind != 6) { float pu = fract(lu * 3.0), pv = fract(lv * 3.0); if (pu < .12 || pv < .12) f *= .9; else if (pu < .24 || pv < .24) f *= 1.04; }
-  if (dmg && h < .3 && abs(lu - lv) < .04) return vec3(110, 98, 76);
-  return base * f;
+  vec3 jc = kind == 6 ? vec3(212, 196, 176) : vec3(base.r * .74, base.g * .74, base.b * .72);
+  float cj = juntas(junta(u / size, .07, w), junta(v / size, .07, w));
+  // lo que es de una baldosa entera (rota, parchada, más clara o más oscura) se ve de lejos; las rayitas no
+  float cerca = 1.0 - smoothstep(.2, .5, w);
+  vec3 col;
+  if (dmg && h < .1) col = dirt(ix, iy);
+  else if (dmg && h < .2) col = vec3(176, 174, 166) * (.95 + .1 * NG(ix, iy));
+  else {
+    float f = 1.0 + (h - .5) * .08 + (NA(ix, iy) - .5) * .12 * (dmg ? 2.0 : 1.0);
+    if (kind != 6) {   // relieve de la vainilla (3 × 3 panes por baldosa): una línea oscura y otra clara, filtradas como las juntas
+      float w3 = w * 3.0, o1 = juntas(junta(u / size * 3.0, .12, w3), junta(v / size * 3.0, .12, w3)), o2 = juntas(junta(u / size * 3.0, .24, w3), junta(v / size * 3.0, .24, w3));
+      f *= 1.0 - .1 * o1 + .04 * max(0.0, o2 - o1); }
+    col = base * f;
+    if (dmg && h < .3 && abs(lu - lv) < .04) col = mix(col, vec3(110, 98, 76), cerca);   // la rajadura, sólo de cerca
+  }
+  return mix(col, jc, cj);
 }
 // cazuela alrededor de un árbol: cuadrado de 1,4 m alineado con la calle. Devuelve el color, o x < 0 si no hay
 vec3 cazuela(float wx, float wy, int ix, int iy) {
@@ -177,5 +197,7 @@ vec3 pixel(float wx, float wy) {
 
 void main() {
   float wy = uMH - vWorld.y / (uSF * uSYN), wx = vWorld.x / uSF - uK * wy;
+  // metros de piso por píxel de pantalla (el mayor de los dos ejes): para filtrar las juntas
+  PXM = max(length(vec2(dFdx(wx), dFdy(wx))), length(vec2(dFdx(wy), dFdy(wy))));
   finalColor = vec4(pixel(wx, wy) / 255.0, 1.0);
 }
