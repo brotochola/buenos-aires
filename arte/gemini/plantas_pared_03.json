@@ -1,0 +1,13 @@
+{
+ "img": "plantas_pared_03.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "objs": [
+  {"name": "fd_balcon_plantas", "w": 3.0, "box": [30, 42, 575, 388]},
+  {"name": "fd_malvones_repisa", "w": 1.8, "box": [615, 78, 1050, 248]},
+  {"name": "fd_reja_macetas", "w": 1.0, "box": [1088, 68, 1335, 292]},
+  {"name": "fd_petunias", "w": 1.2, "box": [92, 505, 470, 702]},
+  {"name": "fd_jazmin_espaldera", "w": 1.2, "box": [548, 355, 790, 724]},
+  {"name": "fd_parra", "w": 2.5, "box": [828, 375, 1345, 724]}
+ ]
+}

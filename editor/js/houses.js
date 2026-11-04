@@ -99,6 +99,9 @@ const Houses = (() => {
   function rejaTex(wm, hm, seed) { const t = new Tex(wm, hm, seed, [0, 0, 0], 0), c = [24, 24, 28];
     for (let x = 1; x < t.w; x += 4) t.rect(x, 0, x + 1, t.h, c); for (const y of [1, t.h >> 1, t.h - 2]) t.rect(0, y, t.w, y + 1, c); for (let x = 1; x < t.w; x += 4) { t.p(x - 1, 3, c); t.p(x + 1, 3, c); } return t; }
   // textura hecha de una pieza de Gemini (lo demás transparente), para usarla en una cara 3D (rejas, barandas de hierro)
+  // uno de la lista que esté cargado (siempre una sola tirada del sorteo, falten o no)
+  const PLWc = () => typeof CFG !== "undefined" ? (CFG.v.plantas ?? 1) : 1;
+  const pickD = (rr, list) => { const n = list[Math.floor(rr() * list.length)]; return R3.DECALS[n] ? n : list[0]; };
   const decalTex = (name, wm, hm, rep = 1) => { if (!R3.DECALS[name]) return null; const t = Tex.fromPx(px(wm), px(hm), 1); const w = Math.round(t.w / rep);
     for (let k = 0; k < rep; k++) t.blit(name, k * w, 0, k === rep - 1 ? t.w - k * w : w, t.h); return t; };
   const solid = (wm, hm, c, seed, kind = "concrete") => { const t = new Tex(wm, hm, seed); if (kind === "concrete") t.concrete(c); else if (kind === "stucco") t.stucco(c); else t.rect(0, 0, t.w, t.h, c); return t; };
@@ -269,11 +272,13 @@ const Houses = (() => {
       for (const [t, Wt, k] of [[ft, W, 1], [bt, W, .6], [stx, D, .8]]) {
         if (rp() < (pobre ? .6 : .3) * k) piso(t, "fd_pasto_pared", rp.uniform(0, Math.max(.1, Wt - 1)), rp.uniform(.7, 1.1));
         if (rp() < (pobre ? .4 : .12) * k && finish !== "hueco") deco(t, "fd_grieta", rp.uniform(.1, Math.max(.2, Wt - .8)), zt(rp.uniform(.8, 2)), rp.uniform(.4, .7));
-        if (rp() < (kind === "chalet" || spec.wealth > .6 ? .22 : .1) * k * PLW) { const wm = rp.uniform(1.4, Math.min(2.6, Wt)), xm = rp() < .5 ? 0 : Wt - wm; deco(t, rp.pick(["fd_hiedra", "fd_hiedra", "fd_jazmin", "fd_mburucuya"]), xm, zt(Math.min(zr, rp.uniform(1.8, 3.2))), wm, zt(0) - zt(Math.min(zr, 3.2))); }
+        if (rp() < (kind === "chalet" || spec.wealth > .6 ? .22 : .1) * k * PLW) { const wm = rp.uniform(1.4, Math.min(2.6, Wt)), xm = rp() < .5 ? 0 : Wt - wm; deco(t, pickD(rp, ["fd_hiedra", "fd_hiedra", "fd_jazmin", "fd_mburucuya", "fd_santarita_reja", "fd_jazmin_espaldera"]), xm, zt(Math.min(zr, rp.uniform(1.8, 3.2))), wm, zt(0) - zt(Math.min(zr, 3.2))); }
       }
       if (flat && rp() < .14 * PLW) { const wm = rp.uniform(1.6, Math.min(2.8, W)); deco(ft, "fd_santarita", rp.uniform(0, W - wm), 0, wm, px(Htot * .45)); }
-      for (const [xm, zm, ww, hh] of wins) if (zm > .5 && rp() < .22 * PLW) deco(ft, "fd_jardinera", xm - .05, zt(zm) - 2, ww + .1, px(.55));
-      if (rp() < .14 * PLW && kind !== "galpon") deco(ft, rp.pick(["fd_helecho_colgante", "fd_potus", "fd_estante"]), rp.uniform(.1, Math.max(.2, W - 1)), zt(2.6), .7, px(1.1));
+      for (const [xm, zm, ww, hh] of wins) if (zm > .5 && rp() < .22 * PLW) deco(ft, pickD(rp, ["fd_jardinera", "fd_jardinera", "fd_petunias", "fd_malvones_repisa"]), xm - .05, zt(zm) - 2, ww + .1, px(.55));
+      if (rp() < .14 * PLW && kind !== "galpon") deco(ft, pickD(rp, ["fd_helecho_colgante", "fd_potus", "fd_estante", "fd_helecho_grande", "fd_potus_largo", "fd_reja_macetas"]), rp.uniform(.1, Math.max(.2, W - 1)), zt(2.6), .7, px(1.1));
+      // glicina o parra colgando del borde de arriba del frente (sorteo aparte: lo demás de la casa no cambia)
+      { const rq = rng(spec.seed ^ 0x2c1b3c6d); if (kind !== "galpon" && rq() < .1 * PLW) { const wm = rq.uniform(1.6, Math.min(2.8, W)); deco(ft, rq() < .5 ? "fd_glicina" : "fd_parra", rq.uniform(0, Math.max(0, W - wm)), zt(Math.min(zr, 3)) - 2, wm, px(1.4)); } }
     }
     const ftc = (z0, z1) => ft.crop(zt(z1), zt(z0)), btc = (z0, z1) => bt.crop(zt(z1), zt(z0)), stc = (z0, z1) => stx.crop(zt(z1), zt(z0));
     // ---- volumen
@@ -332,7 +337,8 @@ const Houses = (() => {
     for (const zb of balconies) {
       sc.box(0, y0 - .85, zb - .02, W, y0, zb + .14, { front: [222, 218, 208], top: [236, 232, 222], right: [190, 186, 178], left: [200, 196, 188] });
       const orn = spec.wealth > .5 && r() < .6 ? decalTex("fd_balcon_hierro", W - .1, .96, Math.max(1, Math.round((W - .1) / 2))) : null;
-      sc.box(.05, y0 - .85, zb + .14, W - .05, y0 - .83, zb + 1.1, { front: orn || railingTex(W - .1, .96, spec.seed), back: orn || railingTex(W - .1, .96, spec.seed), cast: false });
+      const verde = R3.DECALS.fd_balcon_plantas && rng(spec.seed ^ (zb * 1000 | 0) ^ 0x6a09e667)() < .3 * PLWc() ? decalTex("fd_balcon_plantas", W - .1, .96, Math.max(1, Math.round((W - .1) / 3))) : null;
+      sc.box(.05, y0 - .85, zb + .14, W - .05, y0 - .83, zb + 1.1, { front: verde || orn || railingTex(W - .1, .96, spec.seed), back: orn || railingTex(W - .1, .96, spec.seed), cast: false });
       for (const xx of [.05, W - .07]) sc.box(xx, y0 - .85, zb + .14, xx + .02, y0, zb + 1.1, { right: railingTex(.85, .96, spec.seed), left: railingTex(.85, .96, spec.seed), cast: false });
       for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), y0 - .7, zb + .14, r.int(0, 99999));
       if (r() < .4) clothes(sc, .3, W - .3, y0 - .45, zb + 2.0, r.int(0, 99999));
@@ -492,7 +498,8 @@ const Houses = (() => {
       if (cerr) { const ct = decalTex("fd_ed_balcon_cerrado", W, 2.2, Math.max(1, Math.round(W / 3))); sc.box(0, -1.2, zb + .15, W, -1.18, zb + 2.35, { front: ct, back: ct, cast: false });
         sc.box(0, -1.2, zb + 2.35, W, 0, zb + 2.5, { front: add(wall, 10), top: [214, 210, 202], right: mul(wall, .8), left: mul(wall, .86) }); continue; }
       const gv = vidrio && R3.DECALS.fd_ed_baranda_vidrio ? decalTex("fd_ed_baranda_vidrio", W, 1, Math.max(1, Math.round(W / 3))) : para ? decalTex("fd_ed_parapeto", W, 1.2, Math.max(1, Math.round(W / 3))) : null;
-      sc.box(0, -1.2, zb + .15, W, -1.18, zb + (para ? 1.35 : 1.15), { front: gv || rt, back: gv || rt, cast: !!para });
+      const verde = !para && R3.DECALS.fd_balcon_plantas && rng(spec.seed ^ (k * 7919) ^ 0x6a09e667)() < .22 * PLWc() ? decalTex("fd_balcon_plantas", W, 1, Math.max(1, Math.round(W / 3))) : null;
+      sc.box(0, -1.2, zb + .15, W, -1.18, zb + (para ? 1.35 : 1.15), { front: verde || gv || rt, back: gv || rt, cast: !!para });
       for (const xx of [0, W - .03]) sc.box(xx, -1.2, zb + .15, xx + .03, 0, zb + 1.15, { right: railingTex(1.2, 1, spec.seed), left: railingTex(1.2, 1, spec.seed), cast: false });
       for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), -1, zb + .15, r.int(0, 99999), r() < .4);
       if (r() < .35) ac(sc, r.uniform(.3, W - 1.1), -.35, zb + .15, r.int(0, 9999), false);

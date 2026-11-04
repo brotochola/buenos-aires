@@ -1,0 +1,11 @@
+{
+ "img": "plantas_pared_02.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "objs": [
+  {"name": "fd_glicina", "w": 2.5, "box": [180, 25, 545, 312]},
+  {"name": "fd_helecho_grande", "w": 0.8, "box": [195, 335, 525, 738]},
+  {"name": "fd_santarita_reja", "w": 1.2, "box": [618, 12, 978, 722]},
+  {"name": "fd_potus_largo", "w": 0.6, "box": [1078, 8, 1285, 722]}
+ ]
+}
