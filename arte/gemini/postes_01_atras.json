@@ -1,0 +1,58 @@
+{
+ "img": "postes_01_atras.png",
+ "ref": 1376,
+ "objs": [
+  {
+   "name": "hd_led_atras",
+   "h": 9.0,
+   "at": [
+    193,
+    385
+   ]
+  },
+  {
+   "name": "hd_farola_doble_atras",
+   "h": 4.6,
+   "at": [
+    396,
+    397
+   ]
+  },
+  {
+   "name": "hd_farola_atras",
+   "h": 4.0,
+   "at": [
+    618,
+    413
+   ]
+  },
+  {
+   "name": "hd_poste_madera_atras",
+   "h": 8.0,
+   "box": [
+    700,
+    55,
+    962,
+    726
+   ]
+  },
+  {
+   "name": "hd_poste_trafo_atras",
+   "h": 7.6,
+   "box": [
+    962,
+    55,
+    1152,
+    726
+   ]
+  },
+  {
+   "name": "hd_semaforo_atras",
+   "h": 3.6,
+   "at": [
+    1261,
+    419
+   ]
+  }
+ ]
+}

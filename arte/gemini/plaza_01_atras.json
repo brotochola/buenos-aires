@@ -1,0 +1,61 @@
+{
+ "img": "plaza_01_atras.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "grow": 0,
+ "objs": [
+  {
+   "name": "pz_monumento_atras",
+   "at": [
+    213,
+    240
+   ],
+   "h": 5.5,
+   "d": 1.5
+  },
+  {
+   "name": "pz_hamacas_atras",
+   "at": [
+    642,
+    148
+   ],
+   "h": 2.4,
+   "d": 1.5,
+   "grow": 2
+  },
+  {
+   "name": "pz_tobogan_atras",
+   "at": [
+    838,
+    175
+   ],
+   "w": 3,
+   "grow": 2
+  },
+  {
+   "name": "pz_subibaja_atras",
+   "at": [
+    1021,
+    191
+   ],
+   "w": 3
+  },
+  {
+   "name": "pz_banco_atras",
+   "at": [
+    420,
+    378
+   ],
+   "w": 1.8
+  },
+  {
+   "name": "pz_bebedero_atras",
+   "at": [
+    583,
+    392
+   ],
+   "h": 1.1,
+   "d": 0.4
+  }
+ ]
+}

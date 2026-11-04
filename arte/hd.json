@@ -148,6 +148,26 @@
   "k_cucha": "hd_cucha",
   "k_banderines": "hd_banderines",
   "k_cajones_botellas_b": "hd_cajones_bot2",
-  "parrilla_b": "hd_parrilla_ladrillo"
+  "parrilla_b": "hd_parrilla_ladrillo",
+  "u_farola_atras": "hd_led_atras",
+  "u_farol_doble_atras": "hd_farola_doble_atras",
+  "u_farola_orn_atras": "hd_farola_atras",
+  "u_semaforo_atras": "hd_semaforo_atras",
+  "u_poste_trafo_atras": "hd_poste_trafo_atras",
+  "u_contenedor_atras": "hd_contenedor_a_atras",
+  "u_contenedor_b_atras": "hd_contenedor_b_atras",
+  "u_campana_atras": "hd_campana_a_atras",
+  "u_campana_b_atras": "hd_campana_b_atras",
+  "u_cesto_atras": "hd_cesto_a_atras",
+  "u_cesto_b_atras": "hd_cesto_b_atras",
+  "u_kiosco_atras": "hd_kiosco_atras",
+  "u_parada_atras": "hd_parada_atras",
+  "u_banco_atras": "hd_banco_atras",
+  "pz_monumento_atras": "pz_monumento_atras",
+  "pz_hamacas_atras": "pz_hamacas_atras",
+  "pz_tobogan_atras": "pz_tobogan_atras",
+  "pz_subibaja_atras": "pz_subibaja_atras",
+  "pz_banco_atras": "pz_banco_atras",
+  "pz_bebedero_atras": "pz_bebedero_atras"
  }
 }

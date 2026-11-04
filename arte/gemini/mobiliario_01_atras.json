@@ -1,0 +1,87 @@
+{
+ "img": "mobiliario_01_atras.png",
+ "ref": 1376,
+ "uniforme": true,
+ "objs": [
+  {
+   "name": "hd_contenedor_a_atras",
+   "h": 1.65,
+   "d": 1.2,
+   "at": [
+    189,
+    212
+   ]
+  },
+  {
+   "name": "hd_contenedor_b_atras",
+   "h": 1.65,
+   "d": 1.2,
+   "at": [
+    189,
+    559
+   ]
+  },
+  {
+   "name": "hd_campana_a_atras",
+   "h": 1.7,
+   "d": 1.3,
+   "at": [
+    477,
+    216
+   ]
+  },
+  {
+   "name": "hd_campana_b_atras",
+   "h": 1.7,
+   "d": 1.3,
+   "at": [
+    446,
+    574
+   ]
+  },
+  {
+   "name": "hd_cesto_a_atras",
+   "h": 1.1,
+   "d": 0.4,
+   "at": [
+    702,
+    259
+   ]
+  },
+  {
+   "name": "hd_cesto_b_atras",
+   "h": 1.1,
+   "d": 0.4,
+   "at": [
+    649,
+    576
+   ]
+  },
+  {
+   "name": "hd_kiosco_atras",
+   "h": 2.6,
+   "d": 1.6,
+   "at": [
+    940,
+    246
+   ]
+  },
+  {
+   "name": "hd_parada_atras",
+   "h": 3.0,
+   "d": 0.1,
+   "at": [
+    1246,
+    214
+   ]
+  },
+  {
+   "name": "hd_banco_atras",
+   "w": 1.9,
+   "at": [
+    1169,
+    575
+   ]
+  }
+ ]
+}
