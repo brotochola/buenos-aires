@@ -93,6 +93,27 @@ const Houses = (() => {
   // pintadas: graffiti.js (relevamiento de las paredes porteñas: aerosol, de pintor, poesía, firmas, bombas). CTX dice dónde:
   // lo pone cada constructor (casa pobre, villa, paredón) antes de pintar
   let CTX = {};
+  // ---------- modo kit (caras.js: casas por caras con skew). Los detalles chicos (tanque, aire, antena, maceta) no se
+  // arman con cajas: se anotan en sc.acc y el exportador los dibuja como un sprite compartido cada uno (como el tanque
+  // de los props). Los techos salen de una baldosa de material canónica: una cara de techo a la que no se le dibujó nada
+  // encima se dibuja en el juego con esa baldosa, compartida entre todas las casas (t.mat, t.limpia).
+  let KIT = false; const MATS = new Map();
+  function setKit(v) { KIT = !!v; }
+  const hashD = (d) => { let a = 0x811c9dc5; for (let i = 0; i < d.length; i++) a = Math.imul(a ^ (d[i] | 0), 16777619); return a >>> 0; };
+  function baldosa(key, tw, th, make) { key += "@" + R3.DET; let m = MATS.get(key); if (!m) { m = { key, tw, th, tex: make(tw, th) }; MATS.set(key, m); } return m; }
+  // una textura W × H hecha con la baldosa repetida: lo que se ve en el editor; la cara limpia la arma el exportador
+  function deBaldosa(W, H, m, seed) {
+    const t = new Tex(W, H, seed), b = m.tex;
+    for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) { const i = (y * t.w + x) * 4, j = ((y % b.h) * b.w + (x % b.w)) * 4;
+      t.d[i] = b.d[j]; t.d[i + 1] = b.d[j + 1]; t.d[i + 2] = b.d[j + 2]; t.d[i + 3] = b.d[j + 3]; }
+    t.mat = m; t.limpia = hashD(t.d); return t;
+  }
+  const acc = (sc, a) => { (sc.acc || (sc.acc = [])).push(a); };
+  // un accesorio solo, en el origen, para dibujarlo como sprite (caras.js)
+  function accesorio(a, phi) { const sc = new Scene(); sc.setXform(phi); const k = KIT; KIT = false;
+    try { if (a.tipo === "tanque") tank(sc, 0, 0, 0, a.seed, a.kind); else if (a.tipo === "aire") ac(sc, 0, 0, 0, a.seed, a.wall, a.back);
+      else if (a.tipo === "antena") antenna(sc, 0, 0, 0); else if (a.tipo === "maceta") plant(sc, 0, 0, 0, a.seed, a.big); } finally { KIT = k; }
+    return sc; }
   function pintada(t, x0, x1, y, r) { return typeof Graffiti !== "undefined" ? Graffiti.pintar(t, x0, x1, y, r, CTX) : false; }
   function railingTex(wm, hm, seed, c = [28, 28, 32], gap = 4) { const t = new Tex(wm, hm, seed, [0, 0, 0], 0);
     t.rect(0, 0, t.w, 2, c); t.rect(0, t.h - 2, t.w, t.h, c); for (let x = 0; x < t.w; x += gap) t.rect(x, 0, x + 1, t.h, c); if (t.h > 14) t.rect(0, t.h >> 1, t.w, (t.h >> 1) + 1, c); return t; }
@@ -108,6 +129,7 @@ const Houses = (() => {
 
   // ---------- objetos
   function tank(sc, x, y, z, seed, kind = "negro") {
+    if (KIT) return acc(sc, { tipo: "tanque", x, y, z, seed: 1, kind });
     const R = .55;
     if (kind === "negro") { const h = 1.15, t = new Tex(2 * R, h, seed);
       for (let xx = 0; xx < t.w; xx++) { const u = (xx + .5) / t.w * 2 - 1, f = .6 + .6 * Math.max(0, -u * .6 + Math.sqrt(Math.max(0, 1 - u * u)) * .7); t.rect(xx, 0, xx + 1, t.h, mul([52, 52, 60], f)); }
@@ -119,13 +141,15 @@ const Houses = (() => {
     } else { const t = solid(1, .9, [188, 186, 178], seed); sc.box(x - .5, y - .5, z, x + .5, y + .5, z + .9, { front: t, back: t, left: [150, 148, 142], right: [150, 148, 142], top: [206, 204, 196] }); }
   }
   function ac(sc, x, y, z, seed, wallMounted = true, back = false) {
+    if (KIT) return acc(sc, { tipo: "aire", x, y, z, seed: 1, wall: wallMounted, back });
     const t = new Tex(.8, .55, seed, [226, 226, 222]); for (let xx = 2; xx < t.w - 4; xx += 2) t.rect(xx, 2, xx + 1, t.h - 2, [150, 150, 150]); t.rect(t.w - 6, 2, t.w - 2, t.h - 2, [120, 120, 124]);
     const y0 = back ? y : y - (wallMounted ? .3 : 0), y1 = back ? y + (wallMounted ? .3 : .3) : y + (wallMounted ? 0 : .3);
     sc.box(x, y0, z, x + .8, y1, z + .55, { front: t, back: t, left: [196, 196, 192], right: [196, 196, 192], top: [236, 236, 232] });
   }
-  function antenna(sc, x, y, z) { sc.box(x, y, z, x + .05, y + .05, z + 1.9, { front: [96, 96, 102], back: [96, 96, 102], left: [80, 80, 86], right: [80, 80, 86], cast: false });
+  function antenna(sc, x, y, z) { if (KIT) return acc(sc, { tipo: "antena", x, y, z }); sc.box(x, y, z, x + .05, y + .05, z + 1.9, { front: [96, 96, 102], back: [96, 96, 102], left: [80, 80, 86], right: [80, 80, 86], cast: false });
     [.8, .6, .45].forEach((w, k) => sc.box(x - w / 2, y, z + 1.7 - k * .3, x + w / 2, y + .04, z + 1.73 - k * .3, { front: [120, 120, 126], back: [120, 120, 126], top: [140, 140, 146], cast: false })); }
   function plant(sc, x, y, z, seed, big = false) {
+    if (KIT) return acc(sc, { tipo: "maceta", x, y, z, seed: seed % 6, big: !!big });
     const r = rng(seed); sc.box(x, y, z, x + .35, y + .3, z + .3, { front: [176, 92, 56], back: [176, 92, 56], left: [140, 72, 44], right: [140, 72, 44], top: [110, 70, 50] });
     const w = big ? .65 : .45, h = big ? .75 : .45, t = new Tex(w, h, seed, [0, 0, 0], 0);
     for (let i = 0; i < t.w * t.h * .8; i++) { const xx = r.int(0, t.w - 1), yy = r.int(0, t.h - 1); if (((xx / t.w - .5) ** 2) / .25 + ((yy / t.h - .65) ** 2) / .4 < 1) t.p(xx, yy, r.pick([[56, 120, 56], [84, 150, 66], [40, 96, 48], [110, 170, 80]])); }
@@ -145,16 +169,24 @@ const Houses = (() => {
     sc.box(x0, y, z, x1, y + .5, z + h, { front: t, back: t, cast: true });
   }
   function roofTex(W, D, kind, seed) {
+    if (KIT) { const m = baldosa("techo:" + kind, 6, 6, (tw, th) => roofTexBase(tw, th, kind, 5003 + kind.length * 101)); return deBaldosa(W, D, m, seed); }
+    return roofTexBase(W, D, kind, seed, true);
+  }
+  function roofTexBase(W, D, kind, seed, mancha = false) {
     const t = new Tex(W, D, seed), r = t.r;
     if (kind === "piedra") { t.stucco([214, 194, 158], .6); for (let yy = 0; yy < t.h; yy += 4) { t.shade(0, yy, t.w, yy + 1, .88); for (let xx = r.int(0, 9); xx < t.w; xx += r.int(7, 12)) t.shade(xx, yy, xx + 1, yy + 4, .86); } }
     else if (kind === "ceramico") { t.stucco(r.pick([[196, 116, 86], [206, 168, 126], [180, 96, 70]]), .4); for (let yy = 0; yy < t.h; yy += 5) t.shade(0, yy, t.w, yy + 1, .8); for (let yy = 0; yy < t.h; yy += 5) for (let xx = ((yy / 5) % 2) * 5; xx < t.w; xx += 10) t.shade(xx, yy, xx + 1, yy + 5, .82); }
     else if (kind === "membrana") { t.stucco([204, 206, 208], .9); for (let xx = 6; xx < t.w; xx += 17) { t.shade(xx, 0, xx + 1, t.h, .86); t.shade(xx + 1, 0, xx + 2, t.h, 1.06); } }
     else if (kind === "membrana_roja") { t.stucco([176, 72, 56], .9); for (let xx = 6; xx < t.w; xx += 17) { t.shade(xx, 0, xx + 1, t.h, .8); t.shade(xx + 1, 0, xx + 2, t.h, 1.08); } }
     else t.concrete([172, 170, 164], 1.3);
-    if (r() < .5) { const cx = r.int(5, Math.max(6, t.w - 6)), cy = r.int(3, Math.max(4, t.h - 4)); for (let yy = 0; yy < t.h; yy++) for (let xx = 0; xx < t.w; xx++) if (((xx - cx) / 9) ** 2 + ((yy - cy) / 5) ** 2 < 1) t.shade(xx, yy, xx + 1, yy + 1, .88); }
+    if (mancha && r() < .5) { const cx = r.int(5, Math.max(6, t.w - 6)), cy = r.int(3, Math.max(4, t.h - 4)); for (let yy = 0; yy < t.h; yy++) for (let xx = 0; xx < t.w; xx++) if (((xx - cx) / 9) ** 2 + ((yy - cy) / 5) ** 2 < 1) t.shade(xx, yy, xx + 1, yy + 1, .88); }
     return t;
   }
   function chapaTex(W, D, seed, rust) {
+    if (KIT) { const b = seed % 3, m = baldosa("chapa:" + b + ":" + (rust ? 1 : 0), 6, 6, (tw, th) => chapaTexBase(tw, th, 6007 + b * 7, rust)); return deBaldosa(W, D, m, seed); }
+    return chapaTexBase(W, D, seed, rust);
+  }
+  function chapaTexBase(W, D, seed, rust) {
     const t = new Tex(W, D, seed), base = t.r() < .35 ? t.r.pick([[70, 110, 170], [170, 60, 50], [70, 140, 90], [200, 170, 80]]) : [196, 198, 196];
     for (let xx = 0; xx < t.w; xx++) t.rect(xx, 0, xx + 1, t.h, mul(base, [1.12, 1.04, .95, .84, .97][xx % 5]));
     if (t.r() < .3) { const x0 = t.r.int(0, t.w - 10), w = t.r.int(10, 24); for (let xx = x0; xx < Math.min(t.w, x0 + w); xx++) t.rect(xx, 0, xx + 1, t.h, mul([186, 188, 186], [1.12, 1.04, .95, .84, .97][xx % 5])); }
@@ -687,5 +719,5 @@ const Houses = (() => {
       sc.box(-.2, -1.3, 6.62, .2, -.85, 6.85, { front: [70, 72, 78], right: [56, 58, 62], left: [60, 62, 66], top: [96, 98, 104] }); }
     return { sc, cable: [[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]] };
   }
-  return { build, tapial, paredon, esquina, poste, WALLS, ESQ, CO };
+  return { build, tapial, paredon, esquina, poste, WALLS, ESQ, CO, setKit, accesorio };
 })();

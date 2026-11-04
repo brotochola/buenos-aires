@@ -32,6 +32,7 @@ const CFG = (() => {
     ["Lotes", "fondo", "Fondo máximo de lote", 8, 45, 1, 27, "m", "world", ""],
     ["Lotes", "fondoConstr", "Construcciones al fondo", 0, 2, .05, 1, "×", "world", ""],
     ["Lotes", "baldios", "Baldíos", 0, 3, .1, 1, "×", "world", ""],
+    ["Casas", "skew", "Casas por caras con skew", 0, 1, 1, 1, "", "bake", "1: cada cara de la casa (paredes, techo, tanque…) se hornea plana una sola vez y el juego la dibuja con skew en cualquier rumbo (WeedJS con DX-DECOSKEW). 0: la casa entera, una vez por rumbo (como antes)."],
     ["Casas", "variedad", "Variedad de casas (tope)", 40, 400, 10, 200, "", "world", "Cuántas casas distintas se hornean; las demás repiten la más parecida. Con más, el atlas del juego pesa más."],
     ["Casas", "edificios", "Edificios y petit hoteles", 0, 3, .1, 1, "×", "world", "En zonas ricas y avenidas: edificios de departamentos (4 a 10 pisos) y casas de estilo."],
     ["Casas", "pisosMax", "Pisos (máximo)", 1, 10, 1, 2, "", "world", "Ninguna casa ni edificio pasa de esta cantidad de pisos: más alto tapa la vista."],

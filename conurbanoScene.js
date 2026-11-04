@@ -481,6 +481,7 @@ function elegirModelos(autos, props) {
 // ---------- escena
 const SHEETS = {};
 for (let i = 0; i < META.hojasCasas; i++) SHEETS['casas' + i] = { json: BARRIO + 'img/casas' + i + '.json', png: BARRIO + 'img/casas' + i + '.png' };
+for (let i = 0; i < (META.hojasCaras || 0); i++) SHEETS['caras' + i] = { json: BARRIO + 'img/caras' + i + '.json', png: BARRIO + 'img/caras' + i + '.png' };
 SHEETS.props = { json: BARRIO + 'img/props.json', png: BARRIO + 'img/props.png' };
 SHEETS.arboles = { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles.png' };
 for (let i = 0; i < NLPC; i++) SHEETS['lpc' + i] = { json: 'img/lpc/civil1.json', png: 'img/lpc/c' + i + '.png', excludeAnimations: LPC_EXCLUDE };
@@ -500,7 +501,7 @@ export class ConurbanoScene extends Scene {
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
     // piezas de casas y árboles, props (y sus sombras), cables y líneas de canchas
-    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 8 * ((META.transito && META.transito.n) || 0) + 3000, maxAttachedDecorationsPerEntity: 255 },
+    decoration: { maxDecorations: META.nPiezas + (META.nTiles || 0) + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 8 * ((META.transito && META.transito.n) || 0) + 3000, maxAttachedDecorationsPerEntity: 255 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
@@ -562,7 +563,19 @@ export class ConurbanoScene extends Scene {
     if (TR.n) { const tb = await (await fetch(BARRIO + 'transito.bin')).arrayBuffer(); Transito.grid.set(new Uint16Array(tb));
       (w.cruces || []).forEach((c, k) => { for (let q = 0; q < 6; q++) Transito.cruces[k * 6 + q] = c[q]; }); }
     this._sem = [];   // los semáforos: cruce, calle y número (sus luces, en Semaforos.ids)
-    for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
+    if (META.skew) {
+      // casas por caras (WeedJS DX-DECOSKEW): la entidad lleva el colisionador; el dibujo son piezas de caras planas, decoraciones
+      // del mundo (no colgadas: la casa no se mueve, así no pasan por el paso de las colgadas cada cuadro), cada una con su
+      // escala, skew, tinte de luz, y orden (sortOffsetY: la base de su columna; innerZ: el orden de pintor dentro de la casa).
+      // Un solo objeto de configuración para todas: cargar no crea basura por pieza.
+      const cfg = { x: 0, y: 0, texture: '', scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, tint: 0xffffff, sortOffsetY: 0, innerZ: 0, anchorX: .5, anchorY: .5 };
+      for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l });
+        if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+        const V = w.variantes[h.v];
+        for (let i = 0; i < V.length; i++) { const t = V[i];
+          cfg.x = h.ox + t[1]; cfg.y = h.oy + t[2]; cfg.texture = t[0]; cfg.scaleX = t[3]; cfg.scaleY = t[4]; cfg.skewX = t[5]; cfg.skewY = t[6];
+          cfg.tint = t[7]; cfg.sortOffsetY = t[8]; cfg.innerZ = t[9]; Decoration.spawn(cfg); } }
+    } else for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
       if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
