@@ -195,8 +195,10 @@ const R3 = (() => {
       for (const f of faces) for (const c of [f.O, [f.O[0] + f.E1[0], f.O[1] + f.E1[1], f.O[2] + f.E1[2]], [f.O[0] + f.E2[0], f.O[1] + f.E2[1], f.O[2] + f.E2[2]], [f.O[0] + f.E1[0] + f.E2[0], f.O[1] + f.E1[1] + f.E2[1], f.O[2] + f.E1[2] + f.E2[2]]]) {
         const p = proj(c[0], c[1], c[2], S); minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
       if (!isFinite(minx)) return null;
-      minx = Math.floor((minx - 4) / SS) * SS; miny = Math.floor((miny - 4) / SS) * SS;
-      let W = Math.ceil(maxx + 4 - minx), H = Math.ceil(maxy + 4 - miny); W += (SS - W % SS) % SS; H += (SS - H % SS) % SS;
+      // margen: lo que el filtro deja + el contorno de afuera (TC px del sprite final)
+      const TC = opt.outline === false ? 0 : Math.max(1, Math.round(DET)), PAD = 4 + SS * (TC + 1);
+      minx = Math.floor((minx - PAD) / SS) * SS; miny = Math.floor((miny - PAD) / SS) * SS;
+      let W = Math.ceil(maxx + PAD - minx), H = Math.ceil(maxy + PAD - miny); W += (SS - W % SS) % SS; H += (SS - H % SS) % SS;
       const N = W * H, zb = new Float32Array(N).fill(Infinity), col = new Float32Array(N * 3), fi = new Int32Array(N).fill(-1), pos = new Float32Array(N * 3);
       const J = (v) => [S * (v[0] + K * v[1]), -S * (v[2] * CZ + v[1] * SYN)];
       faces.forEach((f, idx) => {
@@ -264,22 +266,25 @@ const R3 = (() => {
       // ---- realce de color (más saturación y contraste)
       for (let k = 0; k < N; k++) { if (fi[k] < 0) continue; const i = k * 4, l = 0.3 * out[i] + 0.59 * out[i + 1] + 0.11 * out[i + 2];
         for (let j = 0; j < 3; j++) out[i + j] = l + (out[i + j] - l) * LIGHT.sat; }
-      // ---- contornos
-      if (opt.outline !== false) {
-        const OC = [46, 32, 26];
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const k = y * W + x; if (fi[k] < 0) continue;
-          let edge = 0;
-          for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + ox, yy = y + oy;
-            if (xx < 0 || yy < 0 || xx >= W || yy >= H) { edge = 2; break; } const kk = yy * W + xx;
-            if (fi[kk] < 0) { edge = 2; break; }
-            if (fid[kk] !== fid[k] && zb[kk] - zb[k] > 0.3) edge = Math.max(edge, 1); }
-          if (edge) { const t = edge === 2 ? LIGHT.outline : LIGHT.outline * .6, i = k * 4; for (let j = 0; j < 3; j++) out[i + j] = out[i + j] * (1 - t) + OC[j] * t; } }
-      }
+      // ---- aristas: donde una cara tapa a otra que está más lejos (el borde del techo sobre la fachada, un tanque sobre el techo)
+      // se marcan acá, a doble resolución, y se oscurecen después de la reducción: 1 px del sprite final, no medio
+      const arista = new Uint8Array(N);
+      if (opt.outline !== false) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const k = y * W + x; if (fi[k] < 0) continue;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + ox, yy = y + oy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const kk = yy * W + xx; if (fi[kk] >= 0 && fid[kk] !== fid[k] && zb[kk] - zb[k] > 0.3) { arista[k] = 1; break; } } }
       // ---- reducción 2x
-      const w2 = W / SS, h2 = H / SS, img = new ImageData(w2, h2);
-      for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) { let r = 0, g = 0, b = 0, a = 0;
-        for (let yy = 0; yy < SS; yy++) for (let xx = 0; xx < SS; xx++) { const i = ((y * SS + yy) * W + x * SS + xx) * 4, al = out[i + 3] / 255; r += out[i] * al; g += out[i + 1] * al; b += out[i + 2] * al; a += al; }
-        const o = (y * w2 + x) * 4; if (a > 0) { img.data[o] = r / a; img.data[o + 1] = g / a; img.data[o + 2] = b / a; img.data[o + 3] = a / (SS * SS) * 255; } }
+      const w2 = W / SS, h2 = H / SS, img = new ImageData(w2, h2), oscurecer = new Uint8Array(w2 * h2);
+      for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) { let r = 0, g = 0, b = 0, a = 0, ar = 0;
+        for (let yy = 0; yy < SS; yy++) for (let xx = 0; xx < SS; xx++) { const kk = (y * SS + yy) * W + x * SS + xx, i = kk * 4, al = out[i + 3] / 255; r += out[i] * al; g += out[i + 1] * al; b += out[i + 2] * al; a += al; ar |= arista[kk]; }
+        const o = (y * w2 + x) * 4; oscurecer[y * w2 + x] = ar; if (a > 0) { img.data[o] = r / a; img.data[o + 1] = g / a; img.data[o + 2] = b / a; img.data[o + 3] = a / (SS * SS) * 255; } }
+      // ---- contornos, como los de los personajes LPC y los autos (contorno.js): las aristas, oscurecidas a medias, y la silueta,
+      // un anillo duro de TC px por fuera (TC = DET: el juego muestra las casas a 1/DET, así mide 1 px de mundo)
+      if (opt.outline !== false && LIGHT.outline > 0) {
+        const tA = Math.min(1, .7 * LIGHT.outline), d = img.data;
+        for (let k = 0; k < w2 * h2; k++) if (oscurecer[k] && d[k * 4 + 3]) { const i = k * 4, c = Contorno.oscuro(d[i], d[i + 1], d[i + 2]);
+          for (let j = 0; j < 3; j++) d[i + j] = d[i + j] * (1 - tA) + c[j] * tA; }
+        Contorno.aplicar(d, w2, h2, TC);
+      }
       const canvas = document.createElement("canvas"); canvas.width = w2; canvas.height = h2; canvas.getContext("2d").putImageData(img, 0, 0);
       const res = { canvas, ax: -minx / SS, ay: -miny / SS };
       if (opt.groundShadow) res.shadow = this.groundShadow();

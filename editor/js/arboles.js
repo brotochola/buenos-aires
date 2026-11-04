@@ -155,11 +155,16 @@ const Arboles = (() => {
       let a = 1e9, b = 1e9, e = -1, f = -1;
       for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) if (d[(y * Wc + x) * 4 + 3]) { if (x < a) a = x; if (x > e) e = x; if (y < b) b = y; if (y > f) f = y; }
       if (e < 0) return;
-      const w = e - a + 1, h = f - b + 1, cut = document.createElement("canvas"); cut.width = w; cut.height = h;
-      const id = new ImageData(w, h); for (let y = 0; y < h; y++) id.data.set(d.subarray(((y + b) * Wc + a) * 4, ((y + b) * Wc + a + w) * 4), y * w * 4);
+      // contorno como el de los personajes (contorno.js): T px por fuera, que a la escala del juego miden 1 px de mundo;
+      // en la base de una rama no, que sale de otra rama y ahí no va raya
+      const T = typeof Contorno === "undefined" ? 0 : Contorno.grosor(ESCALA);
+      const w = e - a + 1 + 2 * T, h = f - b + 1 + 2 * T, cut = document.createElement("canvas"); cut.width = w; cut.height = h;
+      const id = new ImageData(w, h); for (let y = 0; y < h - 2 * T; y++) id.data.set(d.subarray(((y + b) * Wc + a) * 4, ((y + b) * Wc + a + w - 2 * T) * 4), ((y + T) * w + T) * 4);
+      const [bx, by] = PX(...bases[i]), ux = bx - x0 - a + T, uy = by - y0 - b + T;
+      if (T) { const sg = segs.find(q => q.rama === i), R = i > 0 && sg ? sg.r0 * SF + T + 2 : 0;
+        Contorno.aplicar(id.data, w, h, T, R ? (x, y) => (x + .5 - ux) ** 2 + (y + .5 - uy) ** 2 < R * R : null); }
       cut.getContext("2d").putImageData(id, 0, 0);
-      const [bx, by] = PX(...bases[i]);
-      piezas.push({ canvas: cut, i, ax: (bx - x0 - a) / w, ay: (by - y0 - b) / h, dx: bx, dy: by, w, h, prof: prof(...bases[i]), sway: i > 0 });
+      piezas.push({ canvas: cut, i, ax: ux / w, ay: uy / h, dx: bx, dy: by, w, h, prof: prof(...bases[i]), sway: i > 0 });
     });
     // orden dentro del árbol: las ramas de atrás antes que el tronco, las de adelante después
     piezas.sort((p, q) => q.prof - p.prof || (p.i === 0 ? -1 : q.i === 0 ? 1 : 0));

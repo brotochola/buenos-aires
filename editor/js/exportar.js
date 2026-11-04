@@ -120,10 +120,17 @@ const Exportar = (() => {
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
       // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
       const S = (n) => F[n].hd || F[n];
-      const ns = [...usados].sort((a, b) => S(b).h - S(a).h); let x = 0, y = 0, rowH = 0; const pos = {};
-      for (const n of ns) { const f = S(n); if (x + f.w > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += f.w + 2; rowH = Math.max(rowH, f.h); }
+      // contorno como el de los personajes y los autos (contorno.js): por fuera, con el grosor que a la escala del juego
+      // (f.e, o 1) mide 1 px de mundo. Las sombras y lo que va pegado al piso, sin.
+      const SIN_CONTORNO = /^(sh_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {};
+      for (const n of usados) { const f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+        c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+        const t = SIN_CONTORNO.test(n) ? 0 : Contorno.grosor(f.e || 1); cuadro[n] = { cv: t ? Contorno.canvas(c, t) : c, t, f }; }
+      const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
+      for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
-      for (const n of ns) { const f = S(n), [px, py] = pos[n]; g.drawImage(f.img || atlas, f.x, f.y, f.w, f.h, px, py, f.w, f.h); frames[n] = fr(px, py, f.w, f.h); anclas[n] = [r2(f.ox / f.w), r2(f.oy / f.h)];
+      for (const n of ns) { const { cv: c, t, f } = cuadro[n], [px, py] = pos[n]; g.drawImage(c, px, py); frames[n] = fr(px, py, c.width, c.height);
+        anclas[n] = [r2((f.ox + t) / c.width), r2((f.oy + t) / c.height)];
         if (f.e) escalas[n] = f.e; }
       archivos.push(["img/props.png", await png(cv)], ["img/props.json", json(hoja(frames, "props.png", cv))]); }
     // ---------- 5. autos y cables
