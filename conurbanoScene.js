@@ -13,6 +13,8 @@ import { BARRIOS } from './barrios.js';
 // autos: modelos, colores y medidas que hornea herramientas/hornear_autos.js (img/autos/)
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
+// la sombra de los autos al sol: la del volumen (huella + techo corrido), no el sprite dado vuelta
+import { sombraAuto, altoAuto } from './sombraAuto.js';
 const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'barrio'; } catch (e) { return 'barrio'; } })();
 const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
@@ -72,7 +74,9 @@ export class AutoComp extends Component {
     sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array,
     pf: Float32Array,      // qué tan cerca de la máxima maneja (0,8 a 0,97: nadie se pasa)
     espera: Float32Array,  // segundos esperando que pase el de la derecha (a los 4 s sigue: nadie se queda trabado)
-    rs: Int8Array };       // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
+    rs: Int8Array,         // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
+    // su sombra (sombraAuto.js): alto (px), achique del techo, y con qué rumbo y qué sol se armó el polígono (1 en shOk si ya hay)
+    shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shDx: Float32Array, shDy: Float32Array, shOk: Uint8Array };
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -272,7 +276,7 @@ function huellaAuto(A, i, c, s, out) {   // A: la clase AutoComp (sus arreglos),
   const a = A.ha[i], b = A.hb[i], L = 2 * a * Math.sqrt(ct * ct + AUTO_S * AUTO_S * st * st);
   out[0] = L; out[1] = 4 * a * b * AUTO_S / L; return out;
 }
-const _huella = [0, 0];
+const _huella = [0, 0], _sb = new Float32Array(16);
 // el ancla de cada cuadro (herramientas/apoyo_autos.py): los cuadros terminan en la rueda más baja, así el auto se ordena
 // donde toca el piso y no tapa a los árboles y a la gente que tiene adelante
 const _apoyo = new Map();
@@ -286,7 +290,7 @@ export class Faro extends GameObject {
 }
 export class Auto extends GameObject {
   static deriveSpeed = true;
-  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, ShadowCaster, LightEmitter, AutoComp];
+  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, AutoComp];
   onSpawned(c = {}) {
     // cada cuadro de las hojas está centrado en el punto donde el vehículo apoya en el piso
     this.setSpritesheet('auto_' + (c.hoja || 'hatch_rojo')); this.setAnimation('0');
@@ -302,7 +306,10 @@ export class Auto extends GameObject {
     this.setFixedRotation(0);
     this.rotation = c.rot || 0;
     A.active = 1;
-    this.shadowCaster.heightMultiplier = .55;
+    // la sombra: un polígono (MeshRenderer) en la capa de las sombras de las casas; el sprite sigue en la de entidades
+    const [sh, sk] = altoAuto(c.hoja); A.shH = sh; A.shK = sk; A.shOk = 0; A.shDx = 1e9; A.shDy = 1e9;
+    this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
+    this._sombra(Math.cos(rot), Math.sin(rot));
     const L = this.lightEmitter; L.lightIntensity = 0; L.active = 0;
     A.faro = -1;
     if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros)
@@ -310,6 +317,14 @@ export class Auto extends GameObject {
       for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8, layer: 'noche' });
     }
     this._frame();
+  }
+  // rehace el polígono de la sombra si el auto giró más de 2° o el sol se corrió medio píxel desde la última vez
+  _sombra(rc, rs) {
+    const i = this.index, A = AutoComp, r = Sun.shadowLengthRatio * A.shH[i], dx = Sun.shadowDirX * r, dy = Sun.shadowDirY * r;
+    if (A.shOk[i] && Math.abs(dx - A.shDx[i]) + Math.abs(dy - A.shDy[i]) < .5 && rc * A.shC[i] + rs * A.shS[i] > .9994) return;
+    A.shDx[i] = dx; A.shDy[i] = dy; A.shC[i] = rc; A.shS[i] = rs;
+    sombraAuto(_sb, rc, rs, A.ha[i], A.hb[i], dx, dy, A.shK[i]);
+    if (A.shOk[i]) this.meshRenderer.setVertices(_sb); else { this.meshRenderer.setMesh(_sb); A.shOk[i] = 1; }
   }
   onDespawned() { const A = this.autoComp; A.active = 0; if (A.faro >= 0) { GameObject.despawn(A.faro); A.faro = -1; } }
   // agarre lateral (las ruedas no patinan de costado)
@@ -340,6 +355,7 @@ export class Auto extends GameObject {
       if (AutoComp.faro[i] >= 0 && this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; } } }
   }
   tick() { const i = this.index; if (!Transform.active[i]) return; this._friction(); this._frame();
+    if (Transform.rotC) { const rc = Transform.rotC[i], rs = Transform.rotS[i]; if (rc * rc + rs * rs > .5) this._sombra(rc, rs); }
     const f = AutoComp.faro[i];   // la luz de los faros, delante del auto
     if (f >= 0) { GameObject.getHeadingAxes(i, _h); const d = AutoComp.hl[i] + 18; Transform.x[f] = Transform.x[i] + _h.frontX * d; Transform.y[f] = Transform.y[i] + _h.frontY * d; } }
 }
@@ -523,7 +539,9 @@ export class ConurbanoScene extends Scene {
     particle: { maxParticles: 500, decals: false },
     // piezas de casas y árboles, props (y sus sombras), cables y líneas de canchas
     decoration: { maxDecorations: META.nPiezas + (META.nTiles || 0) + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 8 * ((META.transito && META.transito.n) || 0) + 3000, maxAttachedDecorationsPerEntity: 255 },
-    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
+    // mallas: las sombras de las casas (hasta ~38 mil vértices en Carabobo: con 12 mil se quedaban sin lugar y faltaban) y las
+    // de los autos (8 cada uno)
+    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 65535, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
@@ -531,7 +549,7 @@ export class ConurbanoScene extends Scene {
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
-      sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .3, startHour: 17.5,
+      sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .5, startHour: 17.5,
         dayCycle: { enabled: true, speed: 1, dayDurationMinutes: 8 } },
     },
     navigation: { enabled: true, cellSize: 64 },
@@ -715,6 +733,18 @@ export class ConurbanoScene extends Scene {
     this.focusX = lo <= hi ? Math.max(lo, Math.min(hi, this.focusX)) : (lo + hi) / 2;
   }
 
+  // faroles, postes y faros alumbran de noche: de día su luz se sumaba a la del sol y, como el lighting recorta en 1, borraba
+  // las sombras (gente, árboles) cerca de cada farol. Cada luz guarda la intensidad que le puso su onSpawned (si cambió desde
+  // lo último que escribimos acá, es una luz nueva o reusada) y se escala por lo de noche que sea (0 de día, 1 de noche)
+  lamparas(no) { const ahora = Date.now(); if (ahora - (this._lampT || 0) < 250) return; this._lampT = ahora;
+    const LI = LightEmitter.lightIntensity, LG = LightEmitter.hasGlowSprite; if (!LI) return;
+    const n = LI.length; if (!this._lb || this._lb.length !== n) { this._lb = new Float32Array(n); this._lg = new Float32Array(n); this._lw = new Float32Array(n).fill(-1); }
+    const B = this._lb, G = this._lg, W = this._lw;
+    for (let i = 0; i < n; i++) { const v = LI[i];
+      if (v !== W[i]) { if (v > 0) { B[i] = v; G[i] = LG ? LG[i] : 0; } else { B[i] = 0; W[i] = v; continue; } }
+      const b = B[i]; if (!(b > 0)) continue;
+      const w = Math.fround(b * no); LI[i] = w; W[i] = w; if (LG) LG[i] = G[i] * no; }
+  }
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
   // semáforos: cada cuarto de segundo, la luz de la fase de su cruce (la misma cuenta que usan los autos)
   luces() { const ahora = Date.now(); if (!this._sem || !this._sem.length || ahora - (this._lucesT || 0) < 250) return; this._lucesT = ahora;
@@ -729,6 +759,7 @@ export class ConurbanoScene extends Scene {
     const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
     if (Ls && Math.abs(Ls.alpha - si) > .02) Ls.alpha = si; if (Ld && Math.abs(Ld.alpha - si) > .02) Ld.alpha = si;
     const Ln = Layer.get('noche'), no = Math.max(0, Math.min(1, 1.15 - si * 1.4)); if (Ln && Math.abs(Ln.alpha - no) > .02) Ln.alpha = no;
+    this.lamparas(no);
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
     const z = Camera.zoom || 1;
