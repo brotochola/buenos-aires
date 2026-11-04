@@ -214,6 +214,7 @@ export class Persona extends GameObject {
 
 // ---------- autos (Box2D, patrón de carScene; el cuadro del sprite sale del rumbo de pantalla)
 const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 };
+const _vista = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
 const _keys = new Map(), _keys0 = [];
 function angleKeys(sheet) {
   let k = _keys.get(sheet); if (k) return k;
@@ -590,6 +591,18 @@ export class ConurbanoScene extends Scene {
   setDriving(on) { Estado.manejando.store(on ? 1 : 0, 0); if (!on) { const g = Camera.getFollowTarget(); if (g) { this.focusX = g.x; this.focusY = g.y; } } }
   get driving() { return Estado.manejando.load(0) === 1; }
   zoomBy(f) { this.zoomT = Math.max(.25, Math.min(4, this.zoomT * f)); }
+  // La vista entera adentro del mapa, que en pantalla es un paralelogramo (cada px hacia arriba corre K/SYN px a la derecha):
+  // así la cámara nunca muestra el borde del mundo. El área jugable está más adentro, detrás del paredón (META.MG m de margen).
+  limitarVista() {
+    const vb = Camera.getViewportBounds(_vista), z = Camera.zoom || 1, cw = vb.width * z, ch = vb.height * z;   // el lienzo, en px de pantalla
+    if (!(cw > 0 && ch > 0)) return;
+    const S = META.SF, MWp = META.MW * S, Kp = META.K * S * META.MH, kk = META.K / META.SYN;
+    this.zoomT = Math.max(this.zoomT, ch / META.WH, (cw + kk * ch) / MWp);   // que entre la vista entera
+    const hw = cw / (2 * this.zoomT), hh = ch / (2 * this.zoomT);
+    this.focusY = Math.max(hh, Math.min(META.WH - hh, this.focusY));
+    const lo = Kp - kk * (this.focusY - hh) + hw, hi = MWp + Kp - kk * (this.focusY + hh) - hw;
+    this.focusX = lo <= hi ? Math.max(lo, Math.min(hi, this.focusX)) : (lo + hi) / 2;
+  }
 
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
   update(dtRatio = 1) {
@@ -609,7 +622,7 @@ export class ConurbanoScene extends Scene {
     const pan = 12 / z * dtRatio;
     if (Keyboard.a || Keyboard.arrowleft) this.focusX -= pan; if (Keyboard.d || Keyboard.arrowright) this.focusX += pan;
     if (Keyboard.w || Keyboard.arrowup) this.focusY -= pan; if (Keyboard.s || Keyboard.arrowdown) this.focusY += pan;
-    this.focusX = Math.max(0, Math.min(META.WW, this.focusX)); this.focusY = Math.max(0, Math.min(META.WH, this.focusY));
+    this.limitarVista();
     Camera.targetZoom = this.zoomT;
     Camera.follow(this.focusX, this.focusY, .35, dtRatio);
   }
