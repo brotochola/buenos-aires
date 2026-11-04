@@ -383,7 +383,7 @@ const Houses = (() => {
         for (const sx of [xm - ww / 2 - .05, xm + ww + .05]) { const t = new Tex(ww / 2, hh, spec.seed + 31, pc); for (let yy = 1; yy < t.h; yy += 2) t.shade(0, yy, t.w, yy + 1, .72); t.shade(0, 0, 1, t.h, .6);
           sc.box(sx, y0 - .06, zm, sx + ww / 2, y0, zm + hh, { front: t, right: mul(pc, .7), left: mul(pc, .8) }); } }
     }
-    for (const zb of balconies) {
+    for (const zb of spec.ct ? [] : balconies) {   // (el comercio con nombre, sin balcón: si no, tapa el cartel desde arriba)
       sc.box(0, y0 - .85, zb - .02, W, y0, zb + .14, { front: [222, 218, 208], top: [236, 232, 222], right: [190, 186, 178], left: [200, 196, 188] });
       const orn = spec.wealth > .5 && r() < .6 ? decalTex("fd_balcon_hierro", W - .1, .96, Math.max(1, Math.round((W - .1) / 2))) : null;
       const verde = R3.DECALS.fd_balcon_plantas && rng(spec.seed ^ (zb * 1000 | 0) ^ 0x6a09e667)() < .3 * PLWc() ? decalTex("fd_balcon_plantas", W - .1, .96, Math.max(1, Math.round((W - .1) / 3))) : null;

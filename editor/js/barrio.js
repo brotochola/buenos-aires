@@ -481,7 +481,10 @@ const Barrio = (() => {
       for (const o of objs) { if (o.e.spec.t !== "casa" || keep.has(o.e.id)) continue; const sp = o.e.spec; let best = null, bs = 1e9;
         // las casillas de la villa pueden tomar una de hasta dos rumbos de distancia (15°): en la villa nada está en escuadra, y los
         // pasillos van para todos lados (en el barrio real serían cientos de casillas distintas sólo por el rumbo)
+        // la que la reemplaza tiene que entrar en el lugar: ni más ancha que el lote ni más honda que la original (si no, en las
+        // esquinas en ángulo de Parque Chas la casa se come la vereda de la otra calle)
         for (const e of kept) { const q = e.spec, da = Math.min(Math.abs(q.a - sp.a), 48 - Math.abs(q.a - sp.a)); if (da > (q.k === "villa" && sp.k === "villa" ? 2 : 0)) continue;
+          if (q.W > o.place.uw + .01 || q.D > sp.D + .01) continue;
           const ed = (k) => k === "edificio" || k === "petit", sc = da * 6 + (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0) + (q.ct !== sp.ct ? 60 : 0);
           if (sc < bs) { bs = sc; best = e; } }
         if (!best || bs > 40) { keep.add(o.e.id); kept.push(o.e); continue; }
@@ -495,7 +498,7 @@ const Barrio = (() => {
         const score = (q, sp) => (q.k === sp.k ? 0 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0) + (q.ct !== sp.ct ? 60 : 0);
         for (let i = 1; i < fr.length; i++) { const a = fr[i - 1], o = fr[i]; if (a.lot.seg !== o.lot.seg || a.lot.side !== o.lot.side || a.e !== o.e) continue;
           const sp = o.e.spec, ed = (k) => k === "edificio" || k === "petit" || k === "villa"; if (ed(sp.k)) continue;
-          let best = null, bs = 1e9; for (const e of kept) { const q = e.spec; if (e === o.e || q.a !== sp.a || ed(q.k) || q.W > o.place.uw + .01) continue; const sc = score(q, sp); if (sc < bs) { bs = sc; best = e; } }
+          let best = null, bs = 1e9; for (const e of kept) { const q = e.spec; if (e === o.e || q.a !== sp.a || ed(q.k) || q.W > o.place.uw + .01 || q.D > sp.D + .01) continue; const sc = score(q, sp); if (sc < bs) { bs = sc; best = e; } }
           if (!best || bs > 20) continue;
           o.e.n--; best.n++; o.e = best; const lot = o.lot, u = o.place.u0 + (o.place.uw - best.spec.W) / 2, v = o.place.v0;
           o.x0 = lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v; o.y0 = lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v; } }
