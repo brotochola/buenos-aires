@@ -208,7 +208,7 @@ const Barrio = (() => {
       if ((lot.kind === "edificio" || lot.kind === "petit") && lot.ld < (lot.kind === "edificio" ? 14 : 11)) lot.kind = "casa2";
       if (lot.kind === "edificio" || lot.kind === "petit") {
         const ed = lot.kind === "edificio", D = ed ? (lot.ld > 20 ? 14 : 11) : 9, wq = Math.min(lot.fw, Wb(lot.fw, 2)), o = LP((lot.fw - wq) / 2, 0);
-        const p = ed ? (lot.w > .75 || lot.seg.type === "ave" ? r.pick([6, 8, 10]) : r.pick([4, 6])) : r.pick([2, 3]);
+        const p = Math.min(Math.max(1, C.pisosMax || 2), ed ? (lot.w > .75 || lot.seg.type === "ave" ? r.pick([6, 8, 10]) : r.pick([4, 6])) : r.pick([2, 3]));   // tope de pisos
         addObj("house", { t: "casa", k: lot.kind, W: wq, D, a: aIdx(lot.phi), wb: 1, v: 0, p }, lot, o[0], o[1], phiQ, { u0: 0, uw: lot.fw, v0: 0 }, rect(0, lot.fw, 0, D));
         for (let u = .2; u < lot.fw; u += .4) for (let v = -.6; v < D + 1.5; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); }
         continue;
@@ -256,6 +256,17 @@ const Barrio = (() => {
         const nearX = (dd, du = 0) => at(s, mid + du, side * (s.hw + s.sw - dd));      // con rx: no corre el sorteo de las casas
         if ((lot.kind === "negocio" || lot.kind === "negocio_casa") && r() < .6) put("pizarra_" + r.int(0, 2), ...near(.9));
         if (lot.kind === "obra" && r() < .5) put("obra_material", ...near(1.1));
+        // Barrio Coreano: carteles de pie, pizarras, tinajas de kimchi, cajones de repollo (todo con rx: no corre lo demás)
+        if (co.co != null && F.k_co_letrero) {
+          const tipo = Houses.CO[co.co % Houses.CO.length], du = () => rx.uni(-lot.fw / 3, lot.fw / 3);
+          const cosas = tipo === "restaurante" ? ["k_co_letrero", "k_co_pizarra", "k_co_luz"] : tipo === "mercado" || tipo === "almacen" ? ["k_co_banner", "k_co_onggi", "k_co_repollos", "k_co_luz"]
+            : tipo === "karaoke" ? ["k_co_luz", "k_co_letrero"] : ["k_co_luz", "k_co_banner", "k_co_pizarra"];
+          const prueba = (n, a, b) => { for (let k = 0; k < 5; k++) if (put(n, ...nearX(rx.uni(a, b), du()))) return; };
+          if (rx() < .9) prueba(rx.pick(cosas), .7, 1.1);
+          if (rx() < .5) prueba(rx.pick(cosas), s.sw - .7, s.sw - .45);
+          if (F.k_co_corona && rx() < .07) put("k_co_corona", ...nearX(.8, du()));
+          if (F.k_co_carrito && tipo !== "iglesia" && rx() < .08) put("k_co_carrito", ...nearX(s.sw - .9, du()), { face: [-s.n[0] * side, -s.n[1] * side] });
+        }
         if (r() < (lot.w < .3 ? .05 : .14)) put("canasto_" + r.int(0, 2), ...near(.45), { noClaim: true });   // pegado al frente: la casa ya reservó esa franja
         // plantas en macetas contra el frente (más en zonas ricas) y alguna Santa Rita
         if (F.pl_malvon && rx() < Math.min(.95, (.22 + .4 * lot.w) * PL)) { const n = 1 + (rx() < Math.min(.9, .4 * PL)) + (rx() < .2 * lot.w * PL) + (PL > 1.4 && rx() < .3 * (PL - 1));

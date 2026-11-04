@@ -20,7 +20,7 @@
 <body>
 <div id="hud"><b id="tit">BARRIO · CONURBANO</b> <span class="m">WeedJS</span>
   <div class="m">arrastrar / WASD: mover · rueda o pellizco: zoom · V: manejar (WASD, espacio frena)</div>
-  <button id="bV">🚗 Manejar</button><button id="bN">🌗 Hora</button><button id="bM">−</button><button id="bP">+</button><button id="bS">🔊</button><span id="st" class="m"></span>
+  <button id="bV">🚗 Manejar</button><button id="bN">🌗 Hora</button><button id="bM">−</button><button id="bP">+</button><button id="bS">🔊</button><button id="bB">🗺️</button><span id="st" class="m"></span>
   <div id="err"></div></div>
 <div id="load"><b style="color:#f2c14e">Armando el barrio…</b><div class="bar"><i id="lbar"></i></div><div class="m" id="lst">iniciando</div><div class="m" id="liso"></div></div>
 <div id="pad"><div><button data-k="a">◀</button><button data-k="d">▶</button></div><div><button data-k=" ">■</button><button data-k="s">▼</button><button data-k="w">▲</button></div></div>
@@ -28,8 +28,16 @@
   import WEED from './weed/weed.bundle.esm.min.js';
   const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search);
   if (q.has('debug')) document.body.classList.add('dbg');
-  // el barrio real dice dónde es (Bajo Flores: Av. Carabobo al 1500 y la villa 1-11-14)
-  import('./barrio/meta.js').then(({ META }) => { if (META.lugar) $('tit').textContent = 'BAJO FLORES · ' + META.lugar.toUpperCase(); }).catch(() => {});
+  // dos barrios: el inventado (barrio/) y el real (carabobo/: Av. Carabobo al 1500 y la villa 1-11-14, Bajo Flores).
+  // ?barrio=carabobo elige; si no viene, el último que se jugó. El botón 🗺️ cambia al otro.
+  const { BARRIOS } = await import('./barrios.js');
+  let guardado = null; try { guardado = localStorage.getItem('conurbano_barrio'); } catch (e) {}
+  const DIR = [q.get('barrio'), guardado, 'barrio', ...Object.keys(BARRIOS)].find(b => b && BARRIOS[b]);
+  try { localStorage.setItem('conurbano_barrio', DIR); } catch (e) {}
+  const META = BARRIOS[DIR], otro = Object.keys(BARRIOS).find(b => b !== DIR);
+  $('tit').textContent = META.lugar ? 'BAJO FLORES · ' + META.lugar.toUpperCase() : 'BARRIO · CONURBANO';
+  if (otro) { $('bB').textContent = BARRIOS[otro].lugar ? '🗺️ Carabobo y la 1-11-14' : '🗺️ Conurbano inventado';
+    $('bB').onclick = () => { const u = new URL(location.href); u.searchParams.set('barrio', otro); location.href = u.href; }; } else $('bB').hidden = true;
   // diagnóstico visible en el celu: aislamiento, progreso, tiempo y cualquier error
   const t0 = performance.now(), STAGE = { audio: 'audio', scripts: 'scripts', buffers: 'memoria compartida', adobe: 'animaciones', atlas: 'atlas de sprites', tilemaps: 'tilemaps', flowfields: 'flowfields', shaders: 'shaders', sounds: 'sonidos', workers: 'workers', world: 'barrio' };
   let stage = 'descargando el motor';
@@ -41,7 +49,7 @@
   try {
     const game = new WEED.GameEngine({ debug: q.has('debug'), autoResize: true });
     stage = 'preparando';
-    await game.loadScene(new URL('./conurbanoScene.js', import.meta.url).href, {
+    await game.loadScene(new URL('./conurbanoScene.js?barrio=' + DIR, import.meta.url).href, {
       onProgress: (done, total, st) => { $('lbar').style.width = Math.round(done / total * 100) + '%'; stage = (STAGE[st] || st) + ' (' + done + '/' + total + ')'; } });
     clearInterval(tick); $('load').hidden = true;
     const sc = () => window.__conurbano;

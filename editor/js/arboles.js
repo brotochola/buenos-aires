@@ -78,7 +78,9 @@ const Arboles = (() => {
     tipa:      [0x2a260c, 0x454010, 0x645c18, 0x8a8024, 0xb4a836, 0xdcd266].map(hex),
     otono:     [0x2e1608, 0x4e240c, 0x783812, 0xa8541c, 0xd27e2c, 0xf2b25a].map(hex),
   };
-  const BARK = [0xa07a52, 0x74553a, 0x4e3824, 0x22160c, 0x3c2a1a].map(hex);   // luz, medio, sombra, contorno, surco
+  // el contorno de cada racimo: el tono oscuro de la hoja, oscurecido un poco (no casi negro)
+  for (const k in PAL) PAL[k][0] = PAL[k][2].map(v => Math.round(v * .62));
+  const BARK = [0xa07a52, 0x74553a, 0x4e3824, 0x3a2818, 0x3c2a1a].map(hex);   // luz, medio, sombra, contorno, surco
   function render(tipo) {
     if (cache.has(tipo)) return cache.get(tipo);
     const { E, segs, racimos, n, r } = esqueleto(tipo), esp = tipo.split("_")[0], pal = PAL[esp] || PAL.fresno;

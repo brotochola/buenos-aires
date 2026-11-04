@@ -65,8 +65,13 @@ El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el
 
 ## El barrio real: Av. Carabobo al 1500 y la villa 1-11-14 (Bajo Flores)
 
-Con el parámetro `real` en 1 (es el de siempre) el editor no inventa el barrio: lo arma con los datos de OpenStreetMap
-(© colaboradores de OpenStreetMap, licencia ODbL).
+El juego tiene dos barrios: el **inventado** (carpeta `barrio/`, el de siempre) y el **real** (carpeta `carabobo/`). Se elige con
+`?barrio=carabobo` en la URL (si no, el último que se jugó) y el botón 🗺️ pasa al otro. Una sola escena sirve para los dos: `barrios.js`
+junta los `meta.json` de cada carpeta (`node herramientas/barrios.js`, después de exportar) y la escena toma el que diga su URL.
+
+En el editor, con el parámetro `real` en 1 no se inventa el barrio: se arma con los datos de OpenStreetMap (© colaboradores de
+OpenStreetMap, licencia ODbL) y el zip trae la carpeta `carabobo/`; con `real` en 0, el inventado, en `barrio/`. El atlas de cada uno
+se hornea aparte: `node herramientas/hornear_atlas.js http://localhost:8000 carabobo`.
 
 - **Qué entra:** una franja de 480 × 1080 m jugables (más 40 m de margen), girada 15,5° para que la grilla de Bajo Flores quede casi derecha en pantalla. Arriba, Av. Carabobo con Balbastro, Lautaro y Saraza (el juego arranca en Carabobo al 1500); en el medio, Av. Castañares, Bonorino y el Barrio Rivadavia I con sus pasajes peatonales; abajo, la villa 1-11-14 hasta Av. Riestra.
 - **Calles:** las de OSM, clasificadas (avenida, calle, pasaje, pasillo de villa), con su ancho, y encajadas en los 48 rumbos de los autos: cada tramo toma el rumbo más cercano y los nodos se mueven por mínimos cuadrados (en promedio 1,7 m), así las esquinas son las mismas.

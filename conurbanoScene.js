@@ -5,13 +5,17 @@
 //   casas      -> entidades estáticas con su sprite horneado + colisionador poligonal + sombra (malla)
 //   gente      -> miles de personas LPC (se ajusta sola a lo que aguante el aparato) siguiendo flowfields estáticos con costos (cruzan, no caminan por la calle)
 //   autos      -> Box2D (patrón de carScene/littleCity), IA por el flowfield de carriles; V para manejar
-// ---------- el barrio exportado por el editor (carpeta barrio/). meta.js es chico: lo importan todos los hilos.
-// META.atlas lo pone herramientas/hornear_atlas.js cuando hay atlas pre-horneado en barrio/atlas/ (si no, el juego lo arma al cargar)
-import { META } from './barrio/meta.js';
+// ---------- el barrio exportado por el editor: barrio/ (el inventado) o carabobo/ (el real: Av. Carabobo al 1500 y la villa 1-11-14).
+// barrios.js junta los meta de los dos (herramientas/barrios.js) y lo importan todos los hilos. Cuál se juega lo dice ?barrio=… en la
+// URL de esta escena (index.html la arma así); en los workers import.meta.url es esa misma URL, así todos los hilos eligen el mismo.
+// META.atlas lo pone herramientas/hornear_atlas.js cuando hay atlas pre-horneado en <carpeta>/atlas/ (si no, el juego lo arma al cargar)
+import { BARRIOS } from './barrios.js';
 // autos: modelos, colores y medidas que hornea herramientas/hornear_autos.js (img/autos/)
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
-const BARRIO = new URL('./barrio/', import.meta.url).href;
+const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'barrio'; } catch (e) { return 'barrio'; } })();
+const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
+const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
   Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, SoundManager, enums, rng, dot2 } = WEED;

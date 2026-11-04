@@ -1,6 +1,6 @@
 // ===================== contorno.js — el contorno de los personajes y los autos, para todo lo demás =====================
-// Los personajes LPC y los autos traen un anillo de 1 px muy oscuro alrededor de la silueta: luminosidad de 10 a 40 contra
-// 60 a 200 del interior, el color del material oscurecido (casi negro en los oscuros, nunca gris claro) y alfa duro.
+// Los personajes LPC y los autos traen un anillo de 1 px oscuro alrededor de la silueta, con alfa duro. Acá el anillo es del
+// color del relleno, oscurecido un poco (no negro): así se ve el verde de un árbol, el marrón de un tronco, el ladrillo.
 // El juego los muestra a 0,6 y a 1, o sea que en pantalla miden de 0,6 a 1 px de mundo.
 // Las casas (R3), los árboles y los props de Gemini se muestran a otras escalas (0,6; 0,18 a 0,36), así que un contorno de
 // 1 px de textura se pierde. Acá se pinta por fuera de la silueta con el grosor que hace falta en la textura para que en
@@ -8,8 +8,10 @@
 const Contorno = (() => {
   const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]], N8 = N4.concat([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
   const lum = (r, g, b) => .299 * r + .587 * g + .114 * b;
-  // el color del contorno: el del material, oscurecido hasta una luminosidad de 14 a 40 (como el de los LPC y los autos)
-  function oscuro(r, g, b) { const L = lum(r, g, b), T = Math.max(14, Math.min(40, L * .3)), k = L > T ? T / L : 1; return [r * k, g * k, b * k]; }
+  // el color del contorno: el mismo del relleno, oscurecido un poco y con algo más de color (verde oscuro en las hojas, marrón
+  // oscuro en un tronco, rojo oscuro en un techo de chapa), no negro
+  function oscuro(r, g, b) { const m = (r + g + b) / 3, s = 1.25, k = .52, c = (v) => Math.max(0, Math.min(255, (m + (v - m) * s) * k));
+    return [c(r), c(g), c(b)]; }
   // grosor en px de textura para algo que el juego muestra a `escala`
   const grosor = (escala) => Math.max(1, Math.ceil(1 / escala - 1e-6));
   // d: RGBA de w×h (se modifica). Pinta un anillo de t px por fuera de lo opaco (alfa ≥ 128): los pasos impares en cruz y

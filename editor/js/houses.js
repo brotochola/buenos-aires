@@ -18,6 +18,8 @@ const Houses = (() => {
   const PINTADAS = ["EL BARRIO ES NUESTRO", "NO AL AJUSTE", "VAMOS ARGENTINA", "AGUANTE EL BARRIO", "LOS PIBES DEL BARRIO", "TE AMO MARU",
     "PAN Y TRABAJO", "SE VENDE", "ALQUILO", "NO ESTACIONAR", "CUMBIA", "VOLVE NENA", "FELIZ CUMPLE MICA", "ACA NO SE RINDE NADIE"];
   let GF = 3.2, UF = 2.9; const PAR = 0.85;
+  // ninguna casa ni edificio pasa de pisosMax (2: más alto tapa la vista de la cámara)
+  const PISOS = () => Math.max(1, (typeof CFG !== "undefined" && CFG.v.pisosMax) || 2);
   // frente de local de Gemini para cada rubro
   const LOC = { PANADERIA: "panaderia", CARNICERIA: "carniceria", POLLERIA: "carniceria", FIAMBRERIA: "carniceria", VERDULERIA: "verduleria", FERRETERIA: "ferreteria",
     CERRAJERIA: "ferreteria", GOMERIA: "ferreteria", TALLER: "ferreteria", KIOSCO: "kiosco", LIBRERIA: "kiosco", FOTOCOPIAS: "kiosco", FARMACIA: "farmacia", VETERINARIA: "farmacia",
@@ -183,7 +185,7 @@ const Houses = (() => {
     const finish = kind === "obra" ? "hueco" : kind === "villa" ? (r() < .62 ? "hueco" : "stucco") : (r() < .14 ? "brick" : "stucco");
     // revestimientos de frente: piedra Mar del Plata (entera o hasta 1,2 m), o salpicré; muy de los 60 y 70 en el conurbano
     const rv2 = rng(spec.seed ^ 0x9e3779b9), revest = finish === "stucco" && kind !== "villa" && kind !== "galpon" ? (rv2() < .16 ? "piedra" : rv2() < .2 ? "zocalo_piedra" : rv2() < .14 ? "salpicre" : null) : null;
-    const storeys = { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: spec.al ? r.pick([2, 2, 3, 3, 3, 4]) : r.pick([1, 1, 1, 2, 2, 3]) }[kind];
+    const storeys = Math.min(PISOS(), { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: spec.al ? r.pick([1, 2, 2, 2]) : r.pick([1, 1, 1, 2, 2, 3]) }[kind]);
     const D = spec.D || { casa: r.pick([4.2, 5]), chalet: 4.6, negocio: 4.2, galpon: 6, casa2: 4.6, negocio_casa: 4.6, obra: 4.2, ph: 5.2, villa: 3.6 }[kind];
     const y0 = kind === "chalet" ? 2.6 : 0, zr = GF + (storeys - 1) * UF;
     let roofKind = { chalet: "tejas", galpon: "chapa", villa: "chapa" }[kind] || r.pick(["piedra", "piedra", "membrana", "ceramico", "losa", "membrana_roja"]);
@@ -441,7 +443,7 @@ const Houses = (() => {
     t.shade(x, y, x + w, y + 2, .7);
   }
   function edificio(spec, phi) {
-    const r = rng(spec.seed), W = spec.W, D = spec.D, n = spec.p || 6, GF2 = 3.4, UF2 = 2.8;
+    const r = rng(spec.seed), W = spec.W, D = spec.D, n = Math.min(PISOS(), spec.p || 6), GF2 = 3.4, UF2 = 2.8;
     const sc = new Scene(); sc.setXform(phi);
     const estilo = spec.e || r.pick(["balcones", "balcones", "ladrillo", "moderno"]);
     const wall = estilo === "ladrillo" ? [196, 120, 86] : r.pick(CLAROS), frame = r.pick([[214, 214, 210], [60, 62, 68], [150, 120, 84], [196, 196, 192]]);
@@ -536,7 +538,7 @@ const Houses = (() => {
   // ---------- petit hotel / casa de estilo (zonas ricas): fachada clásica con pilastras, buñado en planta baja,
   // ventanas altas con balconcitos, cornisa con dentículos y puerta de madera de dos hojas.
   function petit(spec, phi) {
-    const r = rng(spec.seed), W = spec.W, D = spec.D, n = spec.p || 2, GF2 = 3.8, UF2 = 3.4;
+    const r = rng(spec.seed), W = spec.W, D = spec.D, n = Math.min(PISOS(), spec.p || 2), GF2 = 3.8, UF2 = 3.4;
     const sc = new Scene(); sc.setXform(phi);
     const wall = r.pick([[226, 214, 190], [214, 206, 192], [232, 224, 206], [204, 196, 184], [222, 206, 180]]), zr = GF2 + (n - 1) * UF2, Htot = zr + 1.2;
     const zt = (z) => px(Htot - z), X = (m) => px(m);
@@ -601,7 +603,7 @@ const Houses = (() => {
     ["PANADERIA", [214, 150, 70]], ["CAFE", [92, 58, 36]], ["VERDULERIA", [40, 128, 56]], ["FERRETERIA", [34, 78, 160]], ["LIBRERIA", [36, 86, 168]]];
   function esquina(spec, phi = 0) {
     const sc = new Scene(); sc.setXform(phi); const r = rng(spec.seed);
-    const W = spec.W, D = spec.D, c = spec.c || 2.8, d = c * Math.SQRT2, storeys = spec.p || 2, zr = GF + (storeys - 1) * UF, Htot = zr + PAR;
+    const W = spec.W, D = spec.D, c = spec.c || 2.8, d = c * Math.SQRT2, storeys = Math.min(PISOS(), spec.p || 2), zr = GF + (storeys - 1) * UF, Htot = zr + PAR;
     const zt = (z) => px(Htot - z), X = (m) => px(m), wall = r.pick(WALLS), wear = (spec.wealth ?? .5) < .35 ? 1.4 : 1;
     const [name, scol] = ESQ[(spec.rub ?? spec.seed) % ESQ.length], bar = name === "BAR" || name === "CAFE";
     const ft = wallTex(W - c, Htot, wall, "stucco", spec.seed, wear), st = wallTex(D - c, Htot, wall, "stucco", spec.seed + 5, wear);
@@ -689,5 +691,5 @@ const Houses = (() => {
       sc.box(-.2, -1.3, 6.62, .2, -.85, 6.85, { front: [70, 72, 78], right: [56, 58, 62], left: [60, 62, 66], top: [96, 98, 104] }); }
     return { sc, cable: [[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]] };
   }
-  return { build, tapial, paredon, esquina, poste, WALLS, ESQ };
+  return { build, tapial, paredon, esquina, poste, WALLS, ESQ, CO };
 })();

@@ -1,5 +1,5 @@
 // ===================== exportar.js — el barrio a archivos para WeedJS =====================
-// Exporta el barrio que se ve (misma generación) en un zip con la carpeta `barrio/` que lee Conurbano-weed:
+// Exporta el barrio que se ve (misma generación) en un zip con la carpeta `barrio/` (o `carabobo/`, el barrio real) que lee Conurbano-weed:
 //   meta.json        tamaños, proyección, hojas, cuántas franjas/piezas (para dimensionar los pools)
 //   mundo.json       casas, props, árboles, autos, cables (en px de mundo de WeedJS) + catálogos de franjas y árboles
 //   piso.bin         datos del shader del piso (celdas, tabla de calles, riqueza, ruido)
@@ -233,7 +233,9 @@ const Exportar = (() => {
       ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}) };
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables, lineas })]);
     progreso("zip", .98); await espera();
-    const zip = await Zip.armar(archivos.map(([p, d]) => ["barrio/" + p, d]));
+    // el barrio inventado va a barrio/; el real (Carabobo al 1500 y la villa 1-11-14) a carabobo/: el juego tiene los dos
+    const carpeta = W.real ? "carabobo/" : "barrio/";
+    const zip = await Zip.armar(archivos.map(([p, d]) => [carpeta + p, d]));
     progreso("listo en " + Math.round((performance.now() - t0) / 1000) + " s", 1);
     return { zip, meta, archivos };
   }

@@ -570,7 +570,7 @@
   $("bExp").onclick = async () => {
     const b = $("bExp"); if (b.disabled || !lastB) return; b.disabled = true; const L = $("load"); L.style.display = "block";
     try { const r = await Exportar.exportar(lastB, atlasImg, F, (m) => { L.textContent = "exportando: " + m; });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(r.zip); a.download = "barrio_" + SEED + ".zip"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(r.zip); a.download = (window.__editor && window.__editor.barrio && window.__editor.barrio.W.real ? "carabobo" : "barrio_" + SEED) + ".zip"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       window.__export = r; L.textContent = "exportado: " + Math.round(r.zip.size / 1048576 * 10) / 10 + " MB"; setTimeout(() => L.style.display = "none", 4000); }
     catch (e) { console.error(e); L.textContent = "no se pudo exportar: " + e.message; }
     b.disabled = false; };
