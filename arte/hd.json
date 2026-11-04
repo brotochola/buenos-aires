@@ -213,6 +213,14 @@
   "gd_chicles": "gd_chicles",
   "gd_aire": "gd_aire",
   "gd_hojas": "gd_hojas",
-  "gd_rayuela": "gd_rayuela"
+  "gd_rayuela": "gd_rayuela",
+  "k_co_onggi": "hd_co_onggi",
+  "k_co_repollos": "hd_co_repollos",
+  "k_co_corona": "hd_co_corona",
+  "k_co_carrito": "hd_co_carrito",
+  "k_co_letrero": "hd_co_letrero",
+  "k_co_banner": "hd_co_banner",
+  "k_co_pizarra": "hd_co_pizarra",
+  "k_co_luz": "hd_co_luz"
  }
 }

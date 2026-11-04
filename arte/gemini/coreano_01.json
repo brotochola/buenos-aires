@@ -1,0 +1,11 @@
+{
+ "img": "coreano_01.png",
+ "bg": "magenta",
+ "ref": 1376,
+ "objs": [
+  {"name": "hd_co_letrero", "h": 1.9, "d": 0.6, "box": [45, 70, 385, 712]},
+  {"name": "hd_co_banner", "h": 1.8, "d": 0.5, "box": [430, 65, 630, 695]},
+  {"name": "hd_co_pizarra", "h": 1.1, "d": 0.6, "box": [675, 165, 1045, 688]},
+  {"name": "hd_co_luz", "h": 1.0, "d": 0.5, "box": [1070, 300, 1335, 712]}
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "img": "coreano_02.png",
+ "bg": "magenta",
+ "ref": 1376,
+ "objs": [
+  {"name": "hd_co_onggi", "h": 1.0, "d": 0.9, "box": [25, 305, 362, 698]},
+  {"name": "hd_co_repollos", "h": 1.05, "d": 0.5, "box": [380, 215, 655, 668]},
+  {"name": "hd_co_corona", "h": 1.9, "d": 0.5, "box": [680, 75, 965, 690]},
+  {"name": "hd_co_carrito", "h": 2.1, "d": 0.9, "box": [985, 90, 1355, 705]}
+ ]
+}
