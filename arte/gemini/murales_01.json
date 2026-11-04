@@ -1,0 +1,117 @@
+{
+ "img": "murales_01.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "objs": [
+  {
+   "name": "fd_mural_tango",
+   "w": 6.0,
+   "box": [
+    67,
+    53,
+    251,
+    365
+   ]
+  },
+  {
+   "name": "fd_mural_filete",
+   "w": 6.0,
+   "box": [
+    280,
+    53,
+    462,
+    365
+   ]
+  },
+  {
+   "name": "fd_mural_jacaranda",
+   "w": 6.0,
+   "box": [
+    492,
+    53,
+    673,
+    711
+   ]
+  },
+  {
+   "name": "fd_mural_lago",
+   "w": 6.0,
+   "box": [
+    703,
+    53,
+    885,
+    365
+   ]
+  },
+  {
+   "name": "fd_mural_geometrico",
+   "w": 6.0,
+   "box": [
+    915,
+    53,
+    1098,
+    365
+   ]
+  },
+  {
+   "name": "fd_mural_yaguarete",
+   "w": 6.0,
+   "box": [
+    1127,
+    53,
+    1310,
+    365
+   ]
+  },
+  {
+   "name": "fd_mural_tango_b",
+   "w": 6.0,
+   "box": [
+    67,
+    403,
+    251,
+    711
+   ]
+  },
+  {
+   "name": "fd_mural_filete_b",
+   "w": 6.0,
+   "box": [
+    280,
+    403,
+    462,
+    711
+   ]
+  },
+  {
+   "name": "fd_mural_rio",
+   "w": 6.0,
+   "box": [
+    703,
+    403,
+    885,
+    711
+   ]
+  },
+  {
+   "name": "fd_mural_geometrico_b",
+   "w": 6.0,
+   "box": [
+    915,
+    403,
+    1098,
+    711
+   ]
+  },
+  {
+   "name": "fd_mural_yaguarete_b",
+   "w": 6.0,
+   "box": [
+    1127,
+    403,
+    1310,
+    711
+   ]
+  }
+ ]
+}

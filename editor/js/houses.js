@@ -202,7 +202,12 @@ const Houses = (() => {
     if (r() < .15 && finish !== "hueco") pintada(stx, 4, stx.w - 4, px(Htot - 2.6), r);
     { const rg = rng(spec.seed ^ 0x2f6b1d3), dg = R3.DECALS.fd_graffiti, dm = R3.DECALS.fd_mural;
       if (dg && rg() < (spec.wealth < .45 ? .35 : .1)) { const w = px(Math.min(D - .4, rg.uniform(1.6, 2.6))), h = Math.round(w * dg.h / dg.w); stx.blit("fd_graffiti", px(rg.uniform(.1, Math.max(.2, D - 2.8))), stx.h - h - px(rg.uniform(.3, .8)), w, h); }
-      else if (dm && Htot > 5 && rg() < .12) { const w = px(Math.min(D - .3, rg.uniform(3, 5))), h = Math.min(px(Htot - 1), Math.round(w * dm.h / dm.w)); stx.blit("fd_mural", px(.15), stx.h - h - px(.5), w, h); } }
+      else if (dm && Htot > 5 && rg() < .12) { const w = px(Math.min(D - .3, rg.uniform(3, 5))), h = Math.min(px(Htot - 1), Math.round(w * dm.h / dm.w)); stx.blit("fd_mural", px(.15), stx.h - h - px(.5), w, h); }
+      // casas de dos pisos o más: a veces un mural de los grandes en la medianera (sorteo aparte)
+      else { const rm = rng(spec.seed ^ 0x3c6ef372), MUR = ["fd_mural_filete", "fd_mural_geometrico", "fd_mural_lago", "fd_mural_rio", "fd_mural_tango", "fd_mural_yaguarete"];
+        const n = MUR[Math.floor(rm() * MUR.length)], d2 = R3.DECALS[n];
+        if (d2 && Htot > 5.5 && D > 4 && rm() < .14) { const hm = Math.min(Htot - 1.2, 4.5), wm = Math.min(D - .6, hm * d2.w / d2.h), h2 = wm * d2.h / d2.w;
+          stx.blit(n, px((D - wm) * rm()), stx.h - px(h2 + .6), px(wm), px(h2)); } } }
     // zócalos / estructura de hormigón
     for (const t of [ft, bt]) {
       if (finish !== "hueco" && !(t === ft && revest && revest !== "salpicre")) { t.rect(0, zt(.45), t.w, t.h, [122, 118, 112]); t.rect(0, zt(.45), t.w, zt(.45) + 1, [156, 152, 146]); t.humidity(1.1); }
@@ -478,6 +483,12 @@ const Houses = (() => {
     const stx = new Tex(D, Htot, spec.seed + 3); if (r() < .3) stx.brick(); else { stx.stucco(mix(wall, [200, 196, 188], .5), wear * 1.3); stx.runoff(1.5, wear * 1.4); stx.humidity(1.2); }
     if (r() < .25) { const c = r.pick([[200, 40, 40], [40, 90, 170], [230, 190, 40]]), y = zt(zr - .5); stx.rect(px(1), y, stx.w - px(1), y + px(2.4), c); text(stx, r.pick(["ALQUILA", "VENDE", "FERNET", "COCA"]), px(1.4), y + px(.6), [250, 250, 245], true); }
     if (R3.DECALS.fd_ed_manchas && r() < .5) { const w = stx.w, h = Math.round(w * .6); stx.blit("fd_ed_manchas", 0, px(1.1), w, Math.min(h, stx.h - px(1.1)), mix(wall, [200, 196, 188], .5)); }
+    // mural en la medianera (como en tantos edificios de Buenos Aires): grande, desde abajo del borde de la terraza. Sorteo aparte
+    { const rm = rng(spec.seed ^ 0x3c6ef372), MUR = ["fd_mural_tango", "fd_mural_filete", "fd_mural_lago", "fd_mural_geometrico", "fd_mural_yaguarete", "fd_mural_tango_b",
+        "fd_mural_filete_b", "fd_mural_rio", "fd_mural_geometrico_b", "fd_mural_yaguarete_b"], alto = Htot > 14 && rm() < .3;
+      const n = alto ? "fd_mural_jacaranda" : MUR[Math.floor(rm() * MUR.length)], dm = R3.DECALS[n];
+      if (dm && Htot > 8 && D > 5 && rm() < .4) { const hm = Math.min(Htot - 3.5, (D - 1.2) * dm.h / dm.w), wm = hm * dm.w / dm.h;
+        stx.blit(n, px((D - wm) / 2), zt(Htot - 1.2), px(wm), px(hm)); } }
     const bt = new Tex(W, Htot, spec.seed + 1); bt.stucco(mix(wall, [196, 192, 186], .4), wear * 1.4); bt.runoff(1, 1.3);
     for (let k = 1; k < n; k++) { const zb = GF2 + (k - 1) * UF2; for (let xm = .6; xm + 1 < W; xm += 2.6) windowDecal(bt, X(xm), zt(zb + 2), X(1), px(1.1), r.pick(["persiana", "cerrado", "none"]), wall); }
     const ftc = (a, b) => ft.crop(zt(b), zt(a)), btc = (a, b) => bt.crop(zt(b), zt(a)), stc = (a, b) => stx.crop(zt(b), zt(a));
