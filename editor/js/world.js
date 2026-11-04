@@ -16,7 +16,7 @@ const World = (() => {
     // el mundo es el área jugable (mapW × mapH) más el margen de cada lado: ciudad del otro lado del paredón que la cierra.
     // Con "barrio real" el mapa sale de OpenStreetMap (REAL, de herramientas/osm_real.py): calles, villa, plazas y canchas
     // de verdad, con su propio tamaño
-    const C = CFG.v, RM = C.real && typeof REAL !== "undefined" ? REAL : null;
+    const C = CFG.v, RS = typeof REALES !== "undefined" ? REALES : {}, RM = C.real ? (RS[["", "carabobo", "parquechas"][C.real | 0]] || RS.carabobo || null) : null;
     const MG = RM ? RM.MG : Math.max(0, C.margen || 0), MW = RM ? RM.MW : C.mapW + 2 * MG, MH = RM ? RM.MH : C.mapH + 2 * MG, r = rng(seed);
     const dentro = (x, y) => x >= MG && y >= MG && x <= MW - MG && y <= MH - MG;
     // ---------- riqueza (0 = pobre, 1 = acomodado)
@@ -370,6 +370,10 @@ const World = (() => {
       if (villa) kind = r() < .07 * Math.min(1, C.baldios) ? "baldio" : "villa";
       else if (RM && /Carabobo/.test(s.nombre || "")) kind = pickW(r, [["negocio", 45], ["negocio_casa", 30], ["casa2", 8], ["edificio", 14 * (C.edificios ?? 1)], ["ph", 4]]);   // Barrio Coreano: casi todo locales
       else if (RM && zona(o[0] + nOut[0] * 3, o[1] + nOut[1] * 3) === 2) kind = pickW(r, [["chalet", 4], ["casa", 3], ["casa2", 2.5], ["negocio_casa", nearEnd ? 1 : .2]]);   // complejo (Rivadavia I: casitas con jardín)
+      // un barrio real con su propio estilo (Parque Chas: casas bajas, PH y chalets; casi sin comercio adentro): pesos por
+      // tipo, en avenida o no; los locales pesan más en las esquinas (×3)
+      else if (RM && RM.estilo && RM.estilo.casas) { const L = s.type === "ave" && RM.estilo.casasAvenida ? RM.estilo.casasAvenida : RM.estilo.casas;
+        kind = pickW(r, L.map(([k, p]) => [k, p * (nearEnd && (k === "negocio" || k === "negocio_casa") ? 3 : 1) * (k === "baldio" ? C.baldios : 1) * (k === "edificio" || k === "petit" ? (C.edificios ?? 1) : 1)])); }
       else if (s.type === "ave") kind = pickW(r, [["negocio", 30], ["negocio_casa", 30], ["ph", 14], ["galpon", 7], ["casa2", 10], ["casa", 6], ["baldio", 3 * C.baldios], ["edificio", 22 * (C.edificios ?? 1) * (.3 + w)]]);
       else if (w < .3) kind = pickW(r, [["casa", 26], ["obra", 24], ["villa", 14], ["casa2", 8], ["negocio", nearEnd ? 18 : 6], ["galpon", 4], ["baldio", 15 * C.baldios]]);
       else if (w < .55) kind = pickW(r, [["casa", 34], ["casa2", 20], ["obra", 10], ["negocio", nearEnd ? 20 : 8], ["negocio_casa", nearEnd ? 14 : 6], ["chalet", 5], ["galpon", 3], ["baldio", 7 * C.baldios]]);
@@ -419,7 +423,8 @@ const World = (() => {
       }
     }
     const lotAt = (x, y) => { const gx = (x * LR) | 0, gy = (y * LR) | 0; if (gx < 0 || gy < 0 || gx >= LW || gy >= LH) return null; const i = lotGrid[gy * LW + gx]; return i >= 0 ? lots[i] : null; };
-    return { MW, MH, MG, dentro, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt, zona, real: RM ? RM.nombre : null, inicio: RM ? RM.inicio : null };
+    return { MW, MH, MG, dentro, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt, zona, real: RM ? RM.nombre : null, carpeta: RM ? (RM.carpeta || "carabobo") : "barrio", estilo: (RM && RM.estilo) || {}, inicio: RM ? RM.inicio : null,
+      arbolesReales: RM && RM.arboles ? { especies: RM.especies, lista: RM.arboles } : null };
   }
 
   // ---------- red de calles como grafo, con las reglas de Buenos Aires y el conurbano:
@@ -584,7 +589,9 @@ const World = (() => {
     for (const v of RM.villas) if (!v.contorno) fill(v.p, 1);
     const zona = (x, y) => { const gx = x | 0, gy = y | 0; return gx < 0 || gy < 0 || gx >= MW || gy >= MH ? 0 : Z[gy * MW + gx]; };
     // Bajo Flores: barrio de trabajadores (casas, PH, comercios); la villa, pobre; los complejos (Rivadavia I), en el medio
+    const E = RM.estilo || {};
     const wealthAt = (x, y) => { const gx = Math.max(0, Math.min(WG - 1, (x / 10) | 0)), gy = Math.max(0, Math.min(HG - 1, (y / 10) | 0)), k = gy * WG + gx, z = zona(x, y);
+      if (E.riqueza != null && !z) return Math.max(.2, Math.min(.9, E.riqueza + (n1[k] - .5) * .25 + (n2[k] - .5) * .1));   // un barrio parejo (Parque Chas: clase media)
       if (z === 1) return Math.max(0, Math.min(.2, .08 + (n2[k] - .5) * .2));
       if (z === 2) return .32 + (n2[k] - .5) * .1;
       return Math.max(.3, Math.min(.68, .47 + (n1[k] - .5) * .3 + (n2[k] - .5) * .12)); };

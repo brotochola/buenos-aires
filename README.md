@@ -77,13 +77,14 @@ El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el
 
 ## El barrio real: Av. Carabobo al 1500 y la villa 1-11-14 (Bajo Flores)
 
-El juego tiene dos barrios: el **inventado** (carpeta `barrio/`, el de siempre) y el **real** (carpeta `carabobo/`). Se elige con
-`?barrio=carabobo` en la URL (si no, el último que se jugó) y el botón 🗺️ pasa al otro. Una sola escena sirve para los dos: `barrios.js`
-junta los `meta.json` de cada carpeta (`node herramientas/barrios.js`, después de exportar) y la escena toma el que diga su URL.
+El juego tiene tres barrios: el **inventado** (carpeta `barrio/`, el de siempre) y dos **reales**, Carabobo (`carabobo/`) y Parque
+Chas (`parquechas/`). Se elige con `?barrio=carabobo` o `?barrio=parquechas` en la URL (si no, el último que se jugó) y el botón 🗺️
+pasa al siguiente. Una sola escena sirve para todos: `barrios.js` junta los `meta.json` de cada carpeta (`node herramientas/barrios.js`,
+después de exportar) y la escena toma el que diga su URL.
 
-En el editor, con el parámetro `real` en 1 no se inventa el barrio: se arma con los datos de OpenStreetMap (© colaboradores de
-OpenStreetMap, licencia ODbL) y el zip trae la carpeta `carabobo/`; con `real` en 0, el inventado, en `barrio/`. El atlas de cada uno
-se hornea aparte: `node herramientas/hornear_atlas.js http://localhost:8000 carabobo`.
+En el editor, con el parámetro `real` en 1 o 2 no se inventa el barrio: se arma con datos de verdad y el zip trae la carpeta
+`carabobo/` o `parquechas/`; con `real` en 0, el inventado, en `barrio/`. El atlas de cada uno se hornea aparte:
+`node herramientas/hornear_atlas.js http://localhost:8000 parquechas`.
 
 - **Qué entra:** una franja de 480 × 1080 m jugables (más 40 m de margen), girada 15,5° para que la grilla de Bajo Flores quede casi derecha en pantalla. Arriba, Av. Carabobo con Balbastro, Lautaro y Saraza (el juego arranca en Carabobo al 1500); en el medio, Av. Castañares, Bonorino y el Barrio Rivadavia I con sus pasajes peatonales; abajo, la villa 1-11-14 hasta Av. Riestra.
 - **Calles:** las de OSM, clasificadas (avenida, calle, pasaje, pasillo de villa), con su ancho, y encajadas en los 48 rumbos de los autos: cada tramo toma el rumbo más cercano y los nodos se mueven por mínimos cuadrados (en promedio 1,7 m), así las esquinas son las mismas.
@@ -91,6 +92,30 @@ se hornea aparte: `node herramientas/hornear_atlas.js http://localhost:8000 cara
 - **Barrio Coreano:** los locales sobre Carabobo tienen frente coreano (supermercado, restaurante, ropa, peluquería, panadería, iglesia, karaoke, almacén; Gemini, `arte/gemini/locales_02`).
 - **Plazas y canchas** de OSM: las plazas con sus senderos, las canchas con arcos y líneas pintadas.
 - **Rehacerlo:** `editor/recursos/osm_carabobo.json` son los datos bajados de la API de OSM (calles, usos del suelo, edificios, comercios, en metros); `python3 herramientas/osm_real.py --png vista.png` escribe `editor/recursos/real_carabobo.js` (ventana, giro y tamaño arriba del archivo). Después, exportar desde el editor como siempre.
+
+## El barrio real: Parque Chas, el laberinto
+
+El barrio de Frehner y Guerrico (1925): calles en anillos alrededor de la esquina de seis (Av. Victorica, Ávalos y Gándara), con
+nombres de ciudades europeas (Berlín, Ginebra, La Haya, Londres, Cádiz…), y cuadrícula hacia La Pampa, Triunvirato y Av. de los Incas.
+
+- **Qué entra:** 760 × 760 m jugables (más 40 m de margen) con centro a 300 m de la esquina de seis: los anillos enteros, las dos
+  plazoletas de adentro (Éxodo Jujeño y Cap. Domingo F. Sarmiento), Av. Victorica de punta a punta, un tramo de Av. de los Incas y de
+  La Pampa. El juego arranca en la esquina de seis. Girado 28,5°: es el giro con el que más calles caen en los rumbos de los autos.
+- **Calles y plazoletas:** del callejero de la Ciudad (red vial, una línea por cuadra con nombre, tipo y jerarquía). Las curvas se
+  encajan en los 48 rumbos como las rectas (los nodos se mueven 5 m en promedio, 20 m como mucho en los anillos). Las plazoletas son
+  la manzana que encierra a los árboles de cada espacio verde del censo.
+- **Árboles de vereda:** uno por uno, del censo de arbolado público lineal de la Ciudad (2017-2018), con su especie: fresnos (casi la
+  mitad), plátanos, ficus, paraísos, tilos, crespones, jacarandás, liquidámbares, tipas y algún palo borracho. Se corren con las calles
+  al encajarlas y se plantan sobre el cordón del tramo más cercano. Tilo, crespón y ficus son especies nuevas (sólo salen donde el
+  barrio las pide).
+- **Casas:** bajas, de los años 30 a 60: casas de una y dos plantas y PH, algún chalet y casi sin comercio adentro (los locales van
+  sobre las avenidas). Un 28 % de las casas tiene techo de tejas (`estilo.tejas`); las tejas son un material compartido del horneado
+  con skew, como los techos planos y la chapa.
+- **Rehacerlo:** los datos salen del portal data.buenosaires.gob.ar (red vial, arbolado público lineal y arbolado en espacios verdes;
+  no se guardan acá, pesan 100 MB). `python3 herramientas/gcba_osm.py --barrio parquechas --red red-vial-CABA.geojson
+  --arbolado arbolado_lineal.csv --verdes arbolado_verdes.csv` escribe `editor/recursos/osm_parquechas.json` en el formato de OSM;
+  `python3 herramientas/osm_real.py --barrio parquechas --png vista.png` escribe `editor/recursos/real_parquechas.js`. El estilo del
+  barrio (tipos de casa, riqueza, árboles de plaza, tejas, variedad) está en `BARRIOS` de `osm_real.py`.
 
 ## Cómo se arma la ciudad (editor/js/world.js)
 
@@ -137,6 +162,8 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 
 ## Créditos
 
-- Mapa del barrio real: © colaboradores de OpenStreetMap (https://www.openstreetmap.org/copyright), licencia ODbL.
+- Mapa de Carabobo: © colaboradores de OpenStreetMap (https://www.openstreetmap.org/copyright), licencia ODbL.
+- Parque Chas: callejero (red vial), arbolado público lineal y arbolado en espacios verdes del Gobierno de la Ciudad de Buenos Aires
+  (https://data.buenosaires.gob.ar), licencia CC BY 2.5 AR.
 
 - Autos: «TopDown Vehicles» v1.17 de MinZiin (https://minzinn.itch.io/), licencia Creative Commons Atribución 4.0.

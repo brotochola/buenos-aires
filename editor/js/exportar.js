@@ -308,7 +308,7 @@ const Exportar = (() => {
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, ...(SKEW ? { variantes } : {}), arboles, arbolTipos, props, autos, cables, lineas, cruces })]);
     progreso("zip", .98); await espera();
     // el barrio inventado va a barrio/; el real (Carabobo al 1500 y la villa 1-11-14) a carabobo/: el juego tiene los dos
-    const carpeta = W.real ? "carabobo/" : "barrio/";
+    const carpeta = (W.carpeta || (W.real ? "carabobo" : "barrio")) + "/";
     const zip = await Zip.armar(archivos.map(([p, d]) => [carpeta + p, d]));
     progreso("listo en " + Math.round((performance.now() - t0) / 1000) + " s", 1);
     return { zip, meta, archivos };

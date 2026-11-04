@@ -14,6 +14,11 @@ const Arboles = (() => {
     jacaranda: { hojas: [[196, 150, 236], [150, 104, 210], [96, 62, 150]], alto: [4.0, 5.3], copa: 1.2, ramas: [3, 4], abre: .85, hoja: 1, rico: .6, flor: true },
     tipa:      { hojas: [[214, 196, 86], [168, 158, 58], [104, 104, 40]], alto: [4.3, 5.9], copa: 1.25, ramas: [3, 5], abre: .8, hoja: .9, rico: .55 },
     otono:     { hojas: [[244, 176, 70], [214, 124, 40], [146, 72, 30]], alto: [3.7, 5.3], copa: 1.1, ramas: [3, 4], abre: .66, hoja: 1, rico: .4 },
+    // propias de un barrio (sólo salen si el barrio las pide: Parque Chas). Tilo: copa redonda y tupida, verde oscuro;
+    // crespón: arbolito de vereda angosta, flores rosas; ficus: copa densa y lustrosa, verde muy oscuro
+    tilo:      { hojas: [[150, 186, 78], [84, 134, 52], [40, 82, 36]], alto: [4.2, 5.6], copa: 1.3, ramas: [4, 5], abre: .55, hoja: 1.15, rico: .6, propia: true },
+    crespon:   { hojas: [[244, 170, 206], [212, 112, 168], [148, 64, 112]], alto: [2.8, 3.8], copa: .9, ramas: [3, 4], abre: .8, hoja: .85, rico: .5, flor: true, propia: true },
+    ficus:     { hojas: [[96, 150, 74], [52, 108, 50], [24, 64, 32]], alto: [3.8, 5.0], copa: 1.35, ramas: [4, 5], abre: .6, hoja: 1.2, rico: .5, propia: true },
   };
   const VARIANTES = 3;
   const TIPOS = Object.keys(ESPECIES).flatMap(e => Array.from({ length: VARIANTES }, (_, v) => e + "_" + v));
@@ -21,9 +26,12 @@ const Arboles = (() => {
   const OUT = [24, 30, 18];
   const cache = new Map();
 
-  // elegir un tipo: en las zonas ricas más plátanos y jacarandás, en las pobres más paraísos y fresnos
-  function pick(r, riqueza = .5) {
-    const ks = Object.keys(ESPECIES); let tot = 0; const w = ks.map(k => { const q = 1 - Math.abs(ESPECIES[k].rico - riqueza) * 1.2; tot += Math.max(.08, q); return Math.max(.08, q); });
+  // elegir un tipo: en las zonas ricas más plátanos y jacarandás, en las pobres más paraísos y fresnos. pesos (opcional,
+  // de un barrio real): {especie: peso}, en vez de la riqueza; sin pesos no salen las especies propias de un barrio
+  function pick(r, riqueza = .5, pesos = null) {
+    if (pesos) { const ks = Object.keys(pesos).filter(k => ESPECIES[k]); let t = r() * ks.reduce((a, k) => a + pesos[k], 0), e = ks[0];
+      for (const k of ks) { t -= pesos[k]; if (t <= 0) { e = k; break; } } return e + "_" + r.int(0, VARIANTES - 1); }
+    const ks = Object.keys(ESPECIES).filter(k => !ESPECIES[k].propia); let tot = 0; const w = ks.map(k => { const q = 1 - Math.abs(ESPECIES[k].rico - riqueza) * 1.2; tot += Math.max(.08, q); return Math.max(.08, q); });
     let t = r() * tot, e = ks[0]; for (let i = 0; i < ks.length; i++) { t -= w[i]; if (t <= 0) { e = ks[i]; break; } }
     return e + "_" + r.int(0, VARIANTES - 1);
   }
@@ -77,6 +85,9 @@ const Arboles = (() => {
     jacaranda: [0x24163c, 0x3a2662, 0x553a8c, 0x7656b4, 0x9c7ed8, 0xcab2f2].map(hex),
     tipa:      [0x2a260c, 0x454010, 0x645c18, 0x8a8024, 0xb4a836, 0xdcd266].map(hex),
     otono:     [0x2e1608, 0x4e240c, 0x783812, 0xa8541c, 0xd27e2c, 0xf2b25a].map(hex),
+    tilo:      [0x13240c, 0x1f3a12, 0x2f561a, 0x467a24, 0x689e34, 0x9cc85a].map(hex),
+    crespon:   [0x3a1428, 0x5c1e3e, 0x86305a, 0xb44c80, 0xdc7aa8, 0xf6b6d2].map(hex),
+    ficus:     [0x0c1a0a, 0x16300f, 0x234a17, 0x346820, 0x4e8a2c, 0x78b048].map(hex),
   };
   // el contorno de cada racimo: el tono oscuro de la hoja, oscurecido un poco (no casi negro)
   for (const k in PAL) PAL[k][0] = PAL[k][2].map(v => Math.round(v * .62));

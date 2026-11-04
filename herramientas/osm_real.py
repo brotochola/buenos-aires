@@ -10,21 +10,38 @@ barrio de verdad en vez de las grillas inventadas:
     el rumbo más cercano y después se mueven los nodos por mínimos cuadrados, así las esquinas siguen siendo las mismas;
   - la villa 1-11-14 (sus manzanas), los complejos de vivienda, plazas, canchas, escuelas, industrias y comercios.
 
-Uso: python3 herramientas/osm_real.py [--png vista.png]
+Uso: python3 herramientas/osm_real.py [--barrio carabobo|parquechas] [--png vista.png]
 """
 import json, math, sys
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import lsqr
 
-SRC = "editor/recursos/osm_carabobo.json"
-OUT = "editor/recursos/real_carabobo.js"
-NOMBRE = "Carabobo al 1500 y la villa 1-11-14"
-# ventana: centro en metros del origen de osm_carabobo.json (x al este, y al norte), giro y tamaño jugable
-CEN = (-304.0, 48.0)
-ROT_APROX = -16.0          # se afina solo (±3°) para que las calles caigan lo más cerca posible de los rumbos
-PW, PH, MG = 480, 1080, 40
-INICIO = (-34.6411515, -58.4462075)   # Av. Carabobo 1500 (Nominatim): ahí arranca el juego
+# cada barrio real: de dónde salen los datos, a dónde van, la ventana (centro en metros del origen del JSON, x al este,
+# y al norte), el giro aproximado (se afina solo ±3°), el tamaño jugable, dónde arranca el juego y su estilo (lo que el
+# editor hace distinto: tipos de casa por calle o avenida, riqueza, árboles de vereda, variedad del catálogo)
+BARRIOS = {
+    "carabobo": dict(SRC="editor/recursos/osm_carabobo.json", OUT="editor/recursos/real_carabobo.js", NOMBRE="Carabobo al 1500 y la villa 1-11-14",
+                     CEN=(-304.0, 48.0), ROT=-16.0, PW=480, PH=1080, MG=40, INICIO=(-34.6411515, -58.4462075), ESTILO=None),
+    # Parque Chas (1925, Frehner y Guerrico): calles en anillos alrededor de la esquina de seis (Victorica, Ávalos, Gándara),
+    # cuadrícula hacia las avenidas. Casas bajas de los años 30 a 60, PH y dúplex, alguna con tejas, lotes cortos; casi sin
+    # comercio adentro; veredas angostas con árboles grandes. Las calles y las plazoletas salen del callejero de la Ciudad y
+    # los árboles de vereda, uno por uno, del censo de arbolado (herramientas/gcba_osm.py): fresnos (casi la mitad),
+    # plátanos, ficus, paraísos, tilos, crespones, jacarandás. "arboles" queda para las plazas
+    "parquechas": dict(SRC="editor/recursos/osm_parquechas.json", OUT="editor/recursos/real_parquechas.js", NOMBRE="Parque Chas",
+                       CEN=(-70.0, 320.0), ROT=None, PW=760, PH=760, MG=40, INICIO=(-34.58262, -58.47912),
+                       ESTILO={"riqueza": .58, "variedad": 1.4, "tejas": .28,
+                               "casas": [["casa", 30], ["casa2", 26], ["ph", 24], ["chalet", 8], ["negocio_casa", 1.2], ["negocio", .8], ["obra", 2], ["baldio", 1], ["edificio", .4]],
+                               "casasAvenida": [["negocio", 26], ["negocio_casa", 24], ["casa2", 16], ["ph", 14], ["edificio", 12], ["casa", 8], ["galpon", 2]],
+                               "arboles": {"fresno": 30, "tilo": 16, "platano": 12, "ficus": 10, "paraiso": 10, "jacaranda": 10, "crespon": 10, "tipa": 4}}),
+}
+_b = sys.argv[sys.argv.index("--barrio") + 1] if "--barrio" in sys.argv else "carabobo"
+CFG_B = BARRIOS[_b]
+SRC, OUT, NOMBRE = CFG_B["SRC"], CFG_B["OUT"], CFG_B["NOMBRE"]
+CEN = CFG_B["CEN"]
+ROT_APROX = float(sys.argv[sys.argv.index("--rot") + 1]) if "--rot" in sys.argv else CFG_B["ROT"]   # se afina solo (±3°) para que las calles caigan lo más cerca posible de los rumbos; None: se busca entero
+PW, PH, MG = CFG_B["PW"], CFG_B["PH"], CFG_B["MG"]
+INICIO = CFG_B["INICIO"]
 MW, MH = PW + 2 * MG, PH + 2 * MG
 K, SYN = .16, .5           # proyección oblicua del juego (R3.K, R3.SYN)
 
@@ -127,9 +144,10 @@ def main():
                 if L < 8: continue
                 tot += L * ang_err(math.atan2(s * dx + c * dy, c * dx - s * dy)) ** 2
         return tot
-    ROT = min((ROT_APROX + d / 8 for d in range(-24, 25)), key=costo)
+    rot0 = ROT_APROX if ROT_APROX is not None else min(range(-45, 46), key=costo)   # sin giro dado: el mejor grado entre -45 y 45
+    ROT = min((rot0 + d / 8 for d in range(-24, 25)), key=costo)
     cr, sr = math.cos(math.radians(ROT)), math.sin(math.radians(ROT))
-    print("giro", ROT, "costo", round(costo(ROT)), "(sin afinar", round(costo(ROT_APROX)), ")")
+    print("giro", ROT, "costo", round(costo(ROT)), "(sin afinar", round(costo(rot0)), ")")
 
     def T(p):
         x, y = p[0] - CEN[0], p[1] - CEN[1]
@@ -466,6 +484,20 @@ def main():
         segs.append((A_, B_, pr))
     print("tramos finales", len(segs))
 
+    # lo que está entre las calles (plazas, árboles de vereda) se corre con ellas: el corrimiento de los vértices más cercanos
+    # (encaje de arriba), pesado por la distancia. En las curvas de Parque Chas las calles se mueven hasta 20 m
+    from scipy.spatial import cKDTree
+    usados = sorted({k for a, b, _ in S for k in (a, b)} & set(orig))
+    O_ = np.array([orig[k] for k in usados]); D_ = np.array([verts[k] for k in usados]) - O_
+    arbol_v = cKDTree(O_)
+
+    def mover(q):
+        d, i = arbol_v.query(q, k=min(6, len(usados)))
+        w = 1 / (np.asarray(d) ** 2 + 25)
+        m = (D_[np.atleast_1d(i)] * np.atleast_1d(w)[:, None]).sum(0) / np.atleast_1d(w).sum()
+        return (q[0] + float(m[0]), q[1] + float(m[1]))
+    for p_ in parques: p_["p"] = [mover(q) for q in p_["p"]]
+
     # ------------------------------------------------ edificios altos y comercios (para más adelante)
     edificios = []
     for w in j["ways"]:
@@ -487,6 +519,18 @@ def main():
         if not en_mundo(q): continue
         pois.append({"x": round(q[0], 1), "y": round(q[1], 1), "k": t.get("shop") or t.get("amenity"), "n": t.get("name", "")})
 
+    # árboles de vereda de un censo (gcba_osm.py: natural=tree con la especie del juego y la altura): cada uno donde está
+    especies, arboles = [], []
+    for nd in j["nodes"]:
+        t = nd["t"]
+        if t.get("natural") != "tree" or not t.get("especie"): continue
+        q = T(nd["x"])
+        if not en_mundo(q, 30): continue
+        q = mover(q)
+        if not en_mundo(q, -1): continue
+        if t["especie"] not in especies: especies.append(t["especie"])
+        arboles.append([round(q[0], 1), round(q[1], 1), especies.index(t["especie"]), int(t.get("altura") or 0)])
+
     # ------------------------------------------------ salida
     R = lambda v: round(v, 1)
     simp = dp_ring
@@ -497,7 +541,7 @@ def main():
     NI = {n: i for i, n in enumerate(nombres)}
     TIP = {"ave": 0, "calle": 1, "pasaje": 2, "pasillo": 3}
     out = {
-        "nombre": NOMBRE, "rot": ROT, "cen": CEN, "PW": PW, "PH": PH, "MG": MG, "MW": MW, "MH": MH,
+        "nombre": NOMBRE, "carpeta": _b, **({"estilo": CFG_B["ESTILO"]} if CFG_B["ESTILO"] else {}), "rot": ROT, "cen": CEN, "PW": PW, "PH": PH, "MG": MG, "MW": MW, "MH": MH,
         "nombres": nombres,
         "inicio": [R(v) for v in T(((INICIO[1] - j["origen"][1]) * 111320 * math.cos(math.radians(j["origen"][0])), (INICIO[0] - j["origen"][0]) * 110950))],
         # tramo: [ax, ay, bx, by, tipo (0 ave, 1 calle, 2 pasaje, 3 pasillo), nombre (-1 sin), medio ancho de calzada, medio cantero, banderas (1 tierra, 2 ancha, 4 bulevar)]
@@ -513,11 +557,12 @@ def main():
         "industrias": [{"p": RP(dp_ring(c["p"], .5))} for c in industrias],
         "edificios": [{"t": e["t"], "lv": e["lv"], "p": RP(e["p"])} for e in edificios],
         "pois": pois,
+        **({"especies": especies, "arboles": arboles} if arboles else {}),
     }
     with open(OUT, "w") as f:
-        f.write("// generado por herramientas/osm_real.py con datos de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL)\n")
-        f.write("// " + NOMBRE + "\nconst REAL = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
-    print(OUT, "segs", len(out["segs"]), "nombres", len(nombres), "pois", len(pois), "edificios", len(edificios))
+        f.write("// generado por herramientas/osm_real.py con datos de " + (j.get("fuente") or "OpenStreetMap (© colaboradores de OpenStreetMap, ODbL)") + "\n")
+        f.write("// " + NOMBRE + "\n(window.REALES = window.REALES || {})." + _b + " = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
+    print(OUT, "segs", len(out["segs"]), "nombres", len(nombres), "pois", len(pois), "edificios", len(edificios), "árboles", len(arboles))
 
     if "--png" in sys.argv:
         from PIL import Image, ImageDraw
@@ -535,6 +580,7 @@ def main():
         for s in out["segs"]:
             d.line([P((s[0], s[1])), P((s[2], s[3]))], fill=colr[s[4]], width=max(1, int(s[6] * 2 * sc * .7)))
         d.rectangle([P((MG, MH - MG)), P((MW - MG, MG))], outline=(0, 0, 0), width=2)
+        for a_ in out.get("arboles", []): d.ellipse([P((a_[0] - .8, a_[1] + .8)), P((a_[0] + .8, a_[1] - .8))], fill=(40, 140, 40))
         for s in out["segs"]:
             if s[5] >= 0 and math.hypot(s[2] - s[0], s[3] - s[1]) > 60:
                 d.text(P(((s[0] + s[2]) / 2, (s[1] + s[3]) / 2)), nombres[s[5]][:22], fill=(0, 0, 160))

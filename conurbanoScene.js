@@ -5,7 +5,7 @@
 //   casas      -> entidades estáticas con su sprite horneado + colisionador poligonal + sombra (malla)
 //   gente      -> miles de personas LPC (se ajusta sola a lo que aguante el aparato) siguiendo flowfields estáticos con costos (cruzan, no caminan por la calle)
 //   autos      -> Box2D (patrón de carScene/littleCity), IA por el flowfield de carriles; V para manejar
-// ---------- el barrio exportado por el editor: barrio/ (el inventado) o carabobo/ (el real: Av. Carabobo al 1500 y la villa 1-11-14).
+// ---------- el barrio exportado por el editor: barrio/ (el inventado), carabobo/ (Av. Carabobo al 1500 y la villa 1-11-14) o parquechas/ (Parque Chas).
 // barrios.js junta los meta de los dos (herramientas/barrios.js) y lo importan todos los hilos. Cuál se juega lo dice ?barrio=… en la
 // URL de esta escena (index.html la arma así); en los workers import.meta.url es esa misma URL, así todos los hilos eligen el mismo.
 // META.atlas lo pone herramientas/hornear_atlas.js cuando hay atlas pre-horneado en <carpeta>/atlas/ (si no, el juego lo arma al cargar)

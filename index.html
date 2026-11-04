@@ -35,9 +35,10 @@
   let guardado = null; try { guardado = localStorage.getItem('conurbano_barrio'); } catch (e) {}
   const DIR = [q.get('barrio'), guardado, 'barrio', ...Object.keys(BARRIOS)].find(b => b && BARRIOS[b]);
   try { localStorage.setItem('conurbano_barrio', DIR); } catch (e) {}
-  const META = BARRIOS[DIR], otro = Object.keys(BARRIOS).find(b => b !== DIR);
-  $('tit').textContent = META.lugar ? 'BAJO FLORES · ' + META.lugar.toUpperCase() : 'BARRIO · CONURBANO';
-  if (otro) { $('bB').textContent = BARRIOS[otro].lugar ? '🗺️ Carabobo y la 1-11-14' : '🗺️ Conurbano inventado';
+  const META = BARRIOS[DIR], KS = Object.keys(BARRIOS), otro = KS.length > 1 ? KS[(KS.indexOf(DIR) + 1) % KS.length] : null;
+  const NOMBRE = { barrio: 'Conurbano inventado', carabobo: 'Carabobo y la 1-11-14', parquechas: 'Parque Chas' };
+  $('tit').textContent = DIR === 'parquechas' ? 'PARQUE CHAS · EL LABERINTO' : META.lugar ? 'BAJO FLORES · ' + META.lugar.toUpperCase() : 'BARRIO · CONURBANO';
+  if (otro) { $('bB').textContent = '🗺️ ' + (NOMBRE[otro] || BARRIOS[otro].lugar || otro);
     $('bB').onclick = () => { const u = new URL(location.href); u.searchParams.set('barrio', otro); location.href = u.href; }; } else $('bB').hidden = true;
   // diagnóstico visible en el celu: aislamiento, progreso, tiempo y cualquier error
   const t0 = performance.now(), STAGE = { audio: 'audio', scripts: 'scripts', buffers: 'memoria compartida', adobe: 'animaciones', atlas: 'atlas de sprites', tilemaps: 'tilemaps', flowfields: 'flowfields', shaders: 'shaders', sounds: 'sonidos', workers: 'workers', world: 'barrio' };

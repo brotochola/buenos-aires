@@ -57,7 +57,7 @@ const Barrio = (() => {
     // posición, no del sorteo, así el resto del barrio no cambia. Devuelve true siempre (va dentro de la condición de arriba)
     function calTronco(a, s) { const h = Math.abs(Math.imul(Math.round(a.x * 7), 0x27d4eb2d) ^ Math.imul(Math.round(a.y * 7), 0x165667b1)) % 1000 / 1000;
       if (h < (s.w < .5 ? .55 : .3)) a.t += "_c"; return true; }
-    function arbol(x, y, flip) { const t = Arboles.pick(r, W.wealthAt(x, y)); if (!claim(x, y, .4)) return null; const a = { t, x, y, flip: !!flip, cr: .28 }; arboles.push(a); return a; }
+    function arbol(x, y, flip, tipo) { const t = tipo || Arboles.pick(r, W.wealthAt(x, y), W.estilo && W.estilo.arboles); if (!claim(x, y, .4)) return null; const a = { t, x, y, flip: !!flip, cr: .28 }; arboles.push(a); return a; }
     const person = (x, y, stay) => { if (conGente && W.dentro(x, y)) people.push({ x, y, stay: !!stay }); };   // afuera del paredón no hay gente
     const at = (s, t, off) => [s.a[0] + s.dir[0] * t + s.n[0] * off, s.a[1] + s.dir[1] * t + s.n[1] * off];
 
@@ -221,6 +221,8 @@ const Barrio = (() => {
       // Barrio Coreano: los locales sobre Av. Carabobo tienen frente coreano (cartel en hangul)
       const co = (lot.kind === "negocio" || lot.kind === "negocio_casa") && lot.seg && /Carabobo/.test(lot.seg.nombre || "") ? { co: lot.seed % 8 }
         : lot.kind === "villa" && W.real && W.villaAt(lot.o[0], lot.o[1]) ? { al: 1 } : {};   // la 1-11-14: casillas de ladrillo de 2 a 4 pisos
+      // techo de tejas en las casas de un barrio que las pide (estilo.tejas: la parte de las casas que las tiene); sale del lote
+      if (W.estilo && W.estilo.tejas && (lot.kind === "casa" || lot.kind === "casa2") && (lot.seed % 1000) / 1000 < W.estilo.tejas) co.tj = 1;
       addObj("house", { t: "casa", k: lot.kind, W: wq, D, a: aIdx(lot.phi), wb, v: 0, ...co }, lot, o[0], o[1], phiQ, { u0: 0, uw: lot.fw, v0: 0 }, rect(0, lot.fw, 0, depthTot));
       const occRect = (u0, u1, v0, v1) => { for (let u = u0; u < u1; u += .4) for (let v = v0; v < v1; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); } };
       occRect(.2, lot.fw, -.6, depthTot + 1.5);
@@ -295,18 +297,34 @@ const Barrio = (() => {
       }
     }
     // ---- veredas: árboles, gente, faroles, postes con cables
+    // un barrio real con censo de arbolado (Parque Chas, GCBA 2017-2018): cada árbol de vereda donde está y de su especie, en
+    // la vereda del tramo más cercano, sobre el cordón. Las calles se corrieron al encajarlas en los rumbos y los árboles con
+    // ellas (osm_real.py); queda menos de un par de metros, que se absorbe acá
+    const reales = new Map();
+    if (W.arbolesReales) { const { especies, lista } = W.arbolesReales;
+      for (const [x, y, e] of lista) { let best = null, bd = 4;
+        for (const s of W.near(x, y)) { if (s.type === "pasillo") continue; const dx = x - s.a[0], dy = y - s.a[1], t = dx * s.dir[0] + dy * s.dir[1]; if (t < 1 || t > s.len - 1) continue;
+          const off = dx * s.n[0] + dy * s.n[1], d = Math.abs(Math.abs(off) - (s.hw + .55)); if (d < bd) { bd = d; best = { s, t, side: off < 0 ? 1 : 0 }; } }
+        if (!best) continue; let L = reales.get(best.s); if (!L) reales.set(best.s, L = [[], []]); L[best.side].push([best.t, especies[e]]); } }
     for (const s of W.segs) {
       if (s.type === "pasillo") { for (let t = r.uni(2, 8); t < s.len; t += r.uni(6, 14)) if (r() < .12 * C.gente) { const p = at(s, t, r.uni(-.4, .4)); person(p[0], p[1], false); } continue; }
       const crossNear = (t) => s.cross.some(c => Math.abs(t - c) < 3);
-      for (const side of [1, -1]) {
-        if (s.sw >= 2.2) for (let t = r.uni(3, 9); t < s.len - 3; t += r.uni(7, 13)) {
-          if (crossNear(t) || r() > (.3 + .55 * s.w) * C.arboles) continue; const p = at(s, t, side * (s.hw + (s.cantero ? .6 : .55)));
-          let av; const c = W.classify(p[0], p[1]); if (c && c.k === "walk" && c.s === s && (av = arbol(p[0], p[1], r() < .5)) && calTronco(av, s) && !s.cantero) {
+      // un árbol de vereda en t, con su cazuela y lo que crece en ella; esp: la especie (del censo), si no, la del lugar
+      const plantar = (side, t, esp) => {
+        const p = at(s, t, side * (s.hw + (s.cantero ? .6 : .55)));
+        let av; const c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || c.s !== s) return;
+        if (esp === "palo_borracho") { put("pz_palo_borracho", p[0], p[1], { rad: 1.2 }); return; }
+        const tipo = esp ? esp + "_" + (Math.abs(Math.imul(Math.round(p[0] * 10), 0x2c1b3c6d) ^ Math.imul(Math.round(p[1] * 10), 0x297a2d39)) % 3) : null;
+        if ((av = arbol(p[0], p[1], r() < .5, tipo)) && calTronco(av, s) && !s.cantero) {
             // cazuela: cuadrado de tierra alrededor del árbol (borde de ladrillo, de cemento o sin borde), a veces con plantas o yuyos
             const tipo = s.w < .3 ? rx.pick([2, 3, 3]) : rx.pick([1, 1, 2, 3]), conPasto = rx() < .55;
             pits.push({ x: p[0], y: p[1], ang: Math.atan2(s.dir[1], s.dir[0]), tipo, pasto: conPasto });
             if (rx() < Math.min(.95, .6 * PL)) { const q = at(s, t + rx.pick([-.32, .32]), side * (s.hw + .55 + rx.uni(-.25, .25)));
-              put(rx() < Math.min(.9, .35 * PL) && s.w > .3 ? rx.pick(["plm_agapanto", "pl_boj", "plm_lantana", "plm_romero"]) : rx.pick(["yy_diente_leon", "yy_trebol", "yy_llanten", "yy_cola_zorro", "yy_ortiga_b", "yy_brotes", "yy_pasto_seco"]), q[0], q[1], { noClaim: true }); } } }
+              put(rx() < Math.min(.9, .35 * PL) && s.w > .3 ? rx.pick(["plm_agapanto", "pl_boj", "plm_lantana", "plm_romero"]) : rx.pick(["yy_diente_leon", "yy_trebol", "yy_llanten", "yy_cola_zorro", "yy_ortiga_b", "yy_brotes", "yy_pasto_seco"]), q[0], q[1], { noClaim: true }); } } };
+      for (const side of [1, -1]) {
+        if (reales.size) { const L = reales.get(s); if (L) for (const [t, esp] of L[side > 0 ? 0 : 1]) if (!crossNear(t)) plantar(side, t, esp); }
+        else if (s.sw >= 2.2) for (let t = r.uni(3, 9); t < s.len - 3; t += r.uni(7, 13)) {
+          if (crossNear(t) || r() > (.3 + .55 * s.w) * C.arboles) continue; plantar(side, t, null); }
         // canteros y cazuelas: agapantos, yuyos, bojs y arbolitos con jaula cerca del cordón
         if (F.plm_agapanto && s.sw >= 1.6) for (let t = rx.uni(2, 8); t < s.len - 2; t += rx.uni(5, 13)) {
           if (crossNear(t) || rx() > Math.min(.95, (.35 + .3 * s.w) * PL)) continue; const p = at(s, t, side * (s.hw + .5)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || c.s !== s) continue;
@@ -449,14 +467,14 @@ const Barrio = (() => {
     }
     // ---- recorte del catálogo de casas: las claves más usadas; el resto toma la más parecida del mismo ángulo
     // en el barrio real hay más edificios y galpones (casas más grandes): menos variedad, así el atlas del juego (8192×4096) alcanza
-    { const tope = Math.round(Math.max(20, C.variedad | 0) * (W.real ? .62 : 1)), hs = [...cat.values()].filter(e => e.spec.t === "casa").sort((a, b) => b.n - a.n), keep = new Set(hs.slice(0, tope).map(e => e.id));
+    { const tope = Math.round(Math.max(20, C.variedad | 0) * (W.estilo && W.estilo.variedad != null ? W.estilo.variedad : W.real ? .62 : 1)), hs = [...cat.values()].filter(e => e.spec.t === "casa").sort((a, b) => b.n - a.n), keep = new Set(hs.slice(0, tope).map(e => e.id));
       hs.filter(e => e.spec.co != null).slice(0, 20).forEach(e => keep.add(e.id));   // los locales coreanos de Carabobo no se pierden en el recorte
       const kept = hs.filter(e => keep.has(e.id));
       for (const o of objs) { if (o.e.spec.t !== "casa" || keep.has(o.e.id)) continue; const sp = o.e.spec; let best = null, bs = 1e9;
         // las casillas de la villa pueden tomar una de hasta dos rumbos de distancia (15°): en la villa nada está en escuadra, y los
         // pasillos van para todos lados (en el barrio real serían cientos de casillas distintas sólo por el rumbo)
         for (const e of kept) { const q = e.spec, da = Math.min(Math.abs(q.a - sp.a), 48 - Math.abs(q.a - sp.a)); if (da > (q.k === "villa" && sp.k === "villa" ? 2 : 0)) continue;
-          const ed = (k) => k === "edificio" || k === "petit", sc = da * 6 + (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0);
+          const ed = (k) => k === "edificio" || k === "petit", sc = da * 6 + (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0);
           if (sc < bs) { bs = sc; best = e; } }
         if (!best || bs > 40) { keep.add(o.e.id); kept.push(o.e); continue; }
         o.e.n--; best.n++; o.e = best;
@@ -466,7 +484,7 @@ const Barrio = (() => {
       { const fr = objs.filter(o => o.kind === "house" && !o.back && o.lot && o.lot.seg && o.place);
         const tOf = (o) => (o.lot.o[0] - o.lot.seg.a[0]) * o.lot.seg.dir[0] + (o.lot.o[1] - o.lot.seg.a[1]) * o.lot.seg.dir[1];
         fr.sort((a, b) => a.lot.seg.id - b.lot.seg.id || a.lot.side - b.lot.side || tOf(a) - tOf(b));
-        const score = (q, sp) => (q.k === sp.k ? 0 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0);
+        const score = (q, sp) => (q.k === sp.k ? 0 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0);
         for (let i = 1; i < fr.length; i++) { const a = fr[i - 1], o = fr[i]; if (a.lot.seg !== o.lot.seg || a.lot.side !== o.lot.side || a.e !== o.e) continue;
           const sp = o.e.spec, ed = (k) => k === "edificio" || k === "petit" || k === "villa"; if (ed(sp.k)) continue;
           let best = null, bs = 1e9; for (const e of kept) { const q = e.spec; if (e === o.e || q.a !== sp.a || ed(q.k) || q.W > o.place.uw + .01) continue; const sc = score(q, sp); if (sc < bs) { bs = sc; best = e; } }
@@ -481,7 +499,7 @@ const Barrio = (() => {
   // la casa/tapial/poste 3D de una clave del catálogo (misma semilla en el visor y en la exportación)
   function build3D(spec) {
     const phi = World.ANG[spec.a];
-    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17 + (spec.co ?? 0) * 613, wealth: [.25, .7][spec.wb], co: spec.co, al: spec.al }, phi);
+    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17 + (spec.co ?? 0) * 613 + (spec.tj ?? 0) * 389, wealth: [.25, .7][spec.wb], co: spec.co, al: spec.al, tj: spec.tj }, phi);
     if (spec.t === "esquina") return Houses.esquina({ W: spec.W, D: spec.D, c: spec.c, p: spec.p, rub: spec.rub, seed: 9000 + spec.rub * 7919 + spec.p * 104729 + spec.a * 31, wealth: .5 }, phi);
     if (spec.t === "paredon") return Houses.paredon(spec.W, 700 + spec.s, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);

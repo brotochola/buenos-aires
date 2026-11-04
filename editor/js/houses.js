@@ -98,6 +98,7 @@ const Houses = (() => {
   // de los props). Los techos salen de una baldosa de material canónica: una cara de techo a la que no se le dibujó nada
   // encima se dibuja en el juego con esa baldosa, compartida entre todas las casas (t.mat, t.limpia).
   let KIT = false; const MATS = new Map();
+  const TEJAS = [[182, 84, 54], [170, 96, 64], [150, 72, 50]];   // colores de teja francesa
   function setKit(v) { KIT = !!v; }
   const hashD = (d) => { let a = 0x811c9dc5; for (let i = 0; i < d.length; i++) a = Math.imul(a ^ (d[i] | 0), 16777619); return a >>> 0; };
   function baldosa(key, tw, th, make) { key += "@" + R3.DET; let m = MATS.get(key); if (!m) { m = { key, tw, th, tex: make(tw, th) }; MATS.set(key, m); } return m; }
@@ -218,6 +219,7 @@ const Houses = (() => {
     let roofKind = { chalet: "tejas", galpon: "chapa", villa: "chapa" }[kind] || r.pick(["piedra", "piedra", "membrana", "ceramico", "losa", "membrana_roja"]);
     if (kind === "casa" && r() < (spec.wealth < .35 ? .45 : .15)) roofKind = "chapa";
     if (kind === "obra") roofKind = "losa";
+    if (spec.tj) roofKind = "tejas";   // un barrio real que las pide (Parque Chas: casas de los años 30 y 40 con techo de tejas)
     const setback = (kind === "casa2" || kind === "negocio_casa") && r() < .35 ? 1.8 : 0;
     const wear = (spec.wealth < .35 ? 1.6 : spec.wealth < .6 ? 1.1 : .7) * CFG.v.desgaste;
     const flat = roofKind !== "chapa" && roofKind !== "tejas";
@@ -355,8 +357,11 @@ const Houses = (() => {
         if (r() < .7) sc.box(cx, cy, zz, cx + .65, cy + .65, zz + .22, { front: [32, 32, 34], back: [32, 32, 34], right: [24, 24, 26], left: [24, 24, 26], top: [48, 48, 52] });
         else sc.box(cx, cy, zz, cx + .4, cy + .25, zz + .2, { front: [176, 92, 62], right: [140, 72, 50], top: [190, 110, 76] }); }
     } else {   // tejas
-      const c = r.pick([[182, 84, 54], [170, 96, 64], [150, 72, 50]]), ridge = zr + 1.9;
-      const mk = (s) => { const t = new Tex(W + .6, D / 2 + .5, s); for (let yy = 0; yy < t.h; yy++) for (let xx = 0; xx < t.w; xx++) { const lx = (xx + ((yy / 4) | 0) * 3) % 6, f = 1.12 - .07 * (yy % 4) - (lx === 0 ? .22 : 0) + (lx === 2 || lx === 3 ? .08 : 0); t.p(xx, yy, mul(c, f * (.92 + .12 * t.r()))); } return t; };
+      const c = r.pick(TEJAS), ridge = zr + 1.9;
+      const base = (w, h, s) => { const t = new Tex(w, h, s); for (let yy = 0; yy < t.h; yy++) for (let xx = 0; xx < t.w; xx++) { const lx = (xx + ((yy / 4) | 0) * 3) % 6, f = 1.12 - .07 * (yy % 4) - (lx === 0 ? .22 : 0) + (lx === 2 || lx === 3 ? .08 : 0); t.p(xx, yy, mul(c, f * (.92 + .12 * t.r()))); } return t; };
+      // horneado en piezas: un paño de tejas de 6 × 6,4 m por color, compartido por todos los techos (6,4 m: las hileras
+      // corridas se repiten cada 8 px a 30 px/m)
+      const mk = (s) => KIT ? deBaldosa(W + .6, D / 2 + .5, baldosa("tejas:" + TEJAS.indexOf(c), 6, 6.4, (tw, th) => base(tw, th, 7001 + TEJAS.indexOf(c) * 13)), s) : base(W + .6, D / 2 + .5, s);
       sc.quad([-.3, y0 + D / 2, ridge], [W + .6, 0, 0], [0, -(D / 2 + .5), -(ridge - zr + .15)], mk(spec.seed + 6));
       sc.quad([W + .3, y0 + D / 2, ridge], [-(W + .6), 0, 0], [0, D / 2 + .5, -(ridge - zr + .15)], mk(spec.seed + 7));
       const gt = new Tex(D + 1, ridge - zr, spec.seed + 8); gt.stucco(wall);
