@@ -179,6 +179,9 @@ const Exportar = (() => {
     archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null; W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
       if (s.mat === "pasillo" || s.type === "pasaje" || (s.type === "ave" && Math.abs(cl.ds) < s.med + .2)) return null;   // los pasajes (angostos, de tierra en la villa) no son para el tránsito
       const fwd = cl.ds < 0 ? 1 : -1, lane = laneOff(s), off = cl.ds - (-fwd * lane), pull = Math.max(-.6, Math.min(.6, -off * .35));
+      // calle cortada por el paredón: los últimos 14 m antes de las vallas, el carril que va hacia afuera dobla al de vuelta (giro en U)
+      { let corta = false; for (let d = 3; d <= 14; d += 2.75) if (!W.dentro(x + s.dir[0] * fwd * d, y + s.dir[1] * fwd * d)) { corta = true; break; }
+        if (corta) { const g = cl.ds < 0 ? 1 : -1; return toScr(s.n[0] * g + s.dir[0] * fwd * .25, s.n[1] * g + s.dir[1] * fwd * .25); } }
       return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); })]);
     // ---------- 7. piso (shader de WeedJS)
     progreso("piso", .86); await espera();
@@ -201,7 +204,11 @@ const Exportar = (() => {
         if (cl.k === 2) { const sgn = cl.ds >= 0 ? 1 : -1, s = cl.s; let kind = s.w < .3 ? "tierra" : "vain", dmg = s.w < .45;
           for (const e of s.lots[sgn]) if (cl.t >= e.t0 && cl.t < e.t1) { kind = e.lot.vereda; if (kind === "vain_d") { kind = "vain"; dmg = true; } break; }
           cellB[o + 2] = (VER[kind] || 2) | (dmg ? 16 : 0); }
-        const lot = W.lotAt(x, y); if (lot) cellB[o + 3] = (PAT[lot.patio] || 5) | (lot.w < .4 ? 16 : 0);
+        // patio: el piso del lote (baldosa, cemento…) sólo en los primeros 13 m desde el frente (la casa y su patio); más al fondo,
+        // pasto (tierra en los barrios pobres), como el fondo de las manzanas de Buenos Aires
+        const lot = W.lotAt(x, y); if (lot) { const v = lot.nOut ? (x - lot.o[0]) * lot.nOut[0] + (y - lot.o[1]) * lot.nOut[1] : 0;
+          const pat = lot.patio !== "yuyo" && lot.kind !== "plaza" && lot.kind !== "sendero" && v > 13 ? (lot.w < .3 ? "tierra" : "pasto") : lot.patio;
+          cellB[o + 3] = (PAT[pat] || 5) | (lot.w < .4 ? 16 : 0); }
       } }
     const WGc = Math.ceil(MW / 10), HGc = Math.ceil(MH / 10), wealth = new Uint8Array(WGc * HGc);
     for (let j = 0; j < HGc; j++) for (let i = 0; i < WGc; i++) wealth[j * WGc + i] = Math.round(W.wealthAt(i * 10 + 5, j * 10 + 5) * 255);
