@@ -111,6 +111,8 @@ nombres de ciudades europeas (Berlín, Ginebra, La Haya, Londres, Cádiz…), y 
 - **Casas:** bajas, de los años 30 a 60: casas de una y dos plantas y PH, algún chalet y casi sin comercio adentro (los locales van
   sobre las avenidas). Un 28 % de las casas tiene techo de tejas (`estilo.tejas`); las tejas son un material compartido del horneado
   con skew, como los techos planos y la chapa.
+- **Exportado** con skew: 2886 casas, 1751 árboles (los del censo que caen en una vereda, más los de las plazoletas), 120 mil
+  piezas de pared y techo, atlas de 5748 × 4094.
 - **Rehacerlo:** los datos salen del portal data.buenosaires.gob.ar (red vial, arbolado público lineal y arbolado en espacios verdes;
   no se guardan acá, pesan 100 MB). `python3 herramientas/gcba_osm.py --barrio parquechas --red red-vial-CABA.geojson
   --arbolado arbolado_lineal.csv --verdes arbolado_verdes.csv` escribe `editor/recursos/osm_parquechas.json` en el formato de OSM;
