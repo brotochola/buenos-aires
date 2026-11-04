@@ -469,6 +469,8 @@ export class ConurbanoScene extends Scene {
           { name: 'wealth', format: 'r8unorm', size: { width: META.WG, height: META.HG } }, { name: 'noiseT', format: 'rgba8unorm', size: { width: 256, height: 256 } },
           { name: 'segs', format: 'rgba8unorm', size: { width: 12, height: META.NS } }, { name: 'pits', format: 'rgba8unorm', size: { width: META.PW || 1, height: META.PH || 1 } }],
         uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG), uPW: f32(META.PW || 1), uPH: f32(META.PH || 1) } } },
+      // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
+      manchas: { zIndex: 1.4, ySorting: false, maxItems: 6000 },
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
       sombras: { zIndex: 1.6, ySorting: false, maxItems: 3000 },
       cables: { zIndex: 3.5, ySorting: false, maxItems: 4000 },
@@ -511,7 +513,8 @@ export class ConurbanoScene extends Scene {
       if (p.r > 0) Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl });
       else { const a = META.anclas[p.f], e = (META.escalas && META.escalas[p.f]) || 1, mece = p.f.startsWith('plm_') || p.f.startsWith('yy_');   // plantas que se mecen (skew: la base queda fija)
         Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -e : e, scaleY: e,
-          ...(mece ? { swaySkew: 1, swayAmplitude: .05 + rng() * .05, swayFrequency: .5 + rng() * .6 } : {}) }); }
+          ...(mece ? { swaySkew: 1, swayAmplitude: .05 + rng() * .05, swayFrequency: .5 + rng() * .6 } : {}),
+          ...(p.f.startsWith('gd_') ? { layer: 'manchas' } : {}) }); }   // manchas y roturas: pegadas al piso, debajo de todo
     }
     const ash = META.anclas.sh_tree;
     for (const a of w.arboles) { Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: w.arbolTipos[a.t] }); if (ash) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }

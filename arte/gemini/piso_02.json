@@ -1,0 +1,93 @@
+{
+ "img": "piso_02.png",
+ "bg": "magenta",
+ "ref": 1376,
+ "objs": [
+  {
+   "name": "gd_baldosas_rotas",
+   "w": 1.2,
+   "box": [
+    5,
+    22,
+    340,
+    365
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_pozo_vereda",
+   "w": 0.9,
+   "box": [
+    348,
+    20,
+    684,
+    365
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_raices",
+   "w": 1.3,
+   "box": [
+    692,
+    20,
+    1028,
+    365
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_chicles",
+   "w": 0.6,
+   "box": [
+    1045,
+    40,
+    1365,
+    355
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1
+  },
+  {
+   "name": "gd_aire",
+   "w": 0.6,
+   "box": [
+    8,
+    410,
+    340,
+    735
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_hojas",
+   "w": 0.8,
+   "box": [
+    352,
+    412,
+    682,
+    742
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_rayuela",
+   "w": 1.0,
+   "box": [
+    770,
+    410,
+    950,
+    735
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1.6
+  }
+ ]
+}

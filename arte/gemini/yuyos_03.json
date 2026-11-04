@@ -1,0 +1,148 @@
+{
+ "img": "yuyos_03.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "persona": [
+  98,
+  169
+ ],
+ "grow": 2,
+ "objs": [
+  {
+   "name": "yy_mata",
+   "at": [
+    243,
+    250
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_pasto_largo",
+   "at": [
+    433,
+    216
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_cesped_margaritas",
+   "at": [
+    636,
+    243
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_trebol_blanco",
+   "at": [
+    825,
+    230
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_manzanilla",
+   "at": [
+    984,
+    223
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_verbena",
+   "at": [
+    1127,
+    202
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_vinagrillo",
+   "at": [
+    1274,
+    236
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_hinojo",
+   "at": [
+    145,
+    537
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_junco",
+   "at": [
+    345,
+    554
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_rastrera",
+   "at": [
+    561,
+    473
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_mata_seca",
+   "at": [
+    770,
+    475
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_arbusto_bayas",
+   "at": [
+    921,
+    461
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_campanilla",
+   "at": [
+    510,
+    663
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_campanilla_b",
+   "at": [
+    735,
+    665
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_hongos",
+   "at": [
+    932,
+    681
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_bardana",
+   "at": [
+    1102,
+    584
+   ],
+   "d": 0.3
+  },
+  {
+   "name": "yy_sorgo",
+   "at": [
+    1274,
+    550
+   ],
+   "d": 0.3
+  }
+ ]
+}

@@ -31,6 +31,8 @@ for name, src in cfg["frames"].items():
     im = Image.open(os.path.join(PROPS, src + ".png")).convert("RGBA")
     k, d = info[src]["k"], info[src].get("d", 0.3)
     oy = max(0, im.height - 1 - int(round(d * PXM_W * 0.5 * 0.5 / k)))   # anchor: center of the footprint (d/2 m deep)
+    if info[src].get("piso"):                  # flat on the ground (manchas, roturas): anchored at its center
+        oy = im.height // 2
     items.append((name, im, im.width // 2, oy, k))
 
 # shelf packing, tallest first, 2 px gap

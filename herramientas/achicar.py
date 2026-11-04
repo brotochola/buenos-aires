@@ -52,21 +52,23 @@ def sucio(rgb, key):
     return (np.minimum(g, b) - r > 40) & (np.abs(g - b) < 70) & (g > 100)
 
 
-def shrink(rgb, fg, f, bad=None):
-    """Average of f×f blocks over the drawing's pixels only; alpha = how much of the block is drawing.
+def shrink(rgb, fg, f, bad=None, fy=None):
+    """Average of f×fy blocks (fy = f unless said) over the drawing's pixels only; alpha = how much of the block is drawing.
+    Things flat on the ground (spec "piso") use fy = 2f: the oblique view shows the ground at half its depth (SYN = 0.5).
 
     The colour comes from the drawing's inside (the mask eroded 2 px) where the block has some: the outermost pixels
     still carry some of the magenta or cyan background (the jacaranda had a teal rim), and the outline that the
     exporter paints around each prop takes its colour from them."""
+    fy = fy or f
     h, w = fg.shape
-    H, W = -(-h // f) * f, -(-w // f) * f
+    H, W = -(-h // fy) * fy, -(-w // f) * f
     core = ndimage.binary_erosion(fg, iterations=2)
     if bad is not None:
         core &= ~bad
     # pad at the top and the left: the bottom edge (where the object stands) stays on a block boundary
     rgbp = np.zeros((H, W, 3)); fgp = np.zeros((H, W)); cop = np.zeros((H, W))
     rgbp[H - h:, W - w:] = rgb; fgp[H - h:, W - w:] = fg; cop[H - h:, W - w:] = core
-    blocks = lambda a: a.reshape(H // f, f, W // f, f, *a.shape[2:]).sum((1, 3))
+    blocks = lambda a: a.reshape(H // fy, fy, W // f, f, *a.shape[2:]).sum((1, 3))
     n, nc = blocks(fgp), blocks(cop)
     col_all = blocks(rgbp * fgp[..., None]) / np.maximum(n, 1)[..., None]
     col_core = blocks(rgbp * cop[..., None]) / np.maximum(nc, 1)[..., None]
@@ -74,9 +76,9 @@ def shrink(rgb, fg, f, bad=None):
     if (nc > 0).any():                       # blocks of the rim only: the colour of the nearest block with some inside
         iy, ix = ndimage.distance_transform_edt(nc == 0, return_distances=False, return_indices=True)
         col = np.where(((nc == 0) & (n > 0))[..., None], col_core[iy, ix], col)
-    a = n / (f * f)
+    a = n / (f * fy)
     a = np.where(a < 0.12, 0, np.clip(a * 1.15, 0, 1))      # a block with a speck of drawing is background
-    out = np.zeros((H // f, W // f, 4), np.uint8)
+    out = np.zeros((H // fy, W // f, 4), np.uint8)
     out[..., :3] = np.clip(np.round(col), 0, 255); out[..., 3] = np.round(a * 255)
     return out
 
@@ -146,11 +148,13 @@ def process(spec_path):
     meta = {}
     for o, rgb, m, r in cuts:
         f = factor(r)
-        im = Image.fromarray(shrink(rgb, m, f, sucio(rgb, o.get("_bg"))))
+        if o.get("gris"):                       # grietas, frenadas, aceite: el magenta del fondo las tiñe de violeta; van en gris
+            L = rgb[..., 0] * .3 + rgb[..., 1] * .59 + rgb[..., 2] * .11; rgb = np.repeat(np.minimum(L, (rgb[..., 1] + 20) * 1.0)[..., None], 3, -1) * o.get("gris")
+        im = Image.fromarray(shrink(rgb, m, f, sucio(rgb, o.get("_bg")), 2 * f if o.get("piso") else None))
         bb = im.getbbox(); im = im.crop(bb) if bb else im
         im.save(os.path.join(out_dir, o["name"] + ".png"), optimize=True)
         k = f / r                               # what the game still scales: 0.6·k
-        meta[o["name"]] = {"w": im.width, "h": im.height, "k": round(k, 4), "d": o.get("d", 0.3), "f": f}
+        meta[o["name"]] = {"w": im.width, "h": im.height, "k": round(k, 4), "d": o.get("d", 0.3), "f": f, **({"piso": 1} if o.get("piso") else {})}
         print(f"  {o['name']:22s} {rgb.shape[1]}x{rgb.shape[0]} / {f} -> {im.width}x{im.height}, k = {k:.2f}")
     json.dump(meta, open(os.path.join(out_dir, os.path.basename(spec_path)), "w"), indent=1)
     return meta

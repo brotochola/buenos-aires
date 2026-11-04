@@ -1,0 +1,108 @@
+{
+ "img": "piso_01.png",
+ "bg": "magenta",
+ "ref": 1376,
+ "objs": [
+  {
+   "name": "gd_aceite",
+   "w": 1.2,
+   "box": [
+    40,
+    50,
+    360,
+    330
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1
+  },
+  {
+   "name": "gd_gotas",
+   "w": 0.5,
+   "box": [
+    425,
+    85,
+    645,
+    300
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1
+  },
+  {
+   "name": "gd_parche",
+   "w": 1.6,
+   "box": [
+    715,
+    75,
+    1000,
+    325
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1
+  },
+  {
+   "name": "gd_grietas",
+   "w": 1.3,
+   "box": [
+    1055,
+    45,
+    1350,
+    345
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 0.5
+  },
+  {
+   "name": "gd_bache",
+   "w": 1.0,
+   "box": [
+    10,
+    430,
+    345,
+    725
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_frenada",
+   "w": 2.6,
+   "box": [
+    350,
+    480,
+    700,
+    670
+   ],
+   "piso": true,
+   "d": 0,
+   "gris": 1
+  },
+  {
+   "name": "gd_charco",
+   "w": 1.4,
+   "box": [
+    728,
+    485,
+    995,
+    665
+   ],
+   "piso": true,
+   "d": 0
+  },
+  {
+   "name": "gd_basura",
+   "w": 0.8,
+   "box": [
+    1060,
+    435,
+    1360,
+    705
+   ],
+   "piso": true,
+   "d": 0
+  }
+ ]
+}

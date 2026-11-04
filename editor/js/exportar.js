@@ -124,7 +124,7 @@ const Exportar = (() => {
       const S = (n) => F[n].hd || F[n];
       // contorno como el de los personajes y los autos (contorno.js): por fuera, con el grosor que a la escala del juego
       // (f.e, o 1) mide 1 px de mundo. Las sombras y lo que va pegado al piso, sin.
-      const SIN_CONTORNO = /^(sh_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {};
+      const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {};
       for (const n of usados) { const f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
         c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
         const t = SIN_CONTORNO.test(n) ? 0 : Contorno.grosor(f.e || 1); cuadro[n] = { cv: t ? Contorno.canvas(c, t) : c, t, f }; }
