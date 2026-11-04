@@ -40,13 +40,6 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 - **Luz y sombras (como `predatorScene`):** `config.lighting` con sol y ciclo de día de 8 minutos (arranca a las 17:30). Gente, autos, árboles y postes tienen `ShadowCaster`, así que proyectan sombra del sol y de las luces cercanas. Tienen `LightEmitter` los faroles (con brillo), los semáforos, algunas ventanas de casas y los faros de los autos en movimiento. Las sombras horneadas de las casas se apagan de noche.
 - **Árboles, faroles y semáforos** son entidades con colisionador. El mobiliario chico, las sombras de los props y los cables son `Decoration`; los cables van en una capa propia por encima de todo.
 
-## Sonido
-
-- Todo sintetizado con `python3 herramientas/sonidos.py` (ruido filtrado, osciladores y envolventes, sin grabaciones) a `sfx/*.mp3`.
-- Ambiente de día (tránsito lejano) y de noche (grillos), cada uno en su canal de WeedJS: se funden según el sol, y bajan un poco al alejar la cámara.
-- Sueltos, en algún punto de lo que se ve: pájaros (gorriones, benteveo, zorzal) y palomas de día; perros ladrando lejos y alguna cumbia de noche; bocinas, motos y colectivos (donde se ve uno). Los autos trabados tocan bocina a los 2 s.
-- Suena recién después del primer toque o tecla (regla de los navegadores). El botón 🔊 lo silencia.
-
 ## Otro barrio: el editor de barrios
 
 `editor/` es el editor de barrios (la versión Three.js con todos los knobs). Se abre en `http://localhost:8000/editor/`.

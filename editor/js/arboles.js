@@ -164,9 +164,9 @@ const Arboles = (() => {
       let a = 1e9, b = 1e9, e = -1, f = -1;
       for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) if (d[(y * Wc + x) * 4 + 3]) { if (x < a) a = x; if (x > e) e = x; if (y < b) b = y; if (y > f) f = y; }
       if (e < 0) return;
-      // contorno como el de los personajes (contorno.js): T px por fuera, que a la escala del juego miden 1 px de mundo;
-      // en la base de una rama no, que sale de otra rama y ahí no va raya
-      const T = typeof Contorno === "undefined" ? 0 : Contorno.grosor(ESCALA);
+      // contorno (contorno.js): 1 px por fuera, que a la escala del juego mide 0,6 px de mundo (más fino que el de los personajes:
+      // cada racimo ya trae su borde y con más grosor la copa quedaba recargada); en la base de una rama no, que sale de otra rama
+      const T = typeof Contorno === "undefined" ? 0 : Math.max(1, Contorno.grosor(ESCALA) - 1);
       const w = e - a + 1 + 2 * T, h = f - b + 1 + 2 * T, cut = document.createElement("canvas"); cut.width = w; cut.height = h;
       const id = new ImageData(w, h); for (let y = 0; y < h - 2 * T; y++) id.data.set(d.subarray(((y + b) * Wc + a) * 4, ((y + b) * Wc + a + w - 2 * T) * 4), ((y + T) * w + T) * 4);
       const [bx, by] = PX(...bases[i]), ux = bx - x0 - a + T, uy = by - y0 - b + T;

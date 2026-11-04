@@ -18,13 +18,9 @@ const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
-  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, SoundManager, enums, rng, dot2 } = WEED;
+  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
 // todas las luces del barrio: blanco amarillento de ciudad (~3000 K)
 const LUZ = 0xffdcaa;
-// sonidos del barrio (herramientas/sonidos.py): ambiente de día y de noche en sus propios canales, el resto suelto y en su lugar
-const SONIDOS = ['amb_dia', 'amb_noche', 'gorrion_1', 'gorrion_2', 'gorrion_3', 'benteveo', 'zorzal_1', 'zorzal_2', 'paloma', 'bocina_1', 'bocina_2', 'bocina_3',
-  'colectivo_1', 'colectivo_2', 'moto', 'perro_1', 'perro_2', 'perro_3', 'cumbia'];
-const BOCINAS = ['bocina_1', 'bocina_2', 'bocina_3'], PAJAROS = ['gorrion_1', 'gorrion_2', 'gorrion_3', 'benteveo', 'zorzal_1', 'zorzal_2', 'gorrion_1'], PERROS = ['perro_1', 'perro_2', 'perro_3'];
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
@@ -339,9 +335,7 @@ export class AutoIA extends Auto {
     // ¿alguien adelante en el carril?
     // trabado más de 5 s (dos autos que se frenan mutuamente en un cruce): 3 s sin mirar a los demás
     const A = AutoComp;
-    if (RigidBody.speed[i] < 10) { const antes = A.stuck[i]; A.stuck[i] += dts; A.parado[i] += dts;
-      // trabado: a los 2 s toca bocina (si se ve), como en cualquier esquina de Buenos Aires
-      if (antes < 2 && A.stuck[i] >= 2 && this.isOnScreen && rng() < .6) SoundManager.play(BOCINAS[(rng() * 3) | 0], .55, .94, 1.06, 0, 0, this.x, this.y, 'sfx');
+    if (RigidBody.speed[i] < 10) { A.stuck[i] += dts; A.parado[i] += dts;
       if (A.stuck[i] > 5) { A.stuck[i] = 0; A.libre[i] = 3; } } else { A.stuck[i] = 0; A.parado[i] = 0; }
     // parado más de 12 s (se metió en un lote, quedó contra un poste): fuera de cámara, vuelve a su carril de salida
     if (A.parado[i] > 12 && !this.isOnScreen) { A.parado[i] = 0; this.x = A.sx[i]; this.y = A.sy[i]; this.rotation = A.sr[i];
@@ -464,9 +458,6 @@ export class ConurbanoScene extends Scene {
         dayCycle: { enabled: true, speed: 1, dayDurationMinutes: 8 } },
     },
     navigation: { enabled: true, cellSize: 64 },
-    // el primer canal es el de siempre (sfx); el ambiente de día y el de noche van en los suyos, así se funden con la hora
-    audio: { maxSlots: 40, mixGain: .8, channels: { sfx: { volume: 1, maxVoices: 12 }, dia: { volume: 0, maxVoices: 2, compressor: false },
-      noche: { volume: 0, maxVoices: 2, compressor: false } } },
     layers: {
       piso: { zIndex: .5, shader: {
         fragment: { webgl: 'shaders/piso.frag' }, worldRect: { width: META.WW, height: META.WH },
@@ -488,7 +479,6 @@ export class ConurbanoScene extends Scene {
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
   // (con ?empaquetar en la URL se arma en el navegador, para volver a hornearlo después de cambiar los sprites)
   static assets = { ...(PACK || !META.atlas ? {} : { bigAtlas: { json: BARRIO + 'atlas/bigAtlas.json', png: BARRIO + 'atlas/bigAtlas.png' } }), spritesheets: SHEETS, flowfields: FLOW };
-  static audios = Object.fromEntries(SONIDOS.map(n => [n, new URL('./sfx/' + n + '.mp3', import.meta.url).href]));
   static sharedResources = [
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 }, pits: { type: Uint8Array, length: (META.PW || 1) * (META.PH || 1) * 4 } }],
@@ -615,42 +605,6 @@ export class ConurbanoScene extends Scene {
   setDriving(on) { Estado.manejando.store(on ? 1 : 0, 0); if (!on) { const g = Camera.getFollowTarget(); if (g) { this.focusX = g.x; this.focusY = g.y; } } }
   get driving() { return Estado.manejando.load(0) === 1; }
   zoomBy(f) { this.zoomT = Math.max(.25, Math.min(4, this.zoomT * f)); }
-  // ---------- sonido: el ambiente (día o noche, según el sol) y sonidos sueltos en algún punto de lo que se ve: pájaros y
-  // palomas de día, perros lejos y alguna cumbia de noche, bocinas, motos y colectivos (donde hay uno). Las bocinas de los
-  // autos trabados las toca cada auto (AutoIA). WeedJS deja sonar todo recién después del primer toque o tecla.
-  sonido(si, dtRatio) {
-    if (!this._amb) { this._amb = 1; this._sndT = 2; this._cumbiaT = 0;
-      SoundManager.play('amb_dia', .9, 1, 1, 1, 0, NaN, NaN, 'dia'); SoundManager.play('amb_noche', .9, 1, 1, 1, 0, NaN, NaN, 'noche'); }
-    const z = Camera.zoom || 1, lejos = Math.max(.25, Math.min(1, z * 1.4));      // muy alejado, el ambiente baja un poco
-    const cd = SoundManager.channel('dia'), cn = SoundManager.channel('noche');
-    if (cd) cd.volume = Math.min(1, si * 1.1) * lejos; if (cn) cn.volume = Math.max(0, 1 - si * 1.4) * lejos;
-    const dt = dtRatio / 60; this._sndT -= dt; this._cumbiaT -= dt; if (this._sndT > 0) return;
-    this._sndT = .5 + rng() * 1.6;
-    const vb = Camera.getViewportBounds(_vista), x = vb.left + rng() * vb.width, y = vb.top + rng() * vb.height, q = rng();
-    const ya = (n, v, r0 = .94, r1 = 1.06, px = x, py = y) => SoundManager.play(n, v, r0, r1, 0, 0, px, py, 'sfx');
-    if (si > .35) {
-      if (q < .5) ya(PAJAROS[(rng() * PAJAROS.length) | 0], .45, .9, 1.12);
-      else if (q < .6) ya('paloma', .4);
-      else if (q < .7) ya(BOCINAS[(rng() * 3) | 0], .35);
-      else if (q < .78) ya('moto', .45, .9, 1.1);
-      else if (q < .9) { const c = this.colectivoEnVista(vb); if (c >= 0) ya(rng() < .5 ? 'colectivo_1' : 'colectivo_2', .6, .95, 1.05, Transform.x[c], Transform.y[c]); }
-    } else {
-      // de noche los perros ladran lejos: un poco afuera de lo que se ve (suena más bajo y de un costado)
-      if (q < .4) { const lado = rng() < .5 ? -.25 : 1.25; ya(PERROS[(rng() * 3) | 0], .5, .9, 1.1, vb.left + lado * vb.width, y); }
-      else if (q < .5) ya(BOCINAS[(rng() * 3) | 0], .25);
-      else if (q < .58) ya('moto', .35, .9, 1.1);
-      else if (q < .66 && this._cumbiaT <= 0) { this._cumbiaT = 70; ya('cumbia', .4, .98, 1.02); }
-    }
-  }
-  // un colectivo que se vea (o -1)
-  colectivoEnVista(vb) {
-    const n = Transform.active.length;
-    for (let k = 0, i = (rng() * n) | 0; k < n; k++, i = (i + 1) % n) {
-      if (!Transform.active[i] || AutoComp.active[i] !== 1) continue; const x = Transform.x[i], y = Transform.y[i];
-      if (x < vb.left || x > vb.left + vb.width || y < vb.top || y > vb.top + vb.height) continue;
-      const sid = SpriteRenderer.spritesheetId[i], nm = sid ? SpriteSheetRegistry.getSpritesheetName(sid) : ''; if (nm && nm.indexOf('colectivo') >= 0) return i; }
-    return -1;
-  }
   // La vista entera adentro del mapa, que en pantalla es un paralelogramo (cada px hacia arriba corre K/SYN px a la derecha):
   // así la cámara nunca muestra el borde del mundo. El área jugable está más adentro, detrás del paredón (META.MG m de margen).
   limitarVista() {
@@ -671,7 +625,6 @@ export class ConurbanoScene extends Scene {
     const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
     if (Ls && Math.abs(Ls.alpha - si) > .02) Ls.alpha = si; if (Ld && Math.abs(Ld.alpha - si) > .02) Ld.alpha = si;
     const Ln = Layer.get('noche'), no = Math.max(0, Math.min(1, 1.15 - si * 1.4)); if (Ln && Math.abs(Ln.alpha - no) > .02) Ln.alpha = no;
-    this.sonido(si, dtRatio);
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
     const z = Camera.zoom || 1;
