@@ -168,6 +168,19 @@
   "pz_tobogan_atras": "pz_tobogan_atras",
   "pz_subibaja_atras": "pz_subibaja_atras",
   "pz_banco_atras": "pz_banco_atras",
-  "pz_bebedero_atras": "pz_bebedero_atras"
+  "pz_bebedero_atras": "pz_bebedero_atras",
+  "pl_hibisco": "hd_hibisco",
+  "pl_monstera": "hd_monstera",
+  "pl_gomero": "hd_gomero",
+  "plm_strelitzia": "hd_strelitzia",
+  "pl_azalea": "hd_azalea",
+  "pl_coleo": "hd_coleo",
+  "plm_banano": "hd_banano",
+  "plm_cortadera": "hd_cortadera",
+  "plm_plumbago": "hd_plumbago",
+  "pl_begonias": "hd_begonias",
+  "pl_palmera": "hd_palmera_balde",
+  "pl_suculentas": "hd_suculentas_latas",
+  "pl_jardinera": "hd_malvon_jardinera"
  }
 }

@@ -1,0 +1,22 @@
+{
+ "img": "plantas_04.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "persona": [95, 255],
+ "grow": 2,
+ "objs": [
+  {"name": "hd_hibisco", "at": [230, 265], "d": 0.5},
+  {"name": "hd_monstera", "at": [405, 270], "d": 0.6},
+  {"name": "hd_gomero", "at": [570, 240], "d": 0.5},
+  {"name": "hd_strelitzia", "at": [735, 280], "d": 0.6},
+  {"name": "hd_azalea", "at": [930, 310], "d": 0.4},
+  {"name": "hd_coleo", "at": [1065, 335], "d": 0.3},
+  {"name": "hd_banano", "at": [1210, 210], "d": 0.6},
+  {"name": "hd_cortadera", "at": [245, 595], "d": 0.8},
+  {"name": "hd_plumbago", "at": [410, 630], "d": 0.5},
+  {"name": "hd_begonias", "at": [545, 670], "d": 0.3},
+  {"name": "hd_palmera_balde", "at": [865, 620], "d": 0.4},
+  {"name": "hd_suculentas_latas", "box": [935, 630, 1140, 750], "d": 0.2},
+  {"name": "hd_malvon_jardinera", "at": [1245, 670], "d": 0.3}
+ ]
+}
