@@ -111,8 +111,12 @@ nombres de ciudades europeas (Berlín, Ginebra, La Haya, Londres, Cádiz…), y 
 - **Casas:** bajas, de los años 30 a 60: casas de una y dos plantas y PH, algún chalet y casi sin comercio adentro (los locales van
   sobre las avenidas). Un 28 % de las casas tiene techo de tejas (`estilo.tejas`); las tejas son un material compartido del horneado
   con skew, como los techos planos y la chapa.
-- **Exportado** con skew: 2886 casas, 1751 árboles (los del censo que caen en una vereda, más los de las plazoletas), 120 mil
-  piezas de pared y techo, atlas de 5748 × 4094.
+- **La esquina de seis:** una rotonda con la fuente revestida de trencadís (el mosaico que pusieron los vecinos en 2016;
+  `herramientas/fuente_mosaico.py`). Los autos le dan la vuelta en sentido antihorario y cada uno elige por qué calle sale. Frente
+  a la fuente, la Pizzería Keops (Gándara 2699) y el Café Chas (sobre Ávalos; no encontré en cuál de las esquinas de Gándara y
+  Ávalos está, va en la que tiene el frente a la cámara), con su cartel y mesitas en la vereda.
+- **Exportado** con skew: 2855 casas, 1721 árboles (los del censo que caen en una vereda, más los de las plazoletas), 116 mil
+  piezas de pared y techo, atlas de 5706 × 4094.
 - **Rehacerlo:** los datos salen del portal data.buenosaires.gob.ar (red vial, arbolado público lineal y arbolado en espacios verdes;
   no se guardan acá, pesan 100 MB). `python3 herramientas/gcba_osm.py --barrio parquechas --red red-vial-CABA.geojson
   --arbolado arbolado_lineal.csv --verdes arbolado_verdes.csv` escribe `editor/recursos/osm_parquechas.json` en el formato de OSM;
