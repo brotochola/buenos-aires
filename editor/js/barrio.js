@@ -7,6 +7,7 @@ const Barrio = (() => {
   const aIdx = (a) => World.angIdx(a), qa = (a) => World.ANG[World.angIdx(a)], Q = Math.PI / 24;
   const Wb = (w, step) => Math.max(3, Math.floor(w / step + 1e-6) * step);
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
+  const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
   const RAD = [["k_gauchito", .9], ["k_virgen", .7], ["k_mantero", .9], ["k_pelopincho", 1.2], ["k_cucha", .6], ["k_", .35], ["b_tendedero", 1.6], ["b_mesa_patio", 1.4], ["b_arco", 1.4], ["b_bolsones", .7], ["b_pallets", .6], ["b_viejo", .45], ["b_mujer", .4], ["b_", .3], ["c_volquete", 2.2], ["c_puesto", 1.3], ["c_chori", 1.1], ["c_mesa_bar", 1], ["c_moto", .7], ["c_bici", .6], ["c_perro", .35], ["c_gato", .2], ["c_palomas", .5], ["c_buzon", .3], ["c_hidrante", .2], ["pz_monumento", 2.2], ["pz_fuente", 2.5], ["pz_calesita", 2.6], ["pz_glorieta", 3], ["pz_jacaranda", .5], ["pz_palo_borracho", .5], ["pz_", 1.2], ["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
     ["u_refugio", 1.2], ["u_kiosco", 1.5], ["carro_cartonero", 1.0], ["chango", .5], ["gomas", .55], ["chapas", .5], ["u_tanque", .6], ["u_banco", .9], ["u_parada", .25], ["u_cesto", .3], ["u_poste_trafo", .45], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
@@ -34,10 +35,14 @@ const Barrio = (() => {
     const props = [], arboles = [], people = [], cables = [], cars = [], postes = [], pits = [];
     const VAR = {}; for (const n of Object.keys(F)) { const m = /^(.+)_([b-z])$/.exec(n); if (m && F[m[1]]) (VAR[m[1]] ||= [m[1]]).push(n); }
     function put(name, x, y, opt = {}) {
-      if (VAR[name]) { const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663)); name = VAR[name][h % VAR[name].length]; }
+      const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663));
+      if (VAR[name]) name = VAR[name][h % VAR[name].length];
       if (!F[name]) return null;
       if (!opt.noClaim && !claim(x, y, opt.rad ?? lookup(RAD, name, .3))) return null;
-      const e = { f: name, x, y, flip: !!opt.flip, cr: opt.noCollide ? 0 : lookup(COLR, name, 0), sh: opt.shadow ?? SH(name), face: opt.face || null };
+      // face: hacia dónde mira (m del mundo). Lo que tiene vista de atrás y no mira a nada en especial mira a una diagonal
+      // sacada del lugar (no del sorteo, así el resto del barrio no cambia)
+      const face = opt.face || (F[name + "_atras"] ? DIAG[(h >>> 7) & 3] : null);
+      const e = { f: name, x, y, flip: !!opt.flip, cr: opt.noCollide ? 0 : lookup(COLR, name, 0), sh: opt.shadow ?? SH(name), face };
       props.push(e); return e;
     }
     // árbol: un tipo procedural según la riqueza del lugar (lleva el mismo sorteo que antes, así el resto no cambia)
@@ -52,7 +57,7 @@ const Barrio = (() => {
       const pasto = (q) => { const l = W.lotAt(q[0], q[1]); return l && l.kind === "plaza"; }, sendero = (q) => { const l = W.lotAt(q[0], q[1]); return l && l.kind === "sendero"; };
       const hA = P.bA / 2 - 8.5, hB = P.bB / 2 - 8.5, rx2 = rx;
       // centro
-      put(F.pz_monumento && rx2() < .55 ? "pz_monumento" : F.pz_fuente ? "pz_fuente" : "u_farol_doble", P.c[0], P.c[1], { noClaim: true });
+      put(F.pz_monumento && rx2() < .55 ? "pz_monumento" : F.pz_fuente ? "pz_fuente" : "u_farol_doble", P.c[0], P.c[1], { noClaim: true, face: [0, -1] });   // el prócer mira al sur
       // árboles en el borde, cada 9 a 12 m, fuera de los senderos
       for (const [ax, len, fixed] of [[0, hA, hB], [0, hA, -hB], [1, hB, hA], [1, hB, -hA]])
         for (let t = -len + rx2.uni(1, 4); t < len; t += rx2.uni(9, 12)) { const q = ax ? at2(fixed, t) : at2(t, fixed); if (pasto(q)) {
@@ -205,7 +210,7 @@ const Barrio = (() => {
       if (s.type === "ave" && s.sw > 2 && F.u_parada) for (let t = rx.uni(20, 80); t < s.len - 6; t += rx.uni(120, 220)) {
         if (crossNear(t)) continue; const side = rx() < .5 ? 1 : -1, p = at(s, t, side * (s.hw + .45)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk") continue;
         put("u_parada", p[0], p[1]);
-        if (F.u_banco && rx() < .6) { const b = at(s, t + 2.6, side * (s.hw + 1.3)), q = at(s, t + 2.6, 0); if (W.classify(b[0], b[1])?.k === "walk") put("u_banco", b[0], b[1], { face: [b[0] - q[0], b[1] - q[1]] }); } }
+        if (F.u_banco && rx() < .6) { const b = at(s, t + 2.6, side * (s.hw + 1.3)), q = at(s, t + 2.6, 0); if (W.classify(b[0], b[1])?.k === "walk") put("u_banco", b[0], b[1], { face: [q[0] - b[0], q[1] - b[1]] }); } }
       if (s.type !== "ave" && s.sw > 1) {
         const side = rx() < .5 ? 1 : -1, phi = Math.atan2(s.dir[1], s.dir[0]), phiQ = qa(phi), luz = s.mat === "tierra" || s.mat === "roto" ? 1 : 0, pts = [], feet = [];
         for (let t = rx.uni(3, 10); t < s.len - 2; t += rx.uni(24, 32)) {
@@ -284,5 +289,14 @@ const Barrio = (() => {
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
     return Houses.poste(7, phi, !!spec.l);
   }
-  return { generate, build3D, Q, aIdx };
+  // Qué cuadro y qué espejo usa un prop que mira hacia (sx, sy) en pantalla (sy > 0: hacia abajo, hacia la cámara).
+  // Los props de Gemini con vista de atrás (nombre + "_atras") la usan cuando miran para arriba (se alejan de la cámara).
+  // MIRA: hacia qué lado mira el dibujo sin espejo, [frente, atrás] (true: a la derecha). Lo común: el frente a la
+  // derecha y la espalda (girada 180°) a la izquierda; el banco de hormigón al revés; la farola LED, con el brazo a la derecha en las dos.
+  const MIRA = { u_banco: [false, true], u_farola: [true, true] };
+  function vista(F, name, sx, sy) {
+    const atras = sy < 0 && !!F[name + "_atras"], m = MIRA[name] || [true, false], der = m[atras ? 1 : 0];
+    return [atras ? name + "_atras" : name, der ? sx < 0 : sx > 0];
+  }
+  return { generate, build3D, Q, aIdx, vista };
 })();

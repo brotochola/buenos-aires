@@ -76,6 +76,9 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
    - El 2× se eligió a ojo en `variantes.html` (lo arma `herramientas/variantes.py`): cada objeto tal cual, como era antes y achicado 2×…8× con promedio, nearest, bilineal y bicúbico, en el juego, con `?filtro=linear|nearest|mip`.
    - Antes se usaba `herramientas/pixelar.py`, que buscaba la grilla de Gemini y tomaba un pixel por celda. Como esa grilla no es entera (2,5, 2,83 o 3,6 px), algunas filas salían dobles y otras se perdían. Todavía arma `arte/gemini/limpio/`, de donde salen las piezas de fachada.
 4. `arte/hd.json` dice qué nombre del juego usa cada objeto. Por ejemplo, `u_farola` es la luminaria LED y `u_contenedor` / `u_contenedor_b` son variantes. Los `pl_*` son plantas en maceta, los `plm_*` plantas que se mecen y los `yy_*` yuyos, que también se mecen.
+   - Vistas de atrás: `arte/gemini/<hoja>_atras.png` es la misma hoja redibujada por Gemini con cada objeto girado 180°. Se le pasa la original y se le pide «EDIT the attached sprite sheet… turn EVERY object around 180 degrees on its vertical axis so we now see its BACK side», con la herramienta de imágenes y en 16:9. Hay de mobiliario, postes y plaza. Sus specs usan `"ref": 1376`, o sea coordenadas en pixeles de la hoja.
+   - Esos objetos se llaman igual que el original pero con `_atras`, por ejemplo `u_banco_atras`. El editor y el exportador eligen el cuadro según hacia dónde mira el objeto (`face`, en `Barrio.vista`): si mira a la cámara usa el frente, y si mira para arriba usa la vista de atrás. Con el espejo salen las cuatro diagonales.
+   - Lo que no mira a nada en especial (contenedores, semáforos, kioscos, paradas) mira a una diagonal que sale de su posición. Los semáforos de espaldas no muestran la luz.
 5. `python3 herramientas/armar_hd.py` arma dos hojas:
    - `editor/recursos/hd_props.png/js`: los props, cada uno con su escala `e`;
    - `editor/recursos/fachada.png/js`: las piezas de fachada `fd_*`.
@@ -85,7 +88,7 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
 - Ese atlas (hasta 8192×4096 píxeles) lleva casas, gente, árboles, props y autos. Con WeedJS ff32c939 o posterior no hay tope de cuadros (antes, con más de 8192, no se dibujaba ningún sprite: N-111). Si un barrio no entra en los píxeles, el juego no carga («Could not fit … into atlas»): bajá la «variedad» de casas.
-- Sin giro de cámara, porque los sprites están horneados para una sola vista.
+- Sin giro de cámara, porque los sprites están horneados para una sola vista. Los props de Gemini tienen frente y espalda (y espejo): cuatro diagonales, no ocho rumbos.
 - Las texturas float (`rgba32float`) de las capas worldRect no suben bien en WebGL en esta versión de WeedJS: se suben como bytes con tipo FLOAT. Por eso la tabla de calles va en RGBA8 con punto fijo.
 
 ## Créditos

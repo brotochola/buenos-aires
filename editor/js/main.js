@@ -112,7 +112,8 @@
     for (const b of dyn) if (b.sprite && b.veh) { const p = b.getPosition(); placeCar(b.sprite, b.veh, p.x, p.y, b.getAngle()); }
     for (const d of yawDeps) {
       if (d.veh) placeCar(d.s, d.veh, d.x, d.y, d.hd);
-      else { const fl = Cam.C.ax * d.dx + Cam.C.ay * d.dy < 0; BB.setFlip(d.s.id, fl); d.s.flip = fl; }
+      else { const [n, fl] = Barrio.vista(F, d.f, Cam.C.ax * d.dx + Cam.C.ay * d.dy, Cam.C.bx * d.dx + Cam.C.by * d.dy);
+        if (n !== d.s.fname) placeSprite(d.s, n, d.s.wx, d.s.wy, fl); else { BB.setFlip(d.s.id, fl); d.s.flip = fl; } }
     }
   }
 
@@ -151,8 +152,10 @@
     for (const p of B.postes) { const bp = Houses.poste(7, p.phiQ, !!p.luz); for (const f of p.feet) addStaticCircle(f[0], f[1], .15, "poste");
       addBaked("postes", { built: bp, pts: p.feet, x: p.feet[0][0], y: p.feet[0][1], x1: p.feet[p.feet.length - 1][0], y1: p.feet[p.feet.length - 1][1] }); }
     // ---- props y árboles
-    for (const e of B.props) { let flip = e.flip; if (e.face) flip = Cam.C.ax * e.face[0] + Cam.C.ay * e.face[1] < 0;
-      const sp = put(e.f, e.x, e.y, { noClaim: true, flip, shadow: e.sh }); if (sp && e.face) yawDeps.push({ s: sp, dx: e.face[0], dy: e.face[1] }); }
+    // los que miran a algún lado: el cuadro (frente o atrás) y el espejo dependen del giro de la cámara
+    for (const e of B.props) { let name = e.f, flip = e.flip;
+      if (e.face) [name, flip] = Barrio.vista(F, e.f, Cam.C.ax * e.face[0] + Cam.C.ay * e.face[1], Cam.C.bx * e.face[0] + Cam.C.by * e.face[1]);
+      const sp = put(name, e.x, e.y, { noClaim: true, flip, shadow: e.sh }); if (sp && e.face) yawDeps.push({ s: sp, f: e.f, dx: e.face[0], dy: e.face[1] }); }
     for (const a of B.arboles) put("arbol_" + a.t, a.x, a.y, { noClaim: true, flip: a.flip, shadow: "sh_tree", cat: "trees" });
     // ---- cables (tramos 3D)
     const cables = []; for (const c of B.cables) cables.push(c[0], c[1], c[2], c[3], c[4], c[5]); Gfx.setCables(cables);

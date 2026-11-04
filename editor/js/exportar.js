@@ -112,9 +112,10 @@ const Exportar = (() => {
       archivos.push(["img/arboles.png", await png(cv)], ["img/arboles.json", json(hoja(frames, "arboles.png", cv))]); }
     const arboles = B.arboles.map(a => { const [x, y] = PW(a.x, a.y); return { t: a.t, x: r1(x), y: r1(y), fl: a.flip ? 1 : 0, r: r1(a.cr * 13.5) }; });
     // ---------- 4. props: sólo los cuadros usados del atlas del editor
-    const props = B.props.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip;
-      if (e.face) { const s0 = PW(e.x, e.y), s1 = PW(e.x + e.face[0], e.y + e.face[1]); fl = s1[0] < s0[0]; }
-      return { f: e.f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null }; });
+    // los que miran a algún lado: frente o atrás (los de Gemini que la tienen) y espejo, vistos desde la cámara del juego
+    const props = B.props.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip, f = e.f;
+      if (e.face) { const s0 = PW(e.x, e.y), s1 = PW(e.x + e.face[0], e.y + e.face[1]); [f, fl] = Barrio.vista(F, e.f, s1[0] - s0[0], s1[1] - s0[1]); }
+      return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null }; });
     const anclas = {}, escalas = {};
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
       // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)

@@ -114,13 +114,15 @@ export class Prop extends GameObject {
     this.collider.visualRange = 200;
     this.shadowCaster.heightMultiplier = .8;
     const L = this.lightEmitter, top = this.spriteRenderer.originalHeight * an[1] * e;
-    if (c.f.startsWith('u_farol')) {          // farol: charco de luz en la vereda + brillo en la lámpara
-      L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * (c.f === 'u_farola' ? .97 : .88);
-      L.lightIntensity = c.f === 'u_farol_doble' ? 2600 : c.f === 'u_farola' ? 2200 : 1800; L.hasGlowSprite = .55; L.active = 1;
+    const f = c.f.endsWith('_atras') ? c.f.slice(0, -6) : c.f;   // vista de atrás: el mismo objeto
+    if (f.startsWith('u_farol')) {            // farol: charco de luz en la vereda + brillo en la lámpara
+      L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * (f === 'u_farola' ? .97 : .88);
+      L.lightIntensity = f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
     } else {
       L.lightIntensity = 0; L.active = 0;
-      // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva)
+      // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva);
+      // de atrás (u_semaforo_atras) no se ven las luces
       if (c.f === 'u_semaforo') { const rojo = rng() < .5; this.addDecoration('_lightGradient', 0, -top * (rojo ? .87 : .7), .35, .35, 0, { tint: rojo ? 0xff3b30 : 0x36d96b, alpha: .85, anchorX: .5, anchorY: .5, layer: 'brillos' }); }
     }
   }
