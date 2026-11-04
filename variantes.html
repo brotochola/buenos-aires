@@ -17,7 +17,7 @@
   zoom: <button data-z="1">1</button><button data-z="1.75">1,75</button><button data-z="2.5">2,5</button><button data-z="4">4</button> <span id="zz" class="m"></span>
   <div id="err"></div></div>
 <script type="module">
-  import WEED from './weed/weed.bundle.esm.min.js';
+  import WEED from './weed/weed.prod.bundle.esm.min.js';
   const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search), F = q.get('filtro') || 'linear';
   for (const a of document.querySelectorAll('[data-f]')) a.classList.toggle('on', a.dataset.f === F);
   addEventListener('error', (e) => { $('err').textContent = 'Error: ' + (e.message || e.error); });

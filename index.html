@@ -25,8 +25,9 @@
 <div id="load"><b style="color:#f2c14e">Armando el barrio…</b><div class="bar"><i id="lbar"></i></div><div class="m" id="lst">iniciando</div><div class="m" id="liso"></div></div>
 <div id="pad"><div><button data-k="a">◀</button><button data-k="d">▶</button></div><div><button data-k=" ">■</button><button data-k="s">▼</button><button data-k="w">▲</button></div></div>
 <script type="module">
-  import WEED from './weed/weed.bundle.esm.min.js';
   const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search);
+  // WeedJS de producción (más rápido); con ?debug, el de debug con el panel
+  const { default: WEED } = await import(q.has('debug') ? './weed/weed.bundle.esm.min.js' : './weed/weed.prod.bundle.esm.min.js');
   if (q.has('debug')) document.body.classList.add('dbg');
   // dos barrios: el inventado (barrio/) y el real (carabobo/: Av. Carabobo al 1500 y la villa 1-11-14, Bajo Flores).
   // ?barrio=carabobo elige; si no viene, el último que se jugó. El botón 🗺️ cambia al otro.
