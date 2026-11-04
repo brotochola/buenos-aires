@@ -1,0 +1,50 @@
+{
+ "fd_local_co_mercado": {
+  "w": 134,
+  "h": 132,
+  "k": 0.6716,
+  "d": 0.3
+ },
+ "fd_local_co_restaurante": {
+  "w": 130,
+  "h": 132,
+  "k": 0.6923,
+  "d": 0.3
+ },
+ "fd_local_co_ropa": {
+  "w": 130,
+  "h": 132,
+  "k": 0.6923,
+  "d": 0.3
+ },
+ "fd_local_co_peluqueria": {
+  "w": 128,
+  "h": 132,
+  "k": 0.7031,
+  "d": 0.3
+ },
+ "fd_local_co_panaderia": {
+  "w": 134,
+  "h": 130,
+  "k": 0.6716,
+  "d": 0.3
+ },
+ "fd_local_co_iglesia": {
+  "w": 130,
+  "h": 130,
+  "k": 0.6923,
+  "d": 0.3
+ },
+ "fd_local_co_karaoke": {
+  "w": 130,
+  "h": 130,
+  "k": 0.6923,
+  "d": 0.3
+ },
+ "fd_local_co_almacen": {
+  "w": 128,
+  "h": 130,
+  "k": 0.7031,
+  "d": 0.3
+ }
+}

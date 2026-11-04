@@ -23,6 +23,9 @@ const Houses = (() => {
     CERRAJERIA: "ferreteria", GOMERIA: "ferreteria", TALLER: "ferreteria", KIOSCO: "kiosco", LIBRERIA: "kiosco", FOTOCOPIAS: "kiosco", FARMACIA: "farmacia", VETERINARIA: "farmacia",
     PELUQUERIA: "peluqueria", ALMACEN: "almacen", DESPENSA: "almacen", AUTOSERVICIO: "almacen", BAR: "almacen", ROTISERIA: "almacen", PIZZERIA: "panaderia", MERCERIA: "kiosco" };
 
+  // frentes del Barrio Coreano (Av. Carabobo): Gemini, locales_02
+  const CO = ["mercado", "restaurante", "ropa", "peluqueria", "panaderia", "iglesia", "karaoke", "almacen"];
+
   // ---------- piezas pintadas
   function glass(t, x0, y0, x1, y1, curtains = true) {
     for (let y = y0; y < y1; y++) { const f = (y - y0) / Math.max(1, y1 - y0); t.rect(x0, y, x1, y + 1, mix([108, 134, 158], [32, 42, 58], f)); }
@@ -180,7 +183,7 @@ const Houses = (() => {
     const finish = kind === "obra" ? "hueco" : kind === "villa" ? (r() < .62 ? "hueco" : "stucco") : (r() < .14 ? "brick" : "stucco");
     // revestimientos de frente: piedra Mar del Plata (entera o hasta 1,2 m), o salpicré; muy de los 60 y 70 en el conurbano
     const rv2 = rng(spec.seed ^ 0x9e3779b9), revest = finish === "stucco" && kind !== "villa" && kind !== "galpon" ? (rv2() < .16 ? "piedra" : rv2() < .2 ? "zocalo_piedra" : rv2() < .14 ? "salpicre" : null) : null;
-    const storeys = { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: r.pick([1, 1, 1, 2, 2, 3]) }[kind];
+    const storeys = { casa: 1, chalet: 1, negocio: 1, galpon: 1, casa2: 2, negocio_casa: 2, obra: r.pick([1, 2]), ph: 3, villa: spec.al ? r.pick([2, 2, 3, 3, 3, 4]) : r.pick([1, 1, 1, 2, 2, 3]) }[kind];
     const D = spec.D || { casa: r.pick([4.2, 5]), chalet: 4.6, negocio: 4.2, galpon: 6, casa2: 4.6, negocio_casa: 4.6, obra: 4.2, ph: 5.2, villa: 3.6 }[kind];
     const y0 = kind === "chalet" ? 2.6 : 0, zr = GF + (storeys - 1) * UF;
     let roofKind = { chalet: "tejas", galpon: "chapa", villa: "chapa" }[kind] || r.pick(["piedra", "piedra", "membrana", "ceramico", "losa", "membrana_roja"]);
@@ -215,7 +218,7 @@ const Houses = (() => {
         for (const xc of cols) { const cc = new Tex(.3, Htot, spec.seed + xc); cc.concrete([172, 170, 164]); for (let y = 0; y < t.h; y++) for (let x = 0; x < cc.w && xc + x < t.w; x++) { const i = (y * t.w + xc + x) * 4, j = (y * cc.w + x) * 4; for (let k = 0; k < 3; k++) t.d[i + k] = cc.d[j + k]; } }
         for (let s = 0; s < storeys; s++) { const zz = GF + s * UF; t.rect(0, zt(zz), t.w, zt(zz) + px(.28), [170, 168, 162]); t.shade(0, zt(zz) + px(.28), t.w, zt(zz) + px(.28) + 1, .7); } }
     }
-    let shop = null; const wins = [], balconies = [];
+    let shop = null, coShop = false; const wins = [], balconies = [];
     // ---- frente, planta baja
     if (kind === "negocio" || kind === "negocio_casa") {
       shop = SHOPS[spec.seed % SHOPS.length]; const [name] = shop;
@@ -224,9 +227,11 @@ const Houses = (() => {
       // frente de local de Gemini según el rubro (panadería, carnicería, verdulería...); si no hay, el dibujo de siempre
 
       const loc = spec.wealth < .3 && r() < .25 ? "cerrado" : LOC[name] || r.pick(["kiosco", "almacen"]);
-      if (R3.DECALS["fd_local_" + loc] && W >= 3.2) { const lw = Math.min(W - .3, r.uniform(3, 4.2)), lx = (W - lw) / 2; ft.blit("fd_local_" + loc, X(lx), zt(2.55), X(lw), zt(0) - zt(2.55)); }
+      const co = spec.co != null ? "fd_local_co_" + CO[spec.co % CO.length] : null;
+      if (co && R3.DECALS[co] && W >= 3.2) { const lw = Math.min(W - .3, 3.5), lx = (W - lw) / 2; ft.blit(co, X(lx), zt(3.05), X(lw), zt(0) - zt(3.05)); coShop = true; }
+      else if (R3.DECALS["fd_local_" + loc] && W >= 3.2) { const lw = Math.min(W - .3, r.uniform(3, 4.2)), lx = (W - lw) / 2; ft.blit("fd_local_" + loc, X(lx), zt(2.55), X(lw), zt(0) - zt(2.55)); }
       else { goodsDecal(ft, X(g0), zt(2.35), X(g1), zt(.5), name); doorDecal(ft, X(dx), zt(2.25), X(dw), px(2.23), "chapa", wall); }
-      if (r() < .5) ft.rect(X(.3), zt(2.57), X(W - .3), zt(2.35), [118, 120, 124]);
+      if (r() < .5 && !coShop) ft.rect(X(.3), zt(2.57), X(W - .3), zt(2.35), [118, 120, 124]);
     } else if (kind === "galpon") {
       const gw = Math.min(W - 1.6, 4.2); shutterDecal(ft, X((W - gw) / 2), zt(3.0), X(gw), px(2.55), r.pick([0, 0, .55]));
       if (W - gw > 3) pintada(ft, 4, X((W - gw) / 2) - 3, zt(2.6), r);
@@ -348,7 +353,7 @@ const Houses = (() => {
       for (let i = r.int(0, 3); i > 0; i--) plant(sc, r.uniform(.2, W - .6), y0 - .7, zb + .14, r.int(0, 99999));
       if (r() < .4) clothes(sc, .3, W - .3, y0 - .45, zb + 2.0, r.int(0, 99999));
     }
-    if (shop) {
+    if (shop && !coShop) {   // el frente coreano ya trae su cartel
       const [name, scol] = shop, sw = W - .3, st = new Tex(sw, .62, spec.seed + 40); st.stucco(scol, .2);
       st.rect(0, 0, st.w, 1, add(scol, 40)); st.rect(0, st.h - 1, st.w, st.h, mul(scol, .6));
       if (textW(name) > st.w - 6) text(st, name, (st.w - textW(name, false)) >> 1, 2, [252, 250, 244], false, mul(scol, .45)); else text(st, name, (st.w - textW(name)) >> 1, 2, [252, 250, 244], true, mul(scol, .45));

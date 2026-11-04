@@ -1,0 +1,16 @@
+{
+ "img": "locales_02.png",
+ "bg": "cyan",
+ "ref": 1376,
+ "grow": 0,
+ "objs": [
+  {"name": "fd_local_co_mercado", "w": 3, "box": [35, 43, 371, 375]},
+  {"name": "fd_local_co_restaurante", "w": 3, "box": [372, 43, 695, 375]},
+  {"name": "fd_local_co_ropa", "w": 3, "box": [696, 43, 1020, 375]},
+  {"name": "fd_local_co_peluqueria", "w": 3, "box": [1021, 43, 1342, 375]},
+  {"name": "fd_local_co_panaderia", "w": 3, "box": [35, 392, 371, 717]},
+  {"name": "fd_local_co_iglesia", "w": 3, "box": [372, 392, 695, 717]},
+  {"name": "fd_local_co_karaoke", "w": 3, "box": [696, 392, 1020, 717]},
+  {"name": "fd_local_co_almacen", "w": 3, "box": [1021, 392, 1342, 717]}
+ ]
+}
