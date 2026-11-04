@@ -18,7 +18,7 @@
   #load .m { color: #9aa0aa; font-size: 12px; }
 </style></head>
 <body>
-<div id="hud"><b>BARRIO · CONURBANO</b> <span class="m">WeedJS</span>
+<div id="hud"><b id="tit">BARRIO · CONURBANO</b> <span class="m">WeedJS</span>
   <div class="m">arrastrar / WASD: mover · rueda o pellizco: zoom · V: manejar (WASD, espacio frena)</div>
   <button id="bV">🚗 Manejar</button><button id="bN">🌗 Hora</button><button id="bM">−</button><button id="bP">+</button><button id="bS">🔊</button><span id="st" class="m"></span>
   <div id="err"></div></div>
@@ -28,6 +28,8 @@
   import WEED from './weed/weed.bundle.esm.min.js';
   const $ = (id) => document.getElementById(id), q = new URLSearchParams(location.search);
   if (q.has('debug')) document.body.classList.add('dbg');
+  // el barrio real dice dónde es (Bajo Flores: Av. Carabobo al 1500 y la villa 1-11-14)
+  import('./barrio/meta.js').then(({ META }) => { if (META.lugar) $('tit').textContent = 'BAJO FLORES · ' + META.lugar.toUpperCase(); }).catch(() => {});
   // diagnóstico visible en el celu: aislamiento, progreso, tiempo y cualquier error
   const t0 = performance.now(), STAGE = { audio: 'audio', scripts: 'scripts', buffers: 'memoria compartida', adobe: 'animaciones', atlas: 'atlas de sprites', tilemaps: 'tilemaps', flowfields: 'flowfields', shaders: 'shaders', sounds: 'sonidos', workers: 'workers', world: 'barrio' };
   let stage = 'descargando el motor';

@@ -446,12 +446,13 @@ export class ConurbanoScene extends Scene {
     logic: { numberOfLogicWorkers: HC >= 8 ? 3 : 2, staggeredUpdates: true },
     physics: { gravity: { x: 0, y: 0 }, sleeping: true, subStepCount: 0, commandRingCapacity: 65536, numberOfPhysicsWorkers: HC >= 8 ? 4 : 2 },
     particle: { maxParticles: 500, decals: false },
-    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + META.nProps + META.nCables + 4500, maxAttachedDecorationsPerEntity: 255 },
+    // piezas de casas y árboles, props (y sus sombras), cables y líneas de canchas
+    decoration: { maxDecorations: META.nPiezas + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 2500, maxAttachedDecorationsPerEntity: 255 },
     renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 12000, maxMeshIndices: 0 },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
-      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 512,
+      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 1024,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
@@ -470,10 +471,10 @@ export class ConurbanoScene extends Scene {
           { name: 'segs', format: 'rgba8unorm', size: { width: 12, height: META.NS } }, { name: 'pits', format: 'rgba8unorm', size: { width: META.PW || 1, height: META.PH || 1 } }],
         uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG), uPW: f32(META.PW || 1), uPH: f32(META.PH || 1) } } },
       // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
-      manchas: { zIndex: 1.4, ySorting: false, maxItems: 6000 },
+      manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
-      sombras: { zIndex: 1.6, ySorting: false, maxItems: 3000 },
-      cables: { zIndex: 3.5, ySorting: false, maxItems: 4000 },
+      sombras: { zIndex: 1.6, ySorting: false, maxItems: Math.max(3000, META.nProps + META.nArboles) },
+      cables: { zIndex: 3.5, ySorting: false, maxItems: Math.max(4000, META.nCables + 500) },
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
       brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1000 },
       // brillos de faroles y faros: se prenden al bajar el sol (update)
@@ -520,6 +521,9 @@ export class ConurbanoScene extends Scene {
     for (const a of w.arboles) { Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: w.arbolTipos[a.t] }); if (ash) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }
     for (const c of w.cables) { const dx = c[2] - c[0], dy = c[3] - c[1], L2 = Math.hypot(dx, dy);
       Decoration.spawn({ x: c[0], y: c[1], texture: '_white', anchorX: 0, anchorY: .5, scaleX: L2 / 8, scaleY: 1 / 8, rotation: Math.atan2(dy, dx), tint: 0x17171b, alpha: .85, layer: 'cables' }); }
+    // líneas pintadas de las canchas: finas, pegadas al piso
+    for (const c of (w.lineas || [])) { const dx = c[2] - c[0], dy = c[3] - c[1], L2 = Math.sqrt(dx * dx + dy * dy);
+      Decoration.spawn({ x: c[0], y: c[1], texture: '_white', anchorX: 0, anchorY: .5, scaleX: (L2 + 1) / 8, scaleY: 1.5 / 8, rotation: Math.atan2(dy, dx), tint: 0xf2f2ea, alpha: .8, layer: 'manchas' }); }
     // lugares para la gente: puntos al azar que caen en una vereda (el flowfield "veredas" tiene dirección ahí)
     const NG = 23000, gx = new Float32Array(NG), gy = new Float32Array(NG); let ng = 0;
     for (let k = 0; k < NG * 40 && ng < NG; k++) { const x = rng() * META.WW, y = rng() * META.WH; NavGrid.requestVectorFromStaticFlowfield('veredas', x, y, _v);
@@ -538,8 +542,10 @@ export class ConurbanoScene extends Scene {
       else if (c.m) { AutoIA.spawn({ x: c.x, y: c.y, rot: c.rot, ...md, faros: 1 }); if (!first) first = c; }
       else AutoEstacionado.spawn({ x: c.x, y: c.y, rot: c.rot, ...md });
     });
-    // tu auto: arranca en el centro del mapa, en el carril del primer auto con IA más cercano
-    let best = first, bd = 1e18; for (const c of w.autos) if (c.m) { const d = (c.x - META.WW / 2) ** 2 + (c.y - META.WH / 2) ** 2; if (d < bd) { bd = d; best = c; } }
+    // tu auto: arranca en el punto de inicio del barrio (en el real, Av. Carabobo al 1500) o en el centro del mapa, en el carril del
+    // auto con IA más cercano
+    const [ix, iy] = META.inicio || [META.WW / 2, META.WH / 2];
+    let best = first, bd = 1e18; for (const c of w.autos) if (c.m) { const d = (c.x - ix) ** 2 + (c.y - iy) ** 2; if (d < bd) { bd = d; best = c; } }
     if (best) { AutoJugador.spawn({ x: best.x + 30, y: best.y + 2, rot: best.rot, hoja: 'hatch_rojo', largo: AUTOS.hatch.largo, ancho: AUTOS.hatch.ancho, drive: 300, faros: 1 }); this._spawnCar = best; }
     this.focusX = best ? best.x : META.WW / 2; this.focusY = best ? best.y : META.WH / 2;
   }

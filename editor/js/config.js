@@ -3,6 +3,7 @@
 const CFG = (() => {
   const SCHEMA = [
     // grupo, clave, etiqueta, min, max, paso, valor, unidad, efecto, ayuda
+    ["Mundo", "real", "Barrio real: Carabobo al 1500 y la villa 1-11-14", 0, 1, 1, 1, "", "world", "Calles, villa, plazas y canchas de verdad (OpenStreetMap), con su tamaño (480 × 1080 m jugables). En 0, el barrio inventado con las perillas de abajo."],
     ["Mundo", "mapW", "Ancho del mapa", 200, 1400, 20, 480, "m", "world", "Área jugable este-oeste (adentro del paredón)."],
     ["Mundo", "mapH", "Alto del mapa", 160, 1000, 20, 340, "m", "world", "Área jugable norte-sur (adentro del paredón)."],
     ["Mundo", "ochavas", "Ochavas en las esquinas", 0, 1, 1, 1, "", "world", "Casas de esquina con la ochava a 45°, con el negocio (almacén, bar, kiosco…) en la ochava, como en Buenos Aires."],

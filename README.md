@@ -63,6 +63,18 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 
 El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el juego. Eso queda para el paso 4 o para el build final.
 
+## El barrio real: Av. Carabobo al 1500 y la villa 1-11-14 (Bajo Flores)
+
+Con el parámetro `real` en 1 (es el de siempre) el editor no inventa el barrio: lo arma con los datos de OpenStreetMap
+(© colaboradores de OpenStreetMap, licencia ODbL).
+
+- **Qué entra:** una franja de 480 × 1080 m jugables (más 40 m de margen), girada 15,5° para que la grilla de Bajo Flores quede casi derecha en pantalla. Arriba, Av. Carabobo con Balbastro, Lautaro y Saraza (el juego arranca en Carabobo al 1500); en el medio, Av. Castañares, Bonorino y el Barrio Rivadavia I con sus pasajes peatonales; abajo, la villa 1-11-14 hasta Av. Riestra.
+- **Calles:** las de OSM, clasificadas (avenida, calle, pasaje, pasillo de villa), con su ancho, y encajadas en los 48 rumbos de los autos: cada tramo toma el rumbo más cercano y los nodos se mueven por mínimos cuadrados (en promedio 1,7 m), así las esquinas son las mismas.
+- **Villa:** las manzanas de la 1-11-14 mapeadas en OSM, con sus pasillos. Las casillas son de ladrillo, de 2 a 4 pisos, pegadas, con contrapiso y tierra entre medio.
+- **Barrio Coreano:** los locales sobre Carabobo tienen frente coreano (supermercado, restaurante, ropa, peluquería, panadería, iglesia, karaoke, almacén; Gemini, `arte/gemini/locales_02`).
+- **Plazas y canchas** de OSM: las plazas con sus senderos, las canchas con arcos y líneas pintadas.
+- **Rehacerlo:** `editor/recursos/osm_carabobo.json` son los datos bajados de la API de OSM (calles, usos del suelo, edificios, comercios, en metros); `python3 herramientas/osm_real.py --png vista.png` escribe `editor/recursos/real_carabobo.js` (ventana, giro y tamaño arriba del archivo). Después, exportar desde el editor como siempre.
+
 ## Cómo se arma la ciudad (editor/js/world.js)
 
 - **Grilla continua:** en un mapa chico, una sola grilla (como Flores). En uno grande, zonas de loteos de distintas épocas separadas por rectas, que son avenidas o calles. Las calles siguen derecho de una cuadra a la otra.
@@ -105,5 +117,7 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 - Las texturas float (`rgba32float`) de las capas worldRect no suben bien en WebGL en esta versión de WeedJS: se suben como bytes con tipo FLOAT. Por eso la tabla de calles va en RGBA8 con punto fijo.
 
 ## Créditos
+
+- Mapa del barrio real: © colaboradores de OpenStreetMap (https://www.openstreetmap.org/copyright), licencia ODbL.
 
 - Autos: «TopDown Vehicles» v1.17 de MinZiin (https://minzinn.itch.io/), licencia Creative Commons Atribución 4.0.

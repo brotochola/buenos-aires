@@ -145,6 +145,7 @@ const Exportar = (() => {
     const scrRot = (hd) => Math.atan2(-SYN * Math.sin(hd), Math.cos(hd) + K * Math.sin(hd));
     const autos = B.cars.map(c => { const [x, y] = PW(c.x, c.y); return { c: c.color, x: r1(x), y: r1(y), rot: Math.round(scrRot(c.hd) * 1000) / 1000, m: c.moving ? 1 : 0 }; });
     const cables = B.cables.map(c => { const a = PW(c[0], c[1], c[2]), b = PW(c[3], c[4], c[5]); return [r1(a[0]), r1(a[1]), r1(b[0]), r1(b[1])]; });
+    const lineas = (B.lineas || []).map(c => { const a = PW(c[0], c[1], 0), b = PW(c[2], c[3], 0); return [r1(a[0]), r1(a[1]), r1(b[0]), r1(b[1])]; });
     // ---------- 6. flowfields
     progreso("flowfields", .7); await espera();
     const GW = Math.ceil(MW), GH = Math.ceil(MH), CELL = 12, FW = Math.ceil(WW / CELL), FH = Math.ceil(WH / CELL);
@@ -187,8 +188,8 @@ const Exportar = (() => {
     progreso("piso", .86); await espera();
     const GC = .5, CW = Math.ceil(MW / GC), CHh = Math.ceil(MH / GC), cellA = new Uint8Array(CW * CHh * 4), cellB = new Uint8Array(CW * CHh * 4);
     const TYPE = { ave: 0, calle: 1, pasaje: 2, pasillo: 3 }, MAT = { asf: 0, roto: 1, tierra: 2, pasillo: 3, adoquin: 4 };
-    const VER = { tierra: 1, vain: 2, gris: 3, roja: 3, cem: 4, pasto: 5 }, PAT = { pasto: 1, tierra: 2, yuyo: 3, roja: 4, cem: 5 };
-    const NS = W.segs.length, segs = new Uint8Array(NS * 48), ENC = { pos: [20, 100], unit: [1, 32767.5], len: [0, 100], w: [0, 1000], int: [0, 1] };
+    const VER = { tierra: 1, vain: 2, gris: 3, roja: 3, cem: 4, pasto: 5 }, PAT = { pasto: 1, tierra: 2, yuyo: 3, roja: 4, cem: 5, sint: 1 };
+    const NS = W.segs.length, segs = new Uint8Array(NS * 48), ENC = { pos: [20, 50], unit: [1, 32767.5], len: [0, 50], w: [0, 1000], int: [0, 1] };   // pos y len: 2 cm, hasta 1290 m
     W.segs.forEach((s, k) => { s._gid = k; const cr = s.cross.slice(0, 8); while (cr.length < 8) cr.push(null);
       const vals = [[s.a[0], "pos"], [s.a[1], "pos"], [s.dir[0], "unit"], [s.dir[1], "unit"], [s.n[0], "unit"], [s.n[1], "unit"], [s.len, "len"], [s.hw, "w"], [Math.max(0, s.sw), "w"], [s.med || 0, "w"],
         [s.cls, "int"], [s.w, "w"], [TYPE[s.type], "int"], [MAT[s.mat], "int"], [s.cantero ? 1 : 0, "int"], [0, "int"], ...cr.map(t => [t, "pos"])];
@@ -207,7 +208,7 @@ const Exportar = (() => {
         // patio: el piso del lote (baldosa, cemento…) sólo en los primeros 13 m desde el frente (la casa y su patio); más al fondo,
         // pasto (tierra en los barrios pobres), como el fondo de las manzanas de Buenos Aires
         const lot = W.lotAt(x, y); if (lot) { const v = lot.nOut ? (x - lot.o[0]) * lot.nOut[0] + (y - lot.o[1]) * lot.nOut[1] : 0;
-          const pat = lot.patio !== "yuyo" && lot.kind !== "plaza" && lot.kind !== "sendero" && v > 13 ? (lot.w < .3 ? "tierra" : "pasto") : lot.patio;
+          const pat = lot.patio !== "yuyo" && lot.kind !== "plaza" && lot.kind !== "sendero" && lot.kind !== "cancha" && v > 13 ? (lot.w < .3 ? "tierra" : "pasto") : lot.patio;
           cellB[o + 3] = (PAT[pat] || 5) | (lot.w < .4 ? 16 : 0); }
       } }
     const WGc = Math.ceil(MW / 10), HGc = Math.ceil(MH / 10), wealth = new Uint8Array(WGc * HGc);
@@ -228,8 +229,9 @@ const Exportar = (() => {
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, nArboles: arboles.length,
-      nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, anclas, escalas };
-    archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables })]);
+      nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
+      ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}) };
+    archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, arboles, arbolTipos, props, autos, cables, lineas })]);
     progreso("zip", .98); await espera();
     const zip = await Zip.armar(archivos.map(([p, d]) => ["barrio/" + p, d]));
     progreso("listo en " + Math.round((performance.now() - t0) / 1000) + " s", 1);

@@ -128,9 +128,20 @@ const Ground = (() => {
       return tiles(c.t, dd, ix, iy, kind, dmg);
     }
     const lot = W.lotAt(wx, wy);
+    if (lot && lot.kind === "cancha") { const K2 = lot.cancha, k = lot.patio;
+      if (k === "sint") { const f = .92 + .1 * S(N.g, ix, iy), st = ((wx * K2.u[0] + wy * K2.u[1]) / 3 | 0) & 1; set((58 + 8 * st) * f, (132 + 12 * st) * f, (62 + 6 * st) * f); }
+      else if (k === "pasto") grass(ix, iy, .15); else if (k === "tierra") dirt(ix, iy); else tiles(wx, wy, ix, iy, "cem", false);
+      const du = (wx - K2.c[0]) * K2.u[0] + (wy - K2.c[1]) * K2.u[1], dv = (wx - K2.c[0]) * K2.v[0] + (wy - K2.c[1]) * K2.v[1], hA = K2.bA / 2 - .6, hB = K2.bB / 2 - .6, LW = .08;
+      const aU = Math.abs(du), aV = Math.abs(dv), rc = Math.min(3, hB * .35), ar = Math.min(5, hA * .2), aw = hB * .5;
+      const linea = (aU < hA + LW && aV < hB + LW && (Math.abs(aU - hA) < LW || Math.abs(aV - hB) < LW)) || (K2.deporte === "soccer" && aV < hB && (aU < LW || Math.abs(Math.hypot(du, dv) - rc) < LW ||
+        (aV < aw + LW && Math.abs(aU - (hA - ar)) < LW) || (aU > hA - ar && aU < hA && Math.abs(aV - aw) < LW)));
+      if (linea) set(232, 232, 224);
+      return; }
     if (lot) { const k = lot.patio; if (k === "pasto") return grass(ix, iy, .3); if (k === "tierra") return S(N.b, ix, iy) > .6 ? grass(ix, iy, .8) : dirt(ix, iy);
       if (k === "yuyo") return yuyo(ix, iy); if (k === "roja") return tiles(wx, wy, ix, iy, "roja", false); return tiles(wx, wy, ix, iy, "cem", lot.w < .4); }
     const w = W.wealthAt(wx, wy);
+    if (w < .15) { if (S(N.b, ix, iy) > .5) { const f = .8 + .14 * (S(N.a, ix, iy) - .5) + (S(N.g, ix * 3, iy * 3) > .9 ? -.12 : 0); return set(156 * f, 150 * f, 140 * f); }
+      return S(N.c, ix, iy) > .78 ? grass(ix, iy, .9) : dirt(ix, iy); }
     if (w < .3) yuyo(ix, iy); else grass(ix, iy, .5);
   }
   // chunk en espacio de mundo: fila 0 = sur. Un canvas reutilizado para el ImageData no hace falta: se crea uno por chunk (vive en la GPU).

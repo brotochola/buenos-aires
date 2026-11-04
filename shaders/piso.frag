@@ -89,11 +89,11 @@ float wealthAt(float x, float y) { return texelFetch(wealth, ivec2(clamp(int(x /
 // calle candidata: devuelve d, t, ds y si es calzada (1) o vereda (2)
 struct Seg { vec2 a; vec2 dir; vec2 n; float len, hw, sw, med, cls, w; int type, mat; bool cant; };
 float u16(int id, int m) { vec4 t = texelFetch(segs, ivec2(m >> 1, id), 0); return (m & 1) == 0 ? float(b8(t.r) + b8(t.g) * 256) : float(b8(t.b) + b8(t.a) * 256); }
-float dPos(float q) { return q / 100.0 - 20.0; }
+float dPos(float q) { return q / 50.0 - 20.0; }
 float dUnit(float q) { return q / 32767.5 - 1.0; }
 Seg loadSeg(int id) { Seg s;
   s.a = vec2(dPos(u16(id, 0)), dPos(u16(id, 1))); s.dir = vec2(dUnit(u16(id, 2)), dUnit(u16(id, 3))); s.n = vec2(dUnit(u16(id, 4)), dUnit(u16(id, 5)));
-  s.len = u16(id, 6) / 100.0; s.hw = u16(id, 7) / 1000.0; s.sw = u16(id, 8) / 1000.0; s.med = u16(id, 9) / 1000.0; s.cls = u16(id, 10); s.w = u16(id, 11) / 1000.0;
+  s.len = u16(id, 6) / 50.0; s.hw = u16(id, 7) / 1000.0; s.sw = u16(id, 8) / 1000.0; s.med = u16(id, 9) / 1000.0; s.cls = u16(id, 10); s.w = u16(id, 11) / 1000.0;
   s.type = int(u16(id, 12)); s.mat = int(u16(id, 13)); s.cant = u16(id, 14) > .5; return s; }
 bool nearCross(int id, float t, float r) {
   for (int m = 16; m < 24; m++) { float q = u16(id, m); if (q > 65534.5) break; if (abs(t - dPos(q)) < r) return true; }
@@ -157,7 +157,11 @@ vec3 pixel(float wx, float wy) {
   if (pk > 0) { int k = pk & 15; bool d = (pk & 16) != 0;
     if (k == 1) return grass(ix, iy, .3); if (k == 2) return NB(ix, iy) > .6 ? grass(ix, iy, .8) : dirt(ix, iy);
     if (k == 3) return yuyo(ix, iy); if (k == 4) return tiles(wx, wy, ix, iy, 6, false); return tiles(wx, wy, ix, iy, 4, d); }
-  return wealthAt(wx, wy) < .3 ? yuyo(ix, iy) : grass(ix, iy, .5);
+  // la villa (muy pobre): contrapiso de cemento gastado y tierra entre las casillas, casi sin pasto
+  float wv = wealthAt(wx, wy);
+  if (wv < .15) { if (NB(ix, iy) > .5) { float f = .8 + .14 * (NA(ix, iy) - .5) + (NG(ix * 3, iy * 3) > .9 ? -.12 : 0.0); return vec3(156, 150, 140) * f; }
+    return NC(ix, iy) > .78 ? grass(ix, iy, .9) : dirt(ix, iy); }
+  return wv < .3 ? yuyo(ix, iy) : grass(ix, iy, .5);
 }
 
 void main() {

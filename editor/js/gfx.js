@@ -146,7 +146,7 @@ const Gfx = (() => {
 
   // ---------- sprites: billboards verticales instanciados
   // persistentes (árboles, props, autos) con id fijo + transitorios (gente) que se cargan cada cuadro
-  const CAP = 16384, TCAP = 4096, MAXI = 8192;
+  const CAP = 65536, TCAP = 8192, MAXI = 8192;
   const PX = new Float32Array(CAP), PY = new Float32Array(CAP), PF = new Int32Array(CAP).fill(-1), PFL = new Int8Array(CAP), POY = new Float32Array(CAP), PCAT = new Uint8Array(CAP), PON = new Uint8Array(CAP);
   const FREE = new Int32Array(CAP); let nFree = 0, nP = 0;
   const TX = new Float32Array(TCAP), TY = new Float32Array(TCAP), TF = new Int32Array(TCAP), TFL = new Int8Array(TCAP); let nT = 0;
