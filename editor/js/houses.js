@@ -589,6 +589,78 @@ const Houses = (() => {
     }
     return { sc };
   }
+  // ---------- casa de esquina con ochava (Buenos Aires): el negocio en la ochava (puerta, cartel y a veces toldo), vidrieras sobre
+  // las dos calles, uno o dos pisos con ventanas, terraza con parapeto. Local: la calle de adelante a lo largo de x (frente en
+  // y = 0), la de al lado del lado de x = 0; la ochava corta la esquina (0, 0) a 45° (c m sobre cada calle).
+  const ESQ = [["ALMACEN", [36, 120, 64]], ["BAR", [120, 32, 30]], ["KIOSCO", [200, 34, 34]], ["FARMACIA", [24, 96, 168]], ["PIZZERIA", [186, 44, 36]],
+    ["PANADERIA", [214, 150, 70]], ["CAFE", [92, 58, 36]], ["VERDULERIA", [40, 128, 56]], ["FERRETERIA", [34, 78, 160]], ["LIBRERIA", [36, 86, 168]]];
+  function esquina(spec, phi = 0) {
+    const sc = new Scene(); sc.setXform(phi); const r = rng(spec.seed);
+    const W = spec.W, D = spec.D, c = spec.c || 2.8, d = c * Math.SQRT2, storeys = spec.p || 2, zr = GF + (storeys - 1) * UF, Htot = zr + PAR;
+    const zt = (z) => px(Htot - z), X = (m) => px(m), wall = r.pick(WALLS), wear = (spec.wealth ?? .5) < .35 ? 1.4 : 1;
+    const [name, scol] = ESQ[(spec.rub ?? spec.seed) % ESQ.length], bar = name === "BAR" || name === "CAFE";
+    const ft = wallTex(W - c, Htot, wall, "stucco", spec.seed, wear), st = wallTex(D - c, Htot, wall, "stucco", spec.seed + 5, wear);
+    const ot = wallTex(d, Htot, wall, "stucco", spec.seed + 7, wear), bt = wallTex(W, Htot, mix(wall, [200, 196, 188], .3), "stucco", spec.seed + 1, wear * 1.2);
+    const stx = new Tex(D, Htot, spec.seed + 3); stx.stucco(mix(wall, [190, 186, 178], .6), wear * 1.3); stx.runoff(.8, 1.2);
+    // zócalo y línea de cada piso en los tres frentes
+    for (const t of [ft, st, ot]) { t.rect(0, zt(.45), t.w, t.h, [122, 118, 112]); t.rect(0, zt(.45), t.w, zt(.45) + 1, [156, 152, 146]); t.humidity(1.1);
+      for (let k = 1; k < storeys; k++) { const zb = GF + (k - 1) * UF; t.rect(0, zt(zb) - 2, t.w, zt(zb) + 1, add(wall, 18)); t.rect(0, zt(zb) + 1, t.w, zt(zb) + 2, mul(wall, .7)); }
+      t.rect(0, zt(zr) - 3, t.w, zt(zr), add(wall, 26)); t.rect(0, zt(zr), t.w, zt(zr) + 1, mul(wall, .66)); }
+    // ---- la ochava: el negocio (frente de Gemini según el rubro, o vidriera con mesas si es bar), el cartel arriba
+    const loc = LOC[name], cartelY0 = zt(3.15), cartelY1 = zt(2.62);
+    if (!bar && R3.DECALS["fd_local_" + loc]) ot.blit("fd_local_" + loc, X(.12), zt(2.6), X(d - .24), zt(0) - zt(2.6));
+    else { ot.rect(X(.15), zt(2.6), X(d - .15), zt(.45), [64, 40, 26]); glass(ot, X(.3), zt(2.45), X(d - .3), zt(.6), false);
+      for (let xm = .55; xm < d - .5; xm += 1.1) { ot.rect(X(xm), zt(.95), X(xm + .5), zt(.85), [90, 60, 36]); ot.rect(X(xm + .22), zt(.85), X(xm + .28), zt(.6), [70, 46, 28]); }
+      doorDecal(ot, X(d / 2 - .55), zt(2.3), X(1.1), px(2.28), "vidrio", wall); }
+    ot.rect(X(.08), cartelY0, X(d - .08), cartelY1, scol); ot.rect(X(.08), cartelY0, X(d - .08), cartelY0 + 1, add(scol, 50)); ot.rect(X(.08), cartelY1 - 1, X(d - .08), cartelY1, mul(scol, .5));
+    { const fits = textW(name) <= ot.w - X(.4); text(ot, name, (ot.w - textW(name, fits)) >> 1, cartelY0 + 2, [252, 248, 236], fits, mul(scol, .45)); }
+    // ---- frente y costado, planta baja: vidriera junto a la ochava, después la puerta de la casa y una ventana
+    const vidriera = (t, x0, x1) => { if (x1 - x0 < .8) return; if (bar) { t.rect(X(x0), zt(2.5), X(x1), zt(.45), [64, 40, 26]); glass(t, X(x0 + .12), zt(2.38), X(x1 - .12), zt(.55), false); }
+      else goodsDecal(t, X(x0), zt(2.35), X(x1), zt(.5), name); t.rect(X(x0 - .05), zt(3.1), X(x1 + .05), zt(2.62), scol); };
+    const restoPB = (t, x0, x1) => { if (x1 - x0 < 1.2) return; doorDecal(t, X(x0 + .2), zt(2.2), X(.95), px(2.18), r.pick(["madera", "madera", "chapa"]), wall);
+      if (x1 - x0 > 3) windowDecal(t, X(x0 + 1.6), zt(2.15), X(1.2), px(1.15), r.pick(["persiana", "cerrado"]), wall); };
+    const vf = Math.min(W - c - .3, 3.4); vidriera(ft, .25, vf); restoPB(ft, vf + .3, W - c - .3);
+    const vs = Math.min(D - c - .3, 3.4); vidriera(st, D - c - vs, D - c - .25); restoPB(st, .3, D - c - vs - .3);
+    // ---- pisos altos: ventanas de abrir con persiana (y balcón francés en la ochava)
+    for (let k = 1; k < storeys; k++) { const zb = GF + (k - 1) * UF;
+      for (const [t, wm] of [[ft, W - c], [st, D - c]]) { const n = Math.max(1, Math.floor(wm / 2.6)); for (let i = 0; i < n; i++) windowDecal(t, X(wm * (i + .5) / n - .55), zt(zb + 2.3), X(1.1), px(2), r.pick(["persiana", "persiana", "none"]), wall); }
+      windowDecal(ot, X(d / 2 - .6), zt(zb + 2.35), X(1.2), px(2.1), "persiana", wall);
+      for (let xx = X(d / 2 - .8); xx < X(d / 2 + .8); xx += 3) ot.rect(xx, zt(zb + 1), xx + 1, zt(zb + .1), [30, 30, 34]);
+      ot.rect(X(d / 2 - .85), zt(zb + 1.02), X(d / 2 + .85), zt(zb + .96), [30, 30, 34]); }
+    if (r() < .3) pintada(st, 4, Math.max(5, X(D - c - vs) - 8), zt(3.3), r);
+    // contrafrente (da al patio de la manzana): puerta, ventanas y pileta de lavar
+    doorDecal(bt, X(W - 2), zt(2.1), X(.85), px(2.08), "chapa", wall);
+    for (let k = 0; k < storeys; k++) { const zb = k ? GF + (k - 1) * UF : 0; for (let xm = .8; xm < W - 2.6; xm += 3) windowDecal(bt, X(xm), zt(zb + 2.2), X(1), px(1), r.pick(["persiana", "cerrado", "none"]), wall); }
+    const ftc = (z0, z1) => ft.crop(zt(z1), zt(z0)), stc = (z0, z1) => st.crop(zt(z1), zt(z0)), otc = (z0, z1) => ot.crop(zt(z1), zt(z0));
+    const btc = (z0, z1) => bt.crop(zt(z1), zt(z0)), sxc = (z0, z1) => stx.crop(zt(z1), zt(z0));
+    // ---- volumen: dos cajas (la del frente y la del costado), la cara de la ochava y el triángulo del techo entre las dos
+    const roof = roofTex(W, D, r.pick(["membrana", "ceramico", "losa", "membrana_roja"]), spec.seed + 5), inner = mix(wall, [204, 200, 192], .5), cap = [228, 224, 214];
+    sc.box(c, 0, 0, W, D, zr, { front: ftc(0, zr), back: btc(0, zr), right: sxc(0, zr), top: roof });
+    sc.box(0, c, 0, c, D, zr, { left: stc(0, zr), back: btc(0, zr), top: roof });
+    sc.quad([0, c, zr], [c, -c, 0], [0, 0, -zr], otc(0, zr));
+    sc.quad([c, c, zr], [0, -c, 0], [-c, 0, 0], roof, { tri: true });
+    sc.box(c * .5, c * .5, 0, c, c, zr, {});   // sólo sombra (la cuña de la ochava)
+    // ---- parapetos de la terraza (la ochava, con caras sueltas) y cornisa
+    sc.box(c, 0, zr, W, .2, Htot, { front: ftc(zr, Htot), back: inner, top: cap });
+    sc.box(0, c, zr, .2, D, Htot, { left: stc(zr, Htot), right: inner, top: cap });
+    sc.box(0, D - .2, zr, W, D, Htot, { front: inner, back: btc(zr, Htot), top: cap });
+    sc.box(W - .2, .2, zr, W, D - .2, Htot, { right: sxc(zr, Htot), left: inner, top: cap });
+    const a = .2 / Math.SQRT2, ci = c + 2 * a;
+    sc.quad([0, c, Htot], [c, -c, 0], [0, 0, -PAR], otc(zr, Htot));
+    sc.quad([ci, 0, Htot], [-ci, ci, 0], [0, 0, -PAR], inner);
+    sc.quad([a, c + a, Htot], [c, -c, 0], [-a, -a, 0], cap);
+    sc.box(c, -.14, Htot - .04, W + .06, .2, Htot + .08, { front: [236, 232, 222], top: [244, 240, 232], right: [180, 176, 168] });
+    sc.box(-.14, c, Htot - .04, .2, D + .06, Htot + .08, { left: [214, 210, 200], top: [244, 240, 232], back: [226, 222, 212] });
+    sc.quad([-.1, c - .04, Htot + .08], [c + .04, -c - .04, 0], [0, 0, -.12], [236, 232, 222], { both: true });
+    // ---- toldo a rayas sobre la puerta de la ochava (bares, cafés, pizzerías)
+    if (bar || name === "PIZZERIA" || r() < .25) { const tt = new Tex(d, 1.1, spec.seed + 30, [0, 0, 0]), c2 = r.pick([[238, 236, 228], [236, 200, 60]]);
+      for (let x = 0; x < tt.w; x++) tt.rect(x, 0, x + 1, tt.h, ((x / X(.3)) | 0) % 2 ? c2 : scol); tt.rect(0, tt.h - 3, tt.w, tt.h, mul(scol, .7));
+      sc.quad([0, c, 3.0], [c, -c, 0], [-.72, -.72, -.55], tt, { both: true }); }
+    // ---- en la terraza: tanque de agua
+    { const tx = r.uniform(c + .5, W - 1.4), ty = r.uniform(D * .4, D - 1.4);
+      sc.box(tx, ty, zr, tx + .9, ty + .9, zr + 1.0, { front: [40, 40, 44], back: [40, 40, 44], left: [30, 30, 34], right: [30, 30, 34], top: [62, 62, 66] }); }
+    return { sc, storeys, depth: D, shop: name, height: Htot };
+  }
   // paredón del borde del área jugable: revoque gastado de 3 m con pilares cada 4 m, pintadas y alambre de púas arriba
   // (como los paredones de las vías). Local: a lo largo de x, el espesor hacia +y.
   function paredon(W, seed, phi = 0) {
@@ -612,5 +684,5 @@ const Houses = (() => {
       sc.box(-.2, -1.3, 6.62, .2, -.85, 6.85, { front: [70, 72, 78], right: [56, 58, 62], left: [60, 62, 66], top: [96, 98, 104] }); }
     return { sc, cable: [[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]] };
   }
-  return { build, tapial, paredon, poste, WALLS };
+  return { build, tapial, paredon, esquina, poste, WALLS, ESQ };
 })();

@@ -250,6 +250,34 @@ const World = (() => {
         for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) if (lotGrid[y * LW + x] === id && enSendero((x + .5) / LR, (y + .5) / LR)) lotGrid[y * LW + x] = sid;
       }
     }
+    // ---------- esquinas con ochava: en cada esquina de manzana casi en escuadra (no en la villa ni en la plaza), un lote cuadrado
+    // de 10 m con la casa de esquina; los lotes de las dos calles empiezan después. Marco: la calle de adelante es la que deja a la
+    // otra del lado izquierdo (x = 0), así la ochava siempre queda en la esquina (0, 0) del lote. Sin sorteos: sale del lugar.
+    if (C.ochavas !== 0) for (const it of inters) {
+      const { s, o, p } = it;
+      if ([s, o].some(q => q.type === "pasillo" || q.type === "pasaje" || q.mat === "tierra")) continue;
+      if (Math.abs(s.dir[0] * o.dir[0] + s.dir[1] * o.dir[1]) > .2) continue;
+      for (const a of [1, -1]) for (const b of [1, -1]) {
+        const u = [s.dir[0] * a, s.dir[1] * a], v = [s.n[0] * b, s.n[1] * b];
+        if (u[0] * o.n[0] + u[1] * o.n[1] === 0) continue;
+        const du = o.hw + o.sw + .05, dv = s.hw + s.sw + .05, K = [p[0] + u[0] * du + v[0] * dv, p[1] + u[1] * du + v[1] * dv];
+        if (K[0] < 6 || K[1] < 6 || K[0] > MW - 6 || K[1] > MH - 6 || !dentro(K[0], K[1])) continue;
+        const wq = wealthAt(K[0], K[1]); if (wq < .2) continue;
+        if (villaAt(K[0] + (u[0] + v[0]) * 4, K[1] + (u[1] + v[1]) * 4)) continue;
+        // una esquina de verdad: vereda de las dos calles pegada al vértice
+        const ws = classify(K[0] - v[0] * .6, K[1] - v[1] * .6), wo = classify(K[0] - u[0] * .6, K[1] - u[1] * .6);
+        if (!ws || !wo || ws.k !== "walk" || wo.k !== "walk") continue;
+        const S = 10, ux0 = [v[1], -v[0]], frenteS = ux0[0] * u[0] + ux0[1] * u[1] > 0;
+        const ux = frenteS ? u : v, nOut = frenteS ? v : u, seg = frenteS ? s : o;
+        const q = quadPts(K, ux, nOut, S, S); if (!quadFree(q)) continue;
+        const id = lots.length, side = nOut[0] * seg.n[0] + nOut[1] * seg.n[1] > 0 ? 1 : -1;
+        const h = Math.abs(Math.imul(Math.round(K[0] * 10), 73856093) ^ Math.imul(Math.round(K[1] * 10), 19349663));
+        const t0 = (K[0] - seg.a[0]) * seg.dir[0] + (K[1] - seg.a[1]) * seg.dir[1], t1 = t0 + (ux[0] * seg.dir[0] + ux[1] * seg.dir[1]) * S;
+        const lot = { id, q, o: K, ux, nOut, fw: S, ld: S, seg, side, w: wq, kind: "esquina", phi: Math.atan2(ux[1], ux[0]), seed: h % 1000000007,
+          vereda: wq < .45 ? "cem" : ["vain", "vain", "gris", "roja"][h % 4], patio: "cem", esquina: { c: 2.8, p: wq < .35 ? 1 : 2, rub: (h >>> 3) % 10 } };
+        lots.push(lot); stamp(q, id); seg.lots[side].push({ t0: Math.min(t0, t1), t1: Math.max(t0, t1), lot });
+      }
+    }
     const order = segs.slice().sort((a, b) => b.cls - a.cls || r() - .5);
     for (const s of order) {
       for (const side of [1, -1]) {

@@ -8,6 +8,7 @@ const Barrio = (() => {
   const Wb = (w, step) => Math.max(3, Math.floor(w / step + 1e-6) * step);
   const Db = (d, deep) => deep ? (d < 6 ? 5 : d < 8 ? 7 : d < 10 ? 9 : 11) : d;
   const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const EN_CALLE = /^(u_valla|u_cono|c_volquete|u_contenedor|c_palomas|yy_|obra_material)/;
   // ocupación (m): lo que reserva cada cosa, para que nada se pise
   const RAD = [["k_gauchito", .9], ["k_virgen", .7], ["k_mantero", .9], ["k_pelopincho", 1.2], ["k_cucha", .6], ["k_", .35], ["b_tendedero", 1.6], ["b_mesa_patio", 1.4], ["b_arco", 1.4], ["b_bolsones", .7], ["b_pallets", .6], ["b_viejo", .45], ["b_mujer", .4], ["b_", .3], ["c_volquete", 2.2], ["c_puesto", 1.3], ["c_chori", 1.1], ["c_mesa_bar", 1], ["c_moto", .7], ["c_bici", .6], ["c_perro", .35], ["c_gato", .2], ["c_palomas", .5], ["c_buzon", .3], ["c_hidrante", .2], ["pz_monumento", 2.2], ["pz_fuente", 2.5], ["pz_calesita", 2.6], ["pz_glorieta", 3], ["pz_jacaranda", .5], ["pz_palo_borracho", .5], ["pz_", 1.2], ["plm_santarita", .7], ["plm_", .35], ["pl_", .22], ["yy_", .2], ["arbol", .4], ["u_farol", .2], ["u_semaforo", .18], ["u_cono", .14], ["u_valla", .45], ["u_contenedor", .8], ["u_campana", .5], ["u_tablero", .35], ["u_caja", .3],
     ["u_refugio", 1.2], ["u_kiosco", 1.5], ["carro_cartonero", 1.0], ["chango", .5], ["gomas", .55], ["chapas", .5], ["u_tanque", .6], ["u_banco", .9], ["u_parada", .25], ["u_cesto", .3], ["u_poste_trafo", .45], ["canasto", .35], ["cartel", .2], ["pizarra", .3], ["obra_material", .7], ["bolsas", .35], ["parrilla", .7], ["pileta", 1.4]];
@@ -40,6 +41,9 @@ const Barrio = (() => {
       if (VAR[name]) name = VAR[name][h % VAR[name].length];
       if (!F[name]) return null;
       if (name.startsWith("yy_") && !W.dentro(x, y)) return null;   // afuera del paredón, sin yuyos (son la mayoría de los props)
+      // en la calzada sólo lo que va en la calle (vallas, conos, volquetes, contenedores); lo demás que caiga ahí (una maceta de un
+      // lote de esquina, un hidrante corrido) no se pone
+      if (!EN_CALLE.test(name)) { const ck = W.classify(x, y); if (ck && ck.k === "road") return null; }
       if (!opt.noClaim && !claim(x, y, opt.rad ?? lookup(RAD, name, .3))) return null;
       // face: hacia dónde mira (m del mundo). Lo que tiene vista de atrás y no mira a nada en especial mira a una diagonal
       // sacada del lugar (no del sorteo, así el resto del barrio no cambia)
@@ -111,10 +115,23 @@ const Barrio = (() => {
           else if (F.u_valla) for (let t = rn.t0 + .35; t < rn.t1 - .2; t += .75) put("u_valla", ax + ux * t, ay + uy * t, { noClaim: true });
         } } }
 
+    // ---- casa de esquina con ochava (world.js arma el lote): tres rubros por rumbo, para que el catálogo no crezca de más.
+    // Los bares y cafés sacan dos mesitas a la vereda de la ochava
+    function esquinaLote(lot) {
+      const E = lot.esquina, a = aIdx(lot.phi), rub = (a * 3 + E.rub % 3) % Houses.ESQ.length, c = E.c, S = lot.fw;
+      const LP = (u, v) => [lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v, lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v];
+      addObj("esquina", { t: "esquina", W: S, D: lot.ld, c, p: E.p, rub, a }, lot, lot.o[0], lot.o[1], qa(lot.phi), null, [LP(c, 0), LP(S, 0), LP(S, lot.ld), LP(0, lot.ld), LP(0, c)]);
+      for (let u = .2; u < S; u += .4) for (let v = .2; v < lot.ld; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); }
+      const nom = Houses.ESQ[rub][0];
+      if ((nom === "BAR" || nom === "CAFE") && F.c_mesa_bar) for (const k of [-1, 1]) { const q = LP(-.9 + k * .9, -.9 - k * .9); put("c_mesa_bar", q[0], q[1], { rad: .7 }); }
+      else if (nom === "ALMACEN" || nom === "KIOSCO" || nom === "VERDULERIA") { const q = LP(1.4, -1.1); put(nom === "VERDULERIA" && F.c_puesto_frutas ? "c_puesto_frutas" : "pizarra_0", q[0], q[1]); }
+    }
+
     // ---- casas y tapiales
     for (const lot of W.lots) {
       if (lot.kind === "sendero") continue;
       if (cruzaParedon(lot)) continue;
+      if (lot.kind === "esquina") { esquinaLote(lot); continue; }
       if (lot.kind === "plaza") { plaza(lot); continue; }
       const phiQ = qa(lot.phi);
       const LP = (u, v) => [lot.o[0] + lot.ux[0] * u + lot.nOut[0] * v, lot.o[1] + lot.ux[1] * u + lot.nOut[1] * v];
@@ -318,6 +335,7 @@ const Barrio = (() => {
   function build3D(spec) {
     const phi = World.ANG[spec.a];
     if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17, wealth: [.25, .7][spec.wb] }, phi);
+    if (spec.t === "esquina") return Houses.esquina({ W: spec.W, D: spec.D, c: spec.c, p: spec.p, rub: spec.rub, seed: 9000 + spec.rub * 7919 + spec.p * 104729 + spec.a * 31, wealth: .5 }, phi);
     if (spec.t === "paredon") return Houses.paredon(spec.W, 700 + spec.s, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
     return Houses.poste(7, phi, !!spec.l);
