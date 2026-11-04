@@ -43,16 +43,37 @@ def factor(r):
     return max(1, min(FACTOR, math.floor(r)))
 
 
-def shrink(rgb, fg, f):
-    """Average of f×f blocks over the drawing's pixels only; alpha = how much of the block is drawing."""
+def sucio(rgb, key):
+    """Pixels of the drawing that are mostly background: on a cyan sheet, bright teal ones (the holes of the jacaranda's
+    crown). They keep their alpha but give no colour. On magenta sheets nothing: pink flowers would look the same."""
+    if key != "cyan":
+        return None
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    return (np.minimum(g, b) - r > 40) & (np.abs(g - b) < 70) & (g > 100)
+
+
+def shrink(rgb, fg, f, bad=None):
+    """Average of f×f blocks over the drawing's pixels only; alpha = how much of the block is drawing.
+
+    The colour comes from the drawing's inside (the mask eroded 2 px) where the block has some: the outermost pixels
+    still carry some of the magenta or cyan background (the jacaranda had a teal rim), and the outline that the
+    exporter paints around each prop takes its colour from them."""
     h, w = fg.shape
     H, W = -(-h // f) * f, -(-w // f) * f
+    core = ndimage.binary_erosion(fg, iterations=2)
+    if bad is not None:
+        core &= ~bad
     # pad at the top and the left: the bottom edge (where the object stands) stays on a block boundary
-    rgbp = np.zeros((H, W, 3)); fgp = np.zeros((H, W))
-    rgbp[H - h:, W - w:] = rgb * fg[..., None]; fgp[H - h:, W - w:] = fg
-    s = rgbp.reshape(H // f, f, W // f, f, 3).sum((1, 3))
-    n = fgp.reshape(H // f, f, W // f, f).sum((1, 3))
-    col = s / np.maximum(n, 1)[..., None]
+    rgbp = np.zeros((H, W, 3)); fgp = np.zeros((H, W)); cop = np.zeros((H, W))
+    rgbp[H - h:, W - w:] = rgb; fgp[H - h:, W - w:] = fg; cop[H - h:, W - w:] = core
+    blocks = lambda a: a.reshape(H // f, f, W // f, f, *a.shape[2:]).sum((1, 3))
+    n, nc = blocks(fgp), blocks(cop)
+    col_all = blocks(rgbp * fgp[..., None]) / np.maximum(n, 1)[..., None]
+    col_core = blocks(rgbp * cop[..., None]) / np.maximum(nc, 1)[..., None]
+    col = np.where((nc > 0)[..., None], col_core, col_all)
+    if (nc > 0).any():                       # blocks of the rim only: the colour of the nearest block with some inside
+        iy, ix = ndimage.distance_transform_edt(nc == 0, return_distances=False, return_indices=True)
+        col = np.where(((nc == 0) & (n > 0))[..., None], col_core[iy, ix], col)
     a = n / (f * f)
     a = np.where(a < 0.12, 0, np.clip(a * 1.15, 0, 1))      # a block with a speck of drawing is background
     out = np.zeros((H // f, W // f, 4), np.uint8)
@@ -111,7 +132,7 @@ def cortes(spec_path):
         w, h = bx1 - bx0, by1 - by0
         # Gemini px per game px: from the reference person, or from what the spec says the object measures
         r = rref or (w / (o["w"] * TARGET) if "w" in o else h / (o["h"] * TARGET * CZ + o.get("d", 0) * TARGET * .5))
-        cuts.append((o, rgb, m, r))
+        cuts.append((dict(o, _bg=key), rgb, m, r))
     if spec.get("uniforme") and cuts:          # Gemini drew them to scale with each other: one factor for the sheet
         rm = float(np.median([c[3] for c in cuts]))
         cuts = [(o, rgb, m, rm) for o, rgb, m, _ in cuts]
@@ -125,7 +146,7 @@ def process(spec_path):
     meta = {}
     for o, rgb, m, r in cuts:
         f = factor(r)
-        im = Image.fromarray(shrink(rgb, m, f))
+        im = Image.fromarray(shrink(rgb, m, f, sucio(rgb, o.get("_bg"))))
         bb = im.getbbox(); im = im.crop(bb) if bb else im
         im.save(os.path.join(out_dir, o["name"] + ".png"), optimize=True)
         k = f / r                               # what the game still scales: 0.6·k
