@@ -40,6 +40,13 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
 - **Luz y sombras (como `predatorScene`):** `config.lighting` con sol y ciclo de día de 8 minutos (arranca a las 17:30). Gente, autos, árboles y postes tienen `ShadowCaster`, así que proyectan sombra del sol y de las luces cercanas. Tienen `LightEmitter` los faroles (con brillo), los semáforos, algunas ventanas de casas y los faros de los autos en movimiento. Las sombras horneadas de las casas se apagan de noche.
 - **Árboles, faroles y semáforos** son entidades con colisionador. El mobiliario chico, las sombras de los props y los cables son `Decoration`; los cables van en una capa propia por encima de todo.
 
+## Sonido
+
+- Todo sintetizado con `python3 herramientas/sonidos.py` (ruido filtrado, osciladores y envolventes, sin grabaciones) a `sfx/*.mp3`.
+- Ambiente de día (tránsito lejano) y de noche (grillos), cada uno en su canal de WeedJS: se funden según el sol, y bajan un poco al alejar la cámara.
+- Sueltos, en algún punto de lo que se ve: pájaros (gorriones, benteveo, zorzal) y palomas de día; perros ladrando lejos y alguna cumbia de noche; bocinas, motos y colectivos (donde se ve uno). Los autos trabados tocan bocina a los 2 s.
+- Suena recién después del primer toque o tecla (regla de los navegadores). El botón 🔊 lo silencia.
+
 ## Otro barrio: el editor de barrios
 
 `editor/` es el editor de barrios (la versión Three.js con todos los knobs). Se abre en `http://localhost:8000/editor/`.
@@ -65,6 +72,7 @@ El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el
 - **Plazas:** una manzana entera cada 5 o 6 cuadras, con senderos de baldosa roja, monumento o fuente, árboles, faroles, bancos y juegos.
 - **Lotes** hasta la mitad de la manzana. En los hondos casi siempre hay algo construido en el fondo.
 - **Plantas:** macetas contra los frentes, plantas en los patios, canteros y cazuelas de vereda, y enredaderas, jardineras y helechos colgados en las fachadas. El parámetro `plantas` (1,8× por defecto) multiplica todas esas chances.
+- **Esquinas con ochava:** en las esquinas de manzana casi en escuadra (no en la villa ni en calles de tierra) va una casa de esquina de 10 × 10 m con la ochava a 45°: el negocio en la ochava (almacén, bar, kiosco, farmacia, pizzería, panadería, café…) con cartel y a veces toldo, vidrieras sobre las dos calles, uno o dos pisos. Los bares y cafés sacan mesitas a la vereda. Parámetro `ochavas`.
 - **Borde del mapa:** el área jugable (`mapW` × `mapH`) está cerrada por un **paredón** de 3 m con pilares, pintadas y alambre de púas, con colisionador. Del otro lado se genera ciudad, `margen` m de cada lado (45 por defecto), sin gente, sin autos andando y sin yuyos, para no cargar el juego. Los lotes que el paredón cruza quedan vacíos.
   - Los flowfields de la gente y de los autos sólo tienen dirección adentro, así que nadie aparece ni camina afuera.
   - La cámara libre no deja que la vista salga del mapa: en pantalla el mapa es un paralelogramo y la vista entera tiene que quedar adentro (`limitarVista`). Por eso nunca se ve el borde del mundo.
