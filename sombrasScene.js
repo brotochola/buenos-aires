@@ -95,7 +95,7 @@ export class SombrasScene extends Scene {
       enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 64,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
       resolution: .25, shadowResolution: .25,
-      sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .3, startHour: 15, dayCycle: { enabled: false } },
+      sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .5, startHour: 15, dayCycle: { enabled: false } },
     },
     // ?piso=shader: el piso como el del barrio (capa worldRect con shader), para ver si las sombras del sol caen sobre él
     layers: { ...(PISO_SHADER ? { piso: { zIndex: .5, shader: { fragment: { webgl: 'pruebas/sombras/piso.frag' }, worldRect: { width: WW, height: WH },
