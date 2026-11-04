@@ -263,17 +263,17 @@ const Houses = (() => {
     }
     // ---- plantas en las paredes (Gemini): pasto y yuyos al pie, grietas con musgo, enredaderas, jardineras bajo las ventanas,
     // Santa Rita colgando del parapeto, helechos y potus colgados junto a la puerta. Más en las casas viejas y en las de barrio.
-    if (R3.DECALS.fd_hiedra) { const rp = rng(spec.seed ^ 0x51ed270b), pobre = spec.wealth < .4;
+    if (R3.DECALS.fd_hiedra) { const rp = rng(spec.seed ^ 0x51ed270b), pobre = spec.wealth < .4, PLW = typeof CFG !== "undefined" ? (CFG.v.plantas ?? 1) : 1;
       const deco = (t, n, xm, ytop, wm, hmax) => { const d = R3.DECALS[n]; if (!d) return; let w = X(wm), h = Math.round(w * d.h / d.w); if (hmax && h > hmax) { w = Math.round(w * hmax / h); h = hmax; } t.blit(n, X(xm), ytop, w, h); };
       const piso = (t, n, xm, wm) => { const d = R3.DECALS[n]; if (!d) return; const w = X(wm), h = Math.round(w * d.h / d.w); t.blit(n, X(xm), t.h - h, w, h); };
       for (const [t, Wt, k] of [[ft, W, 1], [bt, W, .6], [stx, D, .8]]) {
         if (rp() < (pobre ? .6 : .3) * k) piso(t, "fd_pasto_pared", rp.uniform(0, Math.max(.1, Wt - 1)), rp.uniform(.7, 1.1));
         if (rp() < (pobre ? .4 : .12) * k && finish !== "hueco") deco(t, "fd_grieta", rp.uniform(.1, Math.max(.2, Wt - .8)), zt(rp.uniform(.8, 2)), rp.uniform(.4, .7));
-        if (rp() < (kind === "chalet" || spec.wealth > .6 ? .22 : .1) * k) { const wm = rp.uniform(1.4, Math.min(2.6, Wt)), xm = rp() < .5 ? 0 : Wt - wm; deco(t, rp.pick(["fd_hiedra", "fd_hiedra", "fd_jazmin", "fd_mburucuya"]), xm, zt(Math.min(zr, rp.uniform(1.8, 3.2))), wm, zt(0) - zt(Math.min(zr, 3.2))); }
+        if (rp() < (kind === "chalet" || spec.wealth > .6 ? .22 : .1) * k * PLW) { const wm = rp.uniform(1.4, Math.min(2.6, Wt)), xm = rp() < .5 ? 0 : Wt - wm; deco(t, rp.pick(["fd_hiedra", "fd_hiedra", "fd_jazmin", "fd_mburucuya"]), xm, zt(Math.min(zr, rp.uniform(1.8, 3.2))), wm, zt(0) - zt(Math.min(zr, 3.2))); }
       }
-      if (flat && rp() < .14) { const wm = rp.uniform(1.6, Math.min(2.8, W)); deco(ft, "fd_santarita", rp.uniform(0, W - wm), 0, wm, px(Htot * .45)); }
-      for (const [xm, zm, ww, hh] of wins) if (zm > .5 && rp() < .22) deco(ft, "fd_jardinera", xm - .05, zt(zm) - 2, ww + .1, px(.55));
-      if (rp() < .14 && kind !== "galpon") deco(ft, rp.pick(["fd_helecho_colgante", "fd_potus", "fd_estante"]), rp.uniform(.1, Math.max(.2, W - 1)), zt(2.6), .7, px(1.1));
+      if (flat && rp() < .14 * PLW) { const wm = rp.uniform(1.6, Math.min(2.8, W)); deco(ft, "fd_santarita", rp.uniform(0, W - wm), 0, wm, px(Htot * .45)); }
+      for (const [xm, zm, ww, hh] of wins) if (zm > .5 && rp() < .22 * PLW) deco(ft, "fd_jardinera", xm - .05, zt(zm) - 2, ww + .1, px(.55));
+      if (rp() < .14 * PLW && kind !== "galpon") deco(ft, rp.pick(["fd_helecho_colgante", "fd_potus", "fd_estante"]), rp.uniform(.1, Math.max(.2, W - 1)), zt(2.6), .7, px(1.1));
     }
     const ftc = (z0, z1) => ft.crop(zt(z1), zt(z0)), btc = (z0, z1) => bt.crop(zt(z1), zt(z0)), stc = (z0, z1) => stx.crop(zt(z1), zt(z0));
     // ---- volumen

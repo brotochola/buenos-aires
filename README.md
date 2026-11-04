@@ -64,6 +64,7 @@ El editor no arma el bigAtlas, porque no sabe qué otras entidades va a tener el
 - **Villas:** grupos de 2 a 5 manzanas en la zona más pobre, rodeadas de calles comunes (como la 1-11-14). Adentro tienen calles de tierra entre manzanas y pasillos que serpentean y salen a la calle.
 - **Plazas:** una manzana entera cada 5 o 6 cuadras, con senderos de baldosa roja, monumento o fuente, árboles, faroles, bancos y juegos.
 - **Lotes** hasta la mitad de la manzana. En los hondos casi siempre hay algo construido en el fondo.
+- **Plantas:** macetas contra los frentes, plantas en los patios, canteros y cazuelas de vereda, y enredaderas, jardineras y helechos colgados en las fachadas. El parámetro `plantas` (1,8× por defecto) multiplica todas esas chances.
 - **Borde del mapa:** el área jugable (`mapW` × `mapH`) está cerrada por un **paredón** de 3 m con pilares, pintadas y alambre de púas, con colisionador. Del otro lado se genera ciudad, `margen` m de cada lado (45 por defecto), sin gente, sin autos andando y sin yuyos, para no cargar el juego. Los lotes que el paredón cruza quedan vacíos.
   - Los flowfields de la gente y de los autos sólo tienen dirección adentro, así que nadie aparece ni camina afuera.
   - La cámara libre no deja que la vista salga del mapa: en pantalla el mapa es un paralelogramo y la vista entera tiene que quedar adentro (`limitarVista`). Por eso nunca se ve el borde del mundo.

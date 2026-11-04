@@ -39,6 +39,7 @@ const CFG = (() => {
     ["Población", "conAutos", "Autos", 0, 1, 1, 1, "", "world", "Si se apaga, el barrio no trae autos estacionados ni circulando."],
     ["Población", "faroles", "Faroles", .3, 3, .1, 1, "×", "world", "Densidad de faroles en las veredas (1× = uno cada 16 a 22 m, alternando vereda)."],
     ["Población", "arboles", "Árboles", 0, 2, .05, 1, "×", "world", ""],
+    ["Población", "plantas", "Plantas", 0, 3, .1, 1.8, "×", "world", "Macetas contra los frentes, plantas en patios, canteros y cazuelas, enredaderas, jardineras y helechos en las fachadas (Buenos Aires está lleno de plantas). 1× = como antes."],
     ["Población", "gente", "Gente", 0, 3, .1, 1, "×", "world", ""],
     ["Población", "estacionados", "Autos estacionados", 0, 3, .1, 1, "×", "world", ""],
     ["Población", "transito", "Autos circulando", 0, 4, .1, 1, "×", "world", "Autos que andan solos siguiendo flowfields."],

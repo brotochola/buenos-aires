@@ -27,6 +27,7 @@ const Barrio = (() => {
         const cx = (i + .5) * OC, cy = (j + .5) * OC; if ((cx - x) ** 2 + (cy - y) ** 2 <= (rad + OC * .5) ** 2) { const k = i * 100000 + j; if (occ.has(k)) return false; keys.push(k); } }
       keys.forEach(k => occ.add(k)); return true; }
     const conGente = C.conGente !== 0, conAutos = C.conAutos !== 0;
+    const PL = C.plantas ?? 1;   // cuántas plantas (1 = como antes)
     // ---- catálogo
     const cat = new Map(), objs = [];
     function want(spec) { const k = JSON.stringify(spec); let e = cat.get(k); if (!e) { e = { spec, n: 0, id: cat.size }; cat.set(k, e); } e.n++; return e; }
@@ -152,7 +153,8 @@ const Barrio = (() => {
         if (F.k_pelopincho && lot.w > .2 && lot.w < .7 && rx() < .1) put("k_pelopincho", ...pp());
         if (F.b_mesa_patio && rx() < (lot.w < .55 ? .18 : .06)) put("b_mesa_patio", ...pp());
         if (F.b_autito && lot.w < .5 && rx() < .2) put(rx.pick(["b_autito", "b_pelota", "b_perro_bebe", "b_tacho_azul", "b_sombrilla"]), ...pp());
-        if (F.plm_rosal && rx() < .35) put(rx.pick(lot.w < .3 ? ["plm_tomates", "plm_yuyos", "pl_cubierta", "plm_santarita", "plm_lantana", "plm_romero"] : ["plm_rosal", "plm_jazmin", "pl_hortensia", "plm_agapanto", "plm_santarita", "plm_lantana", "plm_romero", "pl_limonero", "plm_pindo"]), ...pp());
+        if (F.plm_rosal && rx() < Math.min(.95, .35 * PL)) put(rx.pick(lot.w < .3 ? ["plm_tomates", "plm_yuyos", "pl_cubierta", "plm_santarita", "plm_lantana", "plm_romero"] : ["plm_rosal", "plm_jazmin", "pl_hortensia", "plm_agapanto", "plm_santarita", "plm_lantana", "plm_romero", "pl_limonero", "plm_pindo"]), ...pp());
+        if (F.plm_rosal && PL > 1 && rx() < .3 * (PL - 1)) put(rx.pick(["plm_agapanto", "pl_hortensia", "plm_lantana", "plm_jazmin", "pl_limonero", "plm_formio", "pl_malvon", "plm_santarita"]), ...pp());
         if ((lot.kind === "villa" || lot.w < .25) && rx() < .5) put(rx.pick(["u_tanque", "chapas", "gomas", "parrilla_tambor", "silla", "antena", "garrafa"]), ...pp());
         if (r() < .2) put("parrilla", ...pp()); if (lot.w > .3 && r() < .1) put("pileta", ...pp()); if (r() < .08 * C.gente) { const p = pp(); person(p[0], p[1], true); } }
       const s = lot.seg, side = lot.side, mid = (lot.o[0] - s.a[0]) * s.dir[0] + (lot.o[1] - s.a[1]) * s.dir[1] + (side === 1 ? lot.fw / 2 : -lot.fw / 2);
@@ -163,7 +165,7 @@ const Barrio = (() => {
         if (lot.kind === "obra" && r() < .5) put("obra_material", ...near(1.1));
         if (r() < (lot.w < .3 ? .05 : .14)) put("canasto_" + r.int(0, 2), ...near(.45), { noClaim: true });   // pegado al frente: la casa ya reservó esa franja
         // plantas en macetas contra el frente (más en zonas ricas) y alguna Santa Rita
-        if (F.pl_malvon && rx() < .22 + .4 * lot.w) { const n = 1 + (rx() < .4) + (rx() < .2 * lot.w);
+        if (F.pl_malvon && rx() < Math.min(.95, (.22 + .4 * lot.w) * PL)) { const n = 1 + (rx() < Math.min(.9, .4 * PL)) + (rx() < .2 * lot.w * PL) + (PL > 1.4 && rx() < .3 * (PL - 1));
           const POT = lot.kind === "villa" || lot.w < .25 ? ["pl_balde", "pl_botellas", "pl_aloe", "pl_malvon", "pl_cactus", "plm_yuyos", "pl_potus", "pl_cubierta", "plm_tomates", "pl_balde"]
             : lot.w > .6 ? ["pl_hortensia", "pl_malvon", "pl_sansevieria", "plm_jazmin", "plm_rosal", "pl_boj", "pl_calas", "pl_limonero", "pl_ficus", "pl_helecho", "pl_lavanda", "plm_yuca"]
             : ["pl_malvon", "pl_potus", "pl_aloe", "pl_cactus", "pl_sansevieria", "pl_hortensia", "plm_rosal", "pl_clivia", "pl_helecho", "pl_calas", "pl_malvon"];
@@ -183,7 +185,7 @@ const Barrio = (() => {
         if (F.b_jaula && lot.w < .6 && rx() < .04) put("b_jaula", ...nearX(.22, rx.uni(-lot.fw / 3, lot.fw / 3)), { noClaim: true });
         if (F.b_pallets && (lot.kind === "villa" || lot.w < .25) && rx() < .15) put(rx.pick(["b_pallets", "b_tacho_azul", "b_bolsones", "b_chango_vacio", "b_bolsones"]), ...nearX(rx.uni(1.05, 1.4), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .4 });
         if (F.c_volquete && lot.kind === "obra" && rx() < .5) { const q = at(s, mid, side * (s.hw - 1.4)), c = W.classify(q[0], q[1]); if (c && c.k === "road") put("c_volquete", q[0], q[1], { face: [s.dir[0], s.dir[1]] }); }
-        if (F.plm_santarita && lot.w > .35 && rx() < .06) put("plm_santarita", ...nearX(.5, rx.uni(-lot.fw / 3, lot.fw / 3)), { noClaim: true });
+        if (F.plm_santarita && lot.w > .35 && rx() < .06 * PL) put("plm_santarita", ...nearX(.5, rx.uni(-lot.fw / 3, lot.fw / 3)), { noClaim: true });
         if ((lot.kind === "villa" || lot.w < .22) && rx() < .3) put(rx.pick(["garrafa", "silla", "cajones", "gomas", "chapas", "parrilla_tambor", "carro_cartonero", "chango", "silla"]), ...nearX(rx.uni(.9, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)));
         if (r() < .04) put(r.pick(["u_tablero", "u_caja_bsas"]), ...near(.4));
       }
@@ -199,11 +201,11 @@ const Barrio = (() => {
             // cazuela: cuadrado de tierra alrededor del árbol (borde de ladrillo, de cemento o sin borde), a veces con plantas o yuyos
             const tipo = s.w < .3 ? rx.pick([2, 3, 3]) : rx.pick([1, 1, 2, 3]), conPasto = rx() < .55;
             pits.push({ x: p[0], y: p[1], ang: Math.atan2(s.dir[1], s.dir[0]), tipo, pasto: conPasto });
-            if (rx() < .6) { const q = at(s, t + rx.pick([-.32, .32]), side * (s.hw + .55 + rx.uni(-.25, .25)));
-              put(rx() < .35 && s.w > .4 ? rx.pick(["plm_agapanto", "pl_boj", "plm_lantana", "plm_romero"]) : rx.pick(["yy_diente_leon", "yy_trebol", "yy_llanten", "yy_cola_zorro", "yy_ortiga_b", "yy_brotes", "yy_pasto_seco"]), q[0], q[1], { noClaim: true }); } } }
+            if (rx() < Math.min(.95, .6 * PL)) { const q = at(s, t + rx.pick([-.32, .32]), side * (s.hw + .55 + rx.uni(-.25, .25)));
+              put(rx() < Math.min(.9, .35 * PL) && s.w > .3 ? rx.pick(["plm_agapanto", "pl_boj", "plm_lantana", "plm_romero"]) : rx.pick(["yy_diente_leon", "yy_trebol", "yy_llanten", "yy_cola_zorro", "yy_ortiga_b", "yy_brotes", "yy_pasto_seco"]), q[0], q[1], { noClaim: true }); } } }
         // canteros y cazuelas: agapantos, yuyos, bojs y arbolitos con jaula cerca del cordón
         if (F.plm_agapanto && s.sw >= 1.6) for (let t = rx.uni(2, 8); t < s.len - 2; t += rx.uni(5, 13)) {
-          if (crossNear(t) || rx() > .35 + .3 * s.w) continue; const p = at(s, t, side * (s.hw + .5)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || c.s !== s) continue;
+          if (crossNear(t) || rx() > Math.min(.95, (.35 + .3 * s.w) * PL)) continue; const p = at(s, t, side * (s.hw + .5)), c = W.classify(p[0], p[1]); if (!c || c.k !== "walk" || c.s !== s) continue;
           put(rx() < .06 ? "pl_jaula" : rx.pick(s.w > .55 ? ["plm_agapanto", "pl_boj", "plm_agapanto", "plm_jazmin", "plm_formio", "pl_lavanda", "plm_lantana"] : s.w < .3 ? ["plm_yuyos", "plm_yuyos", "plm_agapanto", "yy_seco_alto", "yy_mostacilla"] : ["plm_agapanto", "plm_yuyos", "pl_boj", "plm_romero", "plm_lantana"]), p[0], p[1]); }
         // yuyos que salen solos: junto al cordón, en las grietas de la vereda y contra las paredes (más en los barrios pobres y en las calles de tierra)
         if (F.yy_diente_leon && s.sw >= 1) { const dens = (s.mat === "tierra" ? 1.6 : s.mat === "roto" ? 1 : .45) * (1.3 - s.w);
