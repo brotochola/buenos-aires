@@ -53,7 +53,13 @@ const Houses = (() => {
   // vano con espesor de pared: jamba de arriba en sombra (la luz viene de arriba a la izquierda), jamba izquierda en sombra, derecha iluminada
   function reveal(t, x, y, w, h, wall) { const rv = Math.max(2, Math.round(px(.09)));
     t.rect(x, y, x + w, y + h, mul(wall, .74)); t.rect(x, y, x + w, y + rv + 1, mul(wall, .42)); t.rect(x, y, x + rv, y + h, mul(wall, .55)); t.rect(x + w - rv, y + rv, x + w, y + h, mul(wall, .9)); }
+  // las puertas y portones del frente que se está dibujando (px de su textura): las plantas y las cosas no van delante
+  let PUERTAS = null;
+  const abrePuertas = (t) => { PUERTAS = { t, l: [] }; };
+  const cierraPuertas = () => { const k = px(1), l = PUERTAS ? PUERTAS.l.map(([a, b]) => [Math.round(a / k * 100) / 100, Math.round(b / k * 100) / 100]) : []; PUERTAS = null; return l; };
+  const anotaPuerta = (t, x, w) => { if (PUERTAS && t === PUERTAS.t) PUERTAS.l.push([x, x + w]); };
   function doorDecal(t, x, y, w, h, kind, wall) {
+    anotaPuerta(t, x, w);
     t.rect(x - 1, y - 1, x + w + 1, y + h, mul(wall, .5));
     if (R3.DECALS.fd_puerta_madera) { reveal(t, x, y, w, h, wall); const rv = Math.max(2, Math.round(px(.09))); x += rv; y += rv + 1; w -= rv * 2; h -= rv + 1; }
     const dc = kind === "madera" || !R3.DECALS.fd_puerta_chapa ? null : t.r.pick([[38, 40, 46], [34, 84, 58], [120, 36, 32], [58, 78, 110], [196, 192, 182], [30, 60, 40], [150, 150, 154], [150, 150, 154]]);
@@ -73,6 +79,7 @@ const Houses = (() => {
     const nx = x + w + 3; if (nx + 8 < t.w) { t.rect(nx, y + 6, nx + 8, y + 11, [40, 40, 46]); t.rect(nx + 1, y + 7, nx + 7, y + 10, [232, 232, 226]); for (const k of [2, 4, 6]) t.p(nx + k, y + 8, [40, 40, 46]); }
   }
   function shutterDecal(t, x, y, w, h, up = 0) {
+    anotaPuerta(t, x, w);
     if (!up && t.blit("fd_persiana_local", x - 1, y - Math.round(h * .12), w + 2, h + Math.round(h * .12))) return;
     t.rect(x - 1, y - 3, x + w + 1, y, [104, 104, 102]); const top = y + ((h * up) | 0); t.rect(x, y, x + w, top, [26, 24, 24]);
     const base = t.r.pick([[150, 152, 156], [132, 134, 138], [64, 100, 140], [60, 120, 90], [176, 170, 160]]);
@@ -80,7 +87,7 @@ const Houses = (() => {
     t.shade(x, y, x + 2, y + h, .7); t.shade(x + w - 2, y, x + w, y + h, .8);
     for (let i = 0; i < 3; i++) { const sx = t.r.int(x, x + w - 6); t.shade(sx, top, sx + 4, y + h, .93); }
   }
-  function portonDecal(t, x, y, w, h) { const c = t.r.pick([[36, 96, 66], [58, 78, 118], [126, 46, 36], [54, 54, 60], [196, 192, 182], [180, 140, 60]]);
+  function portonDecal(t, x, y, w, h) { anotaPuerta(t, x, w); const c = t.r.pick([[36, 96, 66], [58, 78, 118], [126, 46, 36], [54, 54, 60], [196, 192, 182], [180, 140, 60]]);
     if (t.blit("fd_porton", x, y, w, h, c[0] === 36 ? null : mul(c, 1.2))) return;
     for (let xx = x; xx < x + w; xx++) t.rect(xx, y, xx + 1, y + h, mul(c, [1.12, 1, .8, .94][(xx - x) % 4])); t.rect(x, y, x + w, y + 2, mul(c, .6)); t.rect(x + (w >> 1), y, x + (w >> 1) + 1, y + h, mul(c, .5)); t.shade(x, y, x + 2, y + h, .7); }
   function goodsDecal(t, x0, y0, x1, y1, shop) {
@@ -226,7 +233,7 @@ const Houses = (() => {
     const Htot = zr + (flat ? PAR : .35);
     const zt = (z) => px(Htot - z), X = (m) => px(m);
     // ---- texturas de las 4 paredes
-    const ft = wallTex(W, Htot, wall, finish, spec.seed, wear);
+    const ft = wallTex(W, Htot, wall, finish, spec.seed, wear); abrePuertas(ft);
     if (revest === "piedra") ft.piedra(0, px(Htot - (flat ? PAR : .35)));
     else if (revest === "zocalo_piedra") ft.piedra(px(Htot - 1.2), ft.h);
     else if (revest === "salpicre") { ft.salpicre(mix(wall, [236, 230, 218], .4)); ft.runoff(.5, wear * .7); }
@@ -332,7 +339,10 @@ const Houses = (() => {
     let py0 = y0;
     if (setback && storeys >= 2) {
       sc.box(0, y0, 0, W, y0 + D, GF, { front: ftc(0, GF), back: btc(0, GF), left: stc(0, GF), right: stc(0, GF), top: roofTex(W, D, "ceramico", spec.seed + 9) });
-      sc.box(0, y0, GF, W, y0 + .15, GF + 1, { front: railingTex(W, 1, spec.seed), back: railingTex(W, 1, spec.seed), cast: false });
+      // la terraza del retiro, con murete (no baranda): visto de arriba, una baranda calada sobre el piso de la terraza parecía una
+      // reja parada en la vereda
+      { const mt = wallTex(W, 1, wall, finish, spec.seed + 23, wear); mt.rect(0, 0, mt.w, 3, add(wall, 26)); mt.rect(0, 3, mt.w, 4, mul(wall, .7));
+        sc.box(0, y0, GF, W, y0 + .18, GF + 1, { front: mt, back: mix(wall, [200, 196, 188], .5), left: [150, 146, 140], right: [150, 146, 140], top: [228, 224, 214] }); }
       const up = wallTex(W, zr - GF + PAR, wall, finish, spec.seed + 21, wear); const n = Math.max(1, Math.floor(W / 2.8));
       for (let i = 0; i < n; i++) windowDecal(up, px(W * (i + .5) / n - .5), px(PAR + .55), px(1), px(2.1), "persiana", wall);
       sc.box(0, y0 + setback, GF, W, y0 + D, zr, { front: up.crop(px(PAR), up.h), back: btc(GF, zr), left: stc(GF, zr), right: stc(GF, zr), top: roofTop });
@@ -384,6 +394,7 @@ const Houses = (() => {
           sc.box(sx, y0 - .06, zm, sx + ww / 2, y0, zm + hh, { front: t, right: mul(pc, .7), left: mul(pc, .8) }); } }
     }
     for (const zb of spec.ct ? [] : balconies) {   // (el comercio con nombre, sin balcón: si no, tapa el cartel desde arriba)
+      ft.shade(0, px(Htot - zb), ft.w, px(Htot - zb + .5), .8);   // la sombra de la losa en la pared: que se lea que sale
       sc.box(0, y0 - .85, zb - .02, W, y0, zb + .14, { front: [222, 218, 208], top: [236, 232, 222], right: [190, 186, 178], left: [200, 196, 188] });
       const orn = spec.wealth > .5 && r() < .6 ? decalTex("fd_balcon_hierro", W - .1, .96, Math.max(1, Math.round((W - .1) / 2))) : null;
       const verde = R3.DECALS.fd_balcon_plantas && rng(spec.seed ^ (zb * 1000 | 0) ^ 0x6a09e667)() < .3 * PLWc() ? decalTex("fd_balcon_plantas", W - .1, .96, Math.max(1, Math.round((W - .1) / 3))) : null;
@@ -473,7 +484,7 @@ const Houses = (() => {
     if (r() < .5) { const cx = r.uniform(.3, W - .5); sc.box(cx, y0 + D * .75, roofZ, cx + .25, y0 + D * .75 + .25, roofZ + 1, { front: [160, 160, 164], back: [160, 160, 164], left: [124, 124, 128], right: [124, 124, 128], top: [120, 120, 124] }); }
     if (r() < .3 && flat) ac(sc, r.uniform(.3, Math.max(.4, W - 1.1)), y0 + D * .35, zr, spec.seed + 91, false);
     if (flat && r() < .25 && storeys === 1) clothes(sc, .4, W - .4, y0 + D * .5, zr + 1.6, spec.seed + 92);
-    return { sc, storeys, depth: y0 + D, shop: shop && shop[0], height: zr };
+    return { sc, storeys, depth: y0 + D, shop: shop && shop[0], height: zr, puertas: cierraPuertas(), frenteY: y0 };
   }
 
   // ---------- edificio de departamentos (zonas ricas y avenidas): planta baja con hall (y a veces local o cochera),
@@ -492,7 +503,7 @@ const Houses = (() => {
     const wall = estilo === "ladrillo" ? [196, 120, 86] : r.pick(CLAROS), frame = r.pick([[214, 214, 210], [60, 62, 68], [150, 120, 84], [196, 196, 192]]);
     const zr = GF2 + (n - 1) * UF2, Htot = zr + 1.1, zt = (z) => px(Htot - z), X = (m) => px(m), wear = (spec.wealth < .5 ? 1 : .6) * CFG.v.desgaste;
     // frente
-    const ft = new Tex(W, Htot, spec.seed); if (estilo === "ladrillo") ft.brick([182, 96, 64]); else { ft.stucco(wall, wear * .7); ft.runoff(.9, wear); }
+    const ft = new Tex(W, Htot, spec.seed); if (estilo === "ladrillo") ft.brick([182, 96, 64]); else { ft.stucco(wall, wear * .7); ft.runoff(.9, wear); } abrePuertas(ft);
     // planta baja: revestimiento de piedra o granito
     const pb = r.pick([[112, 110, 108], [150, 140, 128], [70, 72, 78], [180, 170, 156]]);
     ft.rect(0, zt(GF2), ft.w, ft.h, pb); for (let yy = zt(GF2); yy < ft.h; yy += px(.45)) ft.shade(0, yy, ft.w, yy + 1, .8);
@@ -575,7 +586,7 @@ const Houses = (() => {
     if (shop) { const [name, scol] = shop, sw = Math.min(lw, 6), st = new Tex(sw, .55, spec.seed + 40); st.stucco(scol, .2);
       text(st, name, Math.max(1, (st.w - textW(name)) >> 1), 3, [252, 250, 244], true, mul(scol, .45));
       sc.box(lado[0], -.16, 2.6, lado[0] + sw, 0, 3.15, { front: st, top: add(scol, 20), right: mul(scol, .6), left: mul(scol, .7) }); }
-    return { sc, storeys: n, depth: D, shop: shop && shop[0], height: zr };
+    return { sc, storeys: n, depth: D, shop: shop && shop[0], height: zr, puertas: cierraPuertas(), frenteY: 0 };
   }
 
   // ---------- petit hotel / casa de estilo (zonas ricas): fachada clásica con pilastras, buñado en planta baja,
@@ -585,7 +596,7 @@ const Houses = (() => {
     const sc = new Scene(); sc.setXform(phi);
     const wall = r.pick([[226, 214, 190], [214, 206, 192], [232, 224, 206], [204, 196, 184], [222, 206, 180]]), zr = GF2 + (n - 1) * UF2, Htot = zr + 1.2;
     const zt = (z) => px(Htot - z), X = (m) => px(m);
-    const ft = new Tex(W, Htot, spec.seed); ft.stucco(wall, .5);
+    const ft = new Tex(W, Htot, spec.seed); ft.stucco(wall, .5); abrePuertas(ft);
     for (let yy = zt(GF2); yy < zt(.5); yy += px(.32)) ft.shade(0, yy, ft.w, yy + 1, .78);            // buñado
     ft.rect(0, zt(.5), ft.w, ft.h, mul(wall, .72)); ft.humidity(.5);
     const dw = 1.5, dx = r.pick([.6, W - dw - .6, (W - dw) / 2]);
@@ -620,7 +631,7 @@ const Houses = (() => {
       else sc.box(xm - .1, -.1, zw - .08, xm + ww + .1, 0, zw, { front: [232, 228, 218], top: [244, 240, 232], right: [196, 192, 184], left: [206, 202, 194] }); }
     tank(sc, r.uniform(1, W - 1), D * .6, zr, spec.seed + 90, "gris");
     if (r() < .6) { const cx = r.uniform(.5, W - .8); sc.box(cx, D * .8, zr, cx + .45, D * .8 + .45, zr + 1.4, { front: [172, 96, 70], back: [172, 96, 70], right: [140, 76, 56], left: [150, 80, 60], top: [80, 70, 64] }); }
-    return { sc, storeys: n, depth: D, shop: null, height: zr };
+    return { sc, storeys: n, depth: D, shop: null, height: zr, puertas: cierraPuertas(), frenteY: 0 };
   }
 
   // tapial / alambrado de baldío
@@ -735,5 +746,106 @@ const Houses = (() => {
       sc.box(-.2, -1.3, 6.62, .2, -.85, 6.85, { front: [70, 72, 78], right: [56, 58, 62], left: [60, 62, 66], top: [96, 98, 104] }); }
     return { sc, cable: [[0, -.76, 8.18], [0, .09, 8.18], [0, .79, 8.18]] };
   }
-  return { build, tapial, paredon, esquina, poste, WALLS, ESQ, CO, setKit, accesorio };
+  // ---------- las seis esquinas de la fuente de Parque Chas (Gándara, Ávalos y Av. Victorica), copiadas a mano de la foto 360°
+  // desde la fuente (Hernán Apaza, nov. 2018) y de las fotos de Keops y del Café Chas en Google Maps. spec.poly: la planta (CCW, en
+  // el marco de la primera calle: x a lo largo de la calle, y hacia adentro); spec.rol: qué es cada lado ("f1"/"f2" frente sobre la
+  // primera o la segunda calle, "o" la ochava, "m" medianera); spec.cal: las dos calles.
+  const CHAS = {
+    keops: { wall: [148, 44, 40], fin: "stucco" },             // Pizzería Keops: roja, tres plantas, cartel amarillo con las pirámides
+    ladrillo: { wall: [190, 112, 96], fin: "brick" },          // ladrillo rosado, balcón cerrado blanco en la ochava, terraza con baranda blanca
+    moderno: { wall: [56, 58, 62], fin: "liso" },              // casa nueva negra, vidrios grandes
+    gris: { wall: [168, 162, 148], fin: "stucco" },            // casa gris de los 50, garaje y ventanas con rejas
+    artdeco: { wall: [236, 234, 226], fin: "liso" },           // edificio blanco art déco de esquina redonda; abajo, el Café Chas
+    balaustres: { wall: [222, 206, 170], fin: "stucco" },      // casa crema con balaustrada en la terraza y balcón en la ochava
+  };
+  function chas(spec, phi = 0) {
+    GF = CFG.v.pb; UF = CFG.v.piso; CTX = { pobre: false };
+    const T = CHAS[spec.tipo] || CHAS.gris, n = spec.p || 2, zr = GF + (n - 1) * UF, Htot = zr + PAR, P = spec.poly, N = P.length, seed = 1925 + (spec.tipo || "").length * 977;
+    const sc = new Scene(); sc.setXform(phi);
+    const zt = (z) => px(Htot - z), X = (m) => px(m);
+    const verde = [34, 72, 50], granito = [124, 88, 84], amarillo = [238, 200, 64], negro = [26, 26, 30];
+    // un cartel de letras en una banda de color (z0 a z1), centrado
+    const cartel = (t, x0, x1, z0, z1, fondo, txt, col) => { t.rect(X(x0), zt(z1), X(x1), zt(z0), fondo); t.rect(X(x0), zt(z1), X(x1), zt(z1) + 1, add(fondo, 40)); t.rect(X(x0), zt(z0) - 1, X(x1), zt(z0), mul(fondo, .6));
+      const w = X(x1 - x0) - 6; let s = txt; while (s.length > 2 && textW(s) > w) s = s.split(" ").slice(-1)[0] === s ? s.slice(0, -1) : s.split(" ").slice(-1)[0];
+      text(t, s, X(x0) + ((X(x1 - x0) - textW(s)) >> 1), zt(z1) + ((zt(z0) - zt(z1) - 14) >> 1), col, true, mul(fondo, .45)); };
+    function fachada(rol, calle, L, i) {
+      const t = new Tex(L, Htot, seed + i * 31), wall = T.wall, frente = rol !== "m";
+      if (T.fin === "brick") { t.brick(wall); } else if (T.fin === "liso") t.stucco(wall, .15); else { t.stucco(wall, .7); t.runoff(.5, .7); }
+      if (!frente) { if (T.fin !== "brick") { t.stucco(mix(wall, [176, 170, 160], .4), .9); t.runoff(.8, 1); } return t; }   // medianera
+      // líneas de cada piso y el remate de la terraza
+      const banda = T.fin === "brick" ? [236, 232, 222] : T.fin === "liso" ? mul(wall, .82) : add(wall, 18);
+      for (let k = 1; k < n; k++) { const zb = GF + (k - 1) * UF; t.rect(0, zt(zb) - 2, t.w, zt(zb) + 2, banda); }
+      t.rect(0, zt(Htot), t.w, zt(Htot) + 3, T.fin === "brick" ? [236, 232, 222] : add(wall, 26)); t.rect(0, zt(zr) - 1, t.w, zt(zr) + 1, mul(banda, .9));
+      const ventanas = (z, est) => { const k = Math.max(1, Math.floor((L - .6) / 2.6)); for (let j = 0; j < k; j++) windowDecal(t, X(L * (j + .5) / k - .6), zt(z + 2.1), X(1.2), px(1.8), est, wall); };
+      const tipo = spec.tipo, och = rol === "o";
+      if (tipo === "keops") {
+        // planta baja: vidriera oscura con pilares azules, faja negra y el cartel amarillo (sobre la calle del cartel y en la ochava)
+        t.rect(0, zt(3.05), t.w, zt(.4), negro); glass(t, X(.1), zt(2.5), t.w - X(.1), zt(.55), false);
+        for (let x = 0; x <= L + .01; x += Math.max(1.5, L / Math.max(1, Math.round(L / 3)))) t.rect(X(Math.min(L - .3, x)), zt(2.6), X(Math.min(L, x + .3)), zt(0), [40, 72, 164]);
+        if (och || calle === spec.cartelEn) { cartel(t, .2, L - .2, 2.55, 3.15, amarillo, och ? "KEOPS" : "PIZZERIA KEOPS", [176, 40, 30]);
+          // las pirámides
+          const y1 = zt(2.6), h = zt(2.6) - zt(3.1); for (let k = 0; k < 2; k++) { const x0 = X(.35 + k * .45); for (let yy = 0; yy < h; yy++) t.rect((x0 + yy / 2) | 0, y1 - yy, (x0 + h - yy / 2) | 0, y1 - yy + 1, [196, 150, 70]); } }
+        for (let k = 1; k < n; k++) ventanas(GF + (k - 1) * UF + .2, k === 1 ? "persiana" : "cerrado");
+        if (och) for (let xx = X(.2); xx < X(L - .2); xx += 3) t.rect(xx, zt(GF + 1.1), xx + 1, zt(GF + .1), [30, 30, 34]);   // balcón de la ochava
+      } else if (tipo === "ladrillo") {
+        if (och) doorDecal(t, X(L / 2 - .5), zt(2.25), X(1), px(2.23), "chapa", wall); else ventanas(.35, "reja");
+        if (n > 1) { if (och) { const z0 = GF + .1, z1 = GF + 2.4;   // balcón cerrado blanco
+            t.rect(X(.1), zt(z1), X(L - .1), zt(z0), [242, 242, 238]); glass(t, X(.2), zt(z1 - .1), X(L - .2), zt(z0 + 1), false);
+            for (let x = .2; x < L - .1; x += .7) t.rect(X(x), zt(z1), X(x) + 2, zt(z0), [246, 246, 242]); t.rect(X(.1), zt(z0 + 1), X(L - .1), zt(z0 + 1) + 3, [246, 246, 242]); }
+          else ventanas(GF + .3, "persiana"); }
+        for (let xx = 0; xx < t.w; xx += 4) t.rect(xx, zt(Htot), xx + 1, zt(zr), [246, 246, 242]);   // baranda blanca de la terraza
+      } else if (tipo === "moderno") {
+        t.rect(0, zt(zr), t.w, t.h, wall);
+        const k = Math.max(1, Math.round(L / 3.2)); for (let j = 0; j < k; j++) { const x0 = L * j / k + .25, x1 = L * (j + 1) / k - .25;
+          if (j === 0 && !och && L > 6) shutterDecal(t, X(x0), zt(2.6), X(x1 - x0), px(2.55)); else { t.rect(X(x0) - 1, zt(2.7) - 1, X(x1) + 1, zt(0), [18, 18, 20]); glass(t, X(x0), zt(2.7), X(x1), zt(.05), false); }
+          for (let kk = 1; kk < n; kk++) { const zb = GF + (kk - 1) * UF; t.rect(X(x0) - 1, zt(zb + 2.3) - 1, X(x1) + 1, zt(zb + .3) + 1, [18, 18, 20]); glass(t, X(x0), zt(zb + 2.3), X(x1), zt(zb + .3), false);
+            for (let x = x0 + .3; x < x1; x += .3) t.rect(X(x), zt(zb + 2.3), X(x) + 2, zt(zb + .3), [92, 70, 52]); } }   // listones de madera
+      } else if (tipo === "gris") {
+        if (!och && L > 6) { shutterDecal(t, X(.4), zt(2.4), X(2.6), px(2.35)); doorDecal(t, X(3.4), zt(2.25), X(1), px(2.23), "madera", wall); for (let x = 5; x < L - 1.2; x += 2.6) windowDecal(t, X(x), zt(2.2), X(1.4), px(1.6), "reja", wall); }
+        else ventanas(.35, "reja");
+        for (let k = 1; k < n; k++) ventanas(GF + (k - 1) * UF + .2, "persiana");
+      } else if (tipo === "artdeco") {
+        // fajas horizontales y los balcones corridos (en la esquina redonda dan la vuelta)
+        for (let k = 1; k < n; k++) { const zb = GF + (k - 1) * UF; t.rect(0, zt(zb + .15), t.w, zt(zb - .1), [244, 244, 238]); t.rect(0, zt(zb - .1), t.w, zt(zb - .1) + 3, [176, 176, 170]);
+          ventanas(zb + .35, och ? "none" : "persiana"); if (och) for (let xx = 0; xx < t.w; xx += 3) t.rect(xx, zt(zb + 1.15), xx + 1, zt(zb + .15), [60, 66, 62]); }
+        t.rect(0, zt(zr + .5), t.w, zt(zr + .3), [200, 200, 194]);
+        if (och || calle === spec.cafe) {
+          // el Café Chas: vidrieras con marco verde oscuro y reja de rombos arriba, pilares de granito, puerta de madera, letras blancas
+          const k = Math.max(1, Math.round(L / 3)), pw = .38;
+          for (let j = 0; j <= k; j++) { const x = Math.max(0, Math.min(L - pw, L * j / k - pw / 2)); t.rect(X(x), zt(3.0), X(x + pw), zt(0), granito);
+            for (let q = 0; q < 40; q++) t.p(X(x) + t.r.int(0, X(pw) - 1), zt(3.0) + t.r.int(0, zt(0) - zt(3.0) - 1), t.r() < .5 ? [168, 132, 124] : [80, 56, 54]); }
+          for (let j = 0; j < k; j++) { const x0 = L * j / k + pw / 2, x1 = L * (j + 1) / k - pw / 2; if (x1 - x0 < .6) continue;
+            t.rect(X(x0), zt(3.0), X(x1), zt(.35), verde); glass(t, X(x0) + 3, zt(2.35), X(x1) - 3, zt(.45), false);
+            for (let x = X(x0) + 3; x < X(x1) - 3; x++) for (let y = zt(2.95); y < zt(2.45); y++) if (((x - X(x0) + y) % 8 === 0) || ((x - X(x0) - y + 800) % 8 === 0)) t.p(x, y, verde);   // rombos
+            if (och && j === (k >> 1)) doorDecal(t, X((x0 + x1) / 2 - .5), zt(2.3), X(1), px(2.28), "vidrio", wall);
+            else { const yy = zt(1.9); text(t, "CAFE", X((x0 + x1) / 2) - (textW("CAFE") >> 1), yy, [244, 240, 228], true); text(t, "CHAS", X((x0 + x1) / 2) - (textW("CHAS") >> 1), yy + 18, [244, 240, 228], true); } }
+        } else { doorDecal(t, X(Math.min(1.2, L / 3)), zt(2.25), X(1), px(2.23), "madera", wall); if (L > 4) windowDecal(t, X(L - 2.2), zt(2.2), X(1.4), px(1.6), "reja", wall); }
+      } else if (tipo === "balaustres") {
+        // planta baja: local con toldo a rayas oscuras; arriba ventanas con persiana; la terraza y el balcón con balaustres
+        if (och || L > 5) { t.rect(X(.2), zt(2.6), X(L - .2), zt(.3), [40, 34, 30]); glass(t, X(.35), zt(2.45), X(L - .35), zt(.45), false);
+          for (let xx = X(.1); xx < X(L - .1); xx++) { const c = ((xx / 9) | 0) % 2 ? [30, 70, 52] : [22, 26, 24]; t.rect(xx, zt(3.05), xx + 1, zt(2.62), c); } }
+        else ventanas(.35, "reja");
+        for (let k = 1; k < n; k++) ventanas(GF + (k - 1) * UF + .2, "persiana");
+        const bal = (z0, z1) => { t.rect(0, zt(z1), t.w, zt(z1) + 3, [240, 236, 222]); t.rect(0, zt(z0) - 3, t.w, zt(z0), [240, 236, 222]);
+          for (let xx = 2; xx < t.w - 2; xx += 7) { t.rect(xx, zt(z1) + 3, xx + 4, zt(z0) - 3, [236, 230, 212]); t.rect(xx + 1, zt((z0 + z1) / 2) - 2, xx + 3, zt((z0 + z1) / 2) + 2, [200, 192, 172]); } };
+        bal(zr + .05, Htot); if (och && n > 1) bal(GF + .05, GF + .95);
+      }
+      return t;
+    }
+    // paredes (con su parapeto por dentro) y casters por lado; el techo, en abanico de triángulos
+    const techo = T.fin === "brick" ? [204, 196, 186] : [190, 188, 182];
+    let cx = 0, cy = 0; for (const q of P) { cx += q[0] / N; cy += q[1] / N; }
+    for (let i = 0; i < N; i++) { const a = P[i], b = P[(i + 1) % N], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); if (L < .05) continue;
+      const rol = spec.rol[i], calle = rol === "f1" ? spec.cal[0] : rol === "f2" ? spec.cal[1] : null;
+      sc.quad([a[0], a[1], Htot], [dx, dy, 0], [0, 0, -Htot], fachada(rol, calle, L, i));
+      sc.quad([b[0], b[1], Htot], [-dx, -dy, 0], [0, 0, -PAR], mix(T.wall, [200, 196, 188], .5));
+      const ux = dx / L, uy = dy / L; sc.casters.push({ c: sc.P([(a[0] + b[0]) / 2 - uy * .15, (a[1] + b[1]) / 2 + ux * .15, Htot / 2]), ax: [sc.V([ux, uy, 0]), sc.V([-uy, ux, 0]), [0, 0, 1]], h: [L / 2, .15, Htot / 2], fid: sc.nid() }); }
+    // (sin contorno: si no, se ven las líneas del abanico cruzando la terraza)
+    for (let i = 1; i + 1 < N; i++) { const a = P[0], b = P[i], c = P[i + 1]; sc.quad([a[0], a[1], zr], [c[0] - a[0], c[1] - a[1], 0], [b[0] - a[0], b[1] - a[1], 0], techo, { tri: true }); sc.faces[sc.faces.length - 1].sinContorno = true; }
+    tank(sc, cx, cy, zr, seed);   // el tanque de agua, como en todas las terrazas
+    if (spec.tipo !== "moderno") ac(sc, cx + 1.5, cy - .8, zr, seed + 3, false);
+    return { sc, storeys: n, depth: 10, shop: spec.tipo === "keops" ? "PIZZERIA" : null, height: zr };
+  }
+
+  return { build, tapial, paredon, esquina, poste, WALLS, ESQ, CO, setKit, accesorio, chas };
 })();

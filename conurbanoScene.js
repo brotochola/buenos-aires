@@ -157,7 +157,7 @@ export class Prop extends GameObject {
 
 // árbol del editor: el tronco es el sprite; cada rama (con sus hojas) es una decoración colgada, anclada en su base, que se mece.
 // El orden dentro del árbol viene en las piezas (las ramas de atrás antes que el tronco).
-const ARB_ESCALA = .6;
+const ARB_ESCALA = .6, COPA_ADELANTE = 2.8 * META.SYN * META.SF;   // 2,8 m de piso, en px de mundo
 export class Arbol extends GameObject {
   static isStatic = true;
   static components = [RigidBody, Collider, SpriteRenderer];
@@ -167,7 +167,9 @@ export class Arbol extends GameObject {
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(2, c.r || 3); this.collider.visualRange = 200;
     for (const p of T.piezas) {
       if (p[5] === 0) { this.setSprite('arboles', p[0], 0); this.spriteRenderer.anchorX = fl > 0 ? p[3] : 1 - p[3]; this.spriteRenderer.anchorY = p[4]; this.setScale(E * fl, E); continue; }
-      this.addDecoration('arboles_' + p[0], p[1] * fl, p[2], E * fl, E, p[5], { anchorX: p[3], anchorY: p[4], sway: !!p[6], swayAmplitude: .022 + rng() * .02, swayFrequency: .45 + rng() * .4 });
+      // las ramas de adelante (y su follaje) se ordenan casi 3 m más cerca de la cámara que el tronco: la copa está arriba y se
+      // abre hacia adelante, así tapa la mesa o el banco que está debajo (si no, la silla salía encima de las hojas)
+      this.addDecoration('arboles_' + p[0], p[1] * fl, p[2], E * fl, E, p[5], { anchorX: p[3], anchorY: p[4], sway: !!p[6], swayAmplitude: .022 + rng() * .02, swayFrequency: .45 + rng() * .4, sortOffsetY: p[5] > 0 ? COPA_ADELANTE : 0 });
     }
   }
 }
@@ -184,7 +186,8 @@ export class Persona extends GameObject {
     this.rigidBody.linearDamping = 3;
     this.setFixedRotation(1);
     this.spriteRenderer.anchorX = .5; this.spriteRenderer.anchorY = .93;
-    const s = .56 + rng() * .08; this.setScale(s, s);
+    // los personajes LPC son anchos ("gorditos"): un 6 % más angostos que altos
+    const s = .56 + rng() * .08; this.setScale(s * .94, s);
     this.collider.radius = 4.5; this.collider.visualRange = 52;
     const p = this.personaComp;
     p.campo = (rng() * NCAMPOS) | 0; p.quieta = c.quieta ? 1 : 0; p.estado = 0; p.timer = rng() * 4; p.vel = 17 + rng() * 9; p.cara = 2;

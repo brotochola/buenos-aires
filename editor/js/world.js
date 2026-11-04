@@ -18,6 +18,7 @@ const World = (() => {
     // de verdad, con su propio tamaño
     const C = CFG.v, RS = typeof REALES !== "undefined" ? REALES : {}, RM = C.real ? (RS[["", "carabobo", "parquechas"][C.real | 0]] || RS.carabobo || null) : null;
     const MG = RM ? RM.MG : Math.max(0, C.margen || 0), MW = RM ? RM.MW : C.mapW + 2 * MG, MH = RM ? RM.MH : C.mapH + 2 * MG, r = rng(seed);
+    const PASTO = RM && RM.estilo && RM.estilo.pasto != null ? RM.estilo.pasto : 1;   // cuánto pasto de siempre (la Capital: casi nada)
     const dentro = (x, y) => x >= MG && y >= MG && x <= MW - MG && y <= MH - MG;
     // ---------- riqueza (0 = pobre, 1 = acomodado)
     const WG = Math.ceil(MW / 10), HG = Math.ceil(MH / 10), n1 = vnoise(WG, HG, Math.max(2, Math.round(C.zonaRiqueza / 10)), r), n2 = vnoise(WG, HG, 6, r);
@@ -148,7 +149,8 @@ const World = (() => {
       if (extra.tierra) mat = "tierra";
       else if (type === "calle" && mat !== "tierra" && w > .34 && r() < .38 * (C.adoquines ?? 1)) mat = "adoquin";      // calles de adoquines, como en Flores
       const hw = extra.hwR ?? { ave: C.avenida / 2, calle: C.calle / 2 * (extra.ancha ? 1.25 : 1), pasaje: C.pasaje / 2, pasillo: C.pasillo / 2 }[type];
-      let sw = { ave: C.vereda * 1.45, calle: C.vereda * (w < .3 ? .8 : 1), pasaje: C.vereda * (w < .4 ? .45 : .56), pasillo: 0 }[type];
+      const VER = (RM && RM.estilo && RM.estilo.vereda) || C.vereda;   // el ancho de vereda del barrio real, si lo trae
+      let sw = { ave: VER * 1.45, calle: VER * (w < .3 ? .8 : 1), pasaje: VER * (w < .4 ? .45 : .56), pasillo: 0 }[type];
       if (mat === "tierra" && type !== "pasillo") sw = Math.max(sw, extra.tierra ? 1.6 : 2.6);
       const s = { id: segs.length, a, b, len, dir: [(b[0] - a[0]) / len, (b[1] - a[1]) / len], type, mat, hw, sw, w, cls: CLS[type],
         med: type === "ave" ? Math.max(0, Math.min(hw - 2.5, extra.medR ?? C.cantCentral / 2)) : 0, nombre: extra.nombre || "", cantero: type !== "pasillo" && mat !== "tierra" && sw >= 2.5 && r() < (w < .35 ? .45 : .85), cross: [], lots: { 1: [], "-1": [] }, district: d };
@@ -309,6 +311,40 @@ const World = (() => {
         if (stampPoly(ch.p, id) < 60) { unstamp(id); lot.kind = "nada"; }
       }
     }
+    // ---------- las esquinas de la rotonda (Parque Chas: las seis de la fuente), copiadas a mano: RM.esquinas trae, por rumbo
+    // desde la fuente (brújula), qué edificio va. Cada una es un lote con la forma de la esquina: la ochava frente a la fuente,
+    // un frente sobre cada calle (16 m desde la esquina) y el fondo donde se cruzan las medianeras.
+    if (RM && RM.esquinas && ROTONDAS.length) for (const q of ROTONDAS) {
+      const C0 = [q[0], q[1]], br = [];
+      for (const s of segs) { if (s.type === "pasillo") continue;
+        for (const [p, sg] of [[s.a, 1], [s.b, -1]]) if (Math.hypot(p[0] - C0[0], p[1] - C0[1]) < 1.5) br.push({ s, u: [s.dir[0] * sg, s.dir[1] * sg] }); }
+      br.sort((a, b) => Math.atan2(a.u[1], a.u[0]) - Math.atan2(b.u[1], b.u[0]));
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1], cruce = (P, d, Q, e) => { const den = d[0] * e[1] - d[1] * e[0]; const t = ((Q[0] - P[0]) * e[1] - (Q[1] - P[1]) * e[0]) / den; return [P[0] + d[0] * t, P[1] + d[1] * t]; };
+      for (let i = 0; i < br.length; i++) {
+        const A = br[i], Bb = br[(i + 1) % br.length], u1 = A.u, u2 = Bb.u, n1 = [-u1[1], u1[0]], n2 = [u2[1], -u2[0]];
+        // qué edificio: el de rumbo más cercano a la mitad de la esquina (brújula → ángulo del mundo, con el giro del mapa)
+        const mid = Math.atan2(u1[1] + u2[1], u1[0] + u2[0]), ang = (e) => ((90 - e.rumbo) + (RM.rot || 0)) * Math.PI / 180;
+        const dif = (a) => Math.abs(((a - mid) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+        const E = RM.esquinas.slice().sort((a, b) => dif(ang(a)) - dif(ang(b)))[0]; if (!E || dif(ang(E)) > .6) continue;
+        const o1 = A.s.hw + A.s.sw, o2 = Bb.s.hw + Bb.s.sw, L1p = [C0[0] + n1[0] * o1, C0[1] + n1[1] * o1], L2p = [C0[0] + n2[0] * o2, C0[1] + n2[1] * o2];
+        const K = cruce(L1p, u1, L2p, u2), b = [Math.cos(mid), Math.sin(mid)], dO = dot([K[0] - C0[0], K[1] - C0[1]], b) + (E.ochava ?? 3.5);
+        const sobre = (Lp, u) => { const t = (dO - dot([Lp[0] - C0[0], Lp[1] - C0[1]], b)) / dot(u, b); return [Lp[0] + u[0] * t, Lp[1] + u[1] * t]; };
+        const O1 = sobre(L1p, u1), O2 = sobre(L2p, u2), len = E.frente || 16;
+        const F1 = [K[0] + u1[0] * len, K[1] + u1[1] * len], F2 = [K[0] + u2[0] * len, K[1] + u2[1] * len], X = cruce(F1, n1, F2, n2);
+        // la ochava: recta, o redondeada (art déco) con cuatro tramos que salen hacia la fuente
+        const och = [];
+        if (E.redonda) { const m = [(O1[0] + O2[0]) / 2, (O1[1] + O2[1]) / 2], h = Math.hypot(O2[0] - O1[0], O2[1] - O1[1]) * .22;
+          for (const t of [.25, .5, .75]) { const k = Math.sin(t * Math.PI) * h; och.push([O2[0] + (O1[0] - O2[0]) * t - b[0] * k, O2[1] + (O1[1] - O2[1]) * t - b[1] * k]); } }
+        const poly = [O1, F1, X, F2, O2, ...och], rol = ["f1", "m", "m", "f2", ...Array(och.length + 1).fill("o")];
+        const id = lots.length, w = wealthAt(K[0], K[1]);
+        const lot = { id, q: poly, o: O1, ux: u1, nOut: n1, fw: len, ld: Math.hypot(X[0] - F1[0], X[1] - F1[1]), seg: A.s, side: 1, w, kind: "esquinaChas", phi: Math.atan2(u1[1], u1[0]),
+          seed: (r() * 1e9) | 0, vereda: "vain", patio: "cem", chas: { ...E, rol, calles: [A.s.nombre, Bb.s.nombre] } };
+        lots.push(lot);
+        const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
+        for (let y = Math.max(0, Math.floor(Math.min(...ys) * LR)); y <= Math.min(LH - 1, Math.ceil(Math.max(...ys) * LR)); y++)
+          for (let x = Math.max(0, Math.floor(Math.min(...xs) * LR)); x <= Math.min(LW - 1, Math.ceil(Math.max(...xs) * LR)); x++) {
+            const wx = (x + .5) / LR, wy = (y + .5) / LR; if (lotGrid[y * LW + x] < 0 && inside(poly, [wx, wy]) > 0 && !classify(wx, wy)) lotGrid[y * LW + x] = id; } }
+    }
     // ---------- esquinas con ochava: en cada esquina de manzana casi en escuadra (no en la villa ni en la plaza), un lote cuadrado
     // de 10 m con la casa de esquina; los lotes de las dos calles empiezan después. Marco: la calle de adelante es la que deja a la
     // otra del lado izquierdo (x = 0), así la ochava siempre queda en la esquina (0, 0) del lote. Sin sorteos: sale del lugar.
@@ -394,7 +430,8 @@ const World = (() => {
       const phi = Math.atan2(ux[1], ux[0]);   // local x -> ux ; local -y -> hacia la calle
       return { id, q, o, ux, nOut, fw, ld, seg: s, side, w, kind, phi, seed: (r() * 1e9) | 0,
         vereda: w < .3 ? pickW(r, [["tierra", 4], ["cem", 2], ["vain_d", 1.5], ["pasto", 3]]) : pickW(r, [["vain", 5], ["vain_d", 1.6], ["gris", 2.5], ["cem", 2.5], ["roja", 1], ["tierra", w < .5 ? .6 : 0]]),
-        patio: kind === "baldio" ? "yuyo" : w < .3 ? pickW(r, [["tierra", 4], ["pasto", 2], ["cem", 3]]) : w < .65 ? pickW(r, [["pasto", 2.5], ["cem", 3.5], ["roja", 3]]) : pickW(r, [["pasto", 5], ["cem", 1.5], ["roja", 2]]) };
+        // patio: en la Capital casi no hay pasto (estilo.pasto: cuánto del de siempre); baldosa colorada o cemento
+        patio: kind === "baldio" ? "yuyo" : w < .3 ? pickW(r, [["tierra", 4], ["pasto", 2 * PASTO], ["cem", 3]]) : w < .65 ? pickW(r, [["pasto", 2.5 * PASTO], ["cem", 3.5], ["roja", 3]]) : pickW(r, [["pasto", 5 * PASTO], ["cem", 1.5], ["roja", 2]]) };
     }
     // relleno denso de villas: casillas pegadas mirando al pasillo/calle más cercano
     for (const d of villaBlocks) {
@@ -445,7 +482,7 @@ const World = (() => {
       if (best) { best.kind = pq.rubro === "PIZZERIA" ? "negocio_casa" : "negocio"; best.cartel = pq.cartel; best.rubro = pq.rubro || ""; best.nombre = pq.n; } }
     const lotAt = (x, y) => { const gx = (x * LR) | 0, gy = (y * LR) | 0; if (gx < 0 || gy < 0 || gx >= LW || gy >= LH) return null; const i = lotGrid[gy * LW + gx]; return i >= 0 ? lots[i] : null; };
     return { MW, MH, MG, dentro, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt, zona, real: RM ? RM.nombre : null, carpeta: RM ? (RM.carpeta || "carabobo") : "barrio", estilo: (RM && RM.estilo) || {}, inicio: RM ? RM.inicio : null,
-      arbolesReales: RM && RM.arboles ? { especies: RM.especies, lista: RM.arboles } : null, rotondas: ROTONDAS };
+      arbolesReales: RM && RM.arboles ? { especies: RM.especies, lista: RM.arboles } : null, rotondas: ROTONDAS, pasto: PASTO };
   }
 
   // ---------- red de calles como grafo, con las reglas de Buenos Aires y el conurbano:

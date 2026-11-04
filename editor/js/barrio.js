@@ -16,6 +16,14 @@ const Barrio = (() => {
   const COLR = [["k_gauchito", .6], ["k_virgen", .45], ["k_heladera", .35], ["k_cucha", .45], ["b_tendedero", .1], ["b_mesa_patio", .9], ["b_bolsones", .5], ["b_pallets", .45], ["b_tacho", .3], ["b_viejo", .25], ["b_mujer", .2], ["c_volquete", 1.6], ["c_puesto", .8], ["c_chori", .7], ["c_moto", .4], ["c_buzon", .2], ["c_hidrante", .12], ["pz_monumento", 1.6], ["pz_fuente", 2.2], ["pz_calesita", 2.2], ["pz_glorieta", 2.4], ["pz_jacaranda", .3], ["pz_palo_borracho", .35], ["pz_hamacas", .9], ["pz_pingpong", .9], ["arbol", .28], ["u_farol", .14], ["u_semaforo", .12], ["cartel", .07], ["canasto", .08], ["u_contenedor", .75], ["u_campana", .55],
     ["u_refugio", .9], ["u_kiosco", 1.1], ["carro_cartonero", .7], ["u_tanque", .45], ["u_banco", .45], ["u_parada", .08], ["u_cesto", .1], ["u_poste_trafo", .22], ["u_valla", .35], ["obra_material", .5], ["parrilla", .55], ["pileta", 1.3], ["u_tablero", .3], ["u_caja", .25]];
   const lookup = (tbl, n, d) => { for (const [p, v] of tbl) if (n.startsWith(p)) return v; return d; };
+  // sin animales (palomas, perros, gatos)
+  const ANIMAL = /palomas|perro|gato|cucha/;
+  // Los props de Gemini que son cajas (parrillas, bancos, contenedores, juegos de plaza…) están dibujados en isométrica: sus
+  // aristas bajan ~26° a cada lado. En la vista oblicua del juego eso es una caja girada 50° (cos 50 + K sen 50 contra SYN sen 50):
+  // sólo quedan bien donde lo de alrededor (la casa del lote, la plaza, la calle) está a 50° ± 6° (módulo 90°). En otro lado no
+  // van. Lo redondo (plantas, macetas, tachos, faroles, la gente) va en cualquier lado.
+  const CAJA = /^(parrilla|u_contenedor|u_kiosco|u_parada|u_banco|u_tablero|u_macetero|obra_material|carro_cartonero|chango|silla|cajones|chapas|pz_hamacas|pz_tobogan|pz_subibaja|pz_banco|pz_pingpong|pz_ajedrez|pz_reja|pz_cantero|c_volquete|c_puesto|c_chori|c_moto|c_bici|b_tendedero|b_mesa_patio|b_arco|b_pallets|b_chango|k_colchon|k_heladera|k_cajones|k_sillas|k_tele|k_mantero|k_pelopincho|k_co_carrito)/;
+  const diagonalOk = (phi) => { const m = ((phi % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2); return Math.abs(m - 50 * Math.PI / 180) <= 6 * Math.PI / 180; };
   const SH = (n) => n.startsWith("plm_") ? "sh_small" : n.startsWith("u_farol") || n.startsWith("u_poste") || n.startsWith("u_parada") ? "sh_pole" : n.startsWith("u_cesto") || n.startsWith("u_banco") || n.startsWith("u_kiosco") ? "sh_small" : n.startsWith("u_contenedor") || n.startsWith("canasto") || n.startsWith("u_campana") ? "sh_small" : null;
   // colores de autos: el juego elige el modelo y usa este color si el modelo lo tiene; "poli" = patrullero, "burnt" = chatarra
   const COLORES = [["red", 1.6], ["white", 1.6], ["black", 1.4], ["blue", 1.4], ["yellow", 1], ["poli", .4]];
@@ -40,7 +48,10 @@ const Barrio = (() => {
     function put(name, x, y, opt = {}) {
       const h = Math.abs(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(y * 10), 19349663));
       if (VAR[name]) name = VAR[name][h % VAR[name].length];
-      if (!F[name]) return null;
+      if (!F[name] || ANIMAL.test(name)) return null;
+      if (CAJA.test(name)) { const l = W.lotAt(x, y), c = l ? null : W.classify(x, y);
+        const phi = l ? (l.plaza ? Math.atan2(l.plaza.u[1], l.plaza.u[0]) : l.phi) : c ? Math.atan2(c.s.dir[1], c.s.dir[0]) : opt.face ? Math.atan2(opt.face[1], opt.face[0]) : null;
+        if (phi == null || !diagonalOk(phi)) return null; }
       if (name.startsWith("yy_") && !W.dentro(x, y)) return null;   // afuera del paredón, sin yuyos (son la mayoría de los props)
       // en la calzada sólo lo que va en la calle (vallas, conos, volquetes, contenedores); lo demás que caiga ahí (una maceta de un
       // lote de esquina, un hidrante corrido) no se pone
@@ -164,6 +175,19 @@ const Barrio = (() => {
           else if (F.u_valla) for (let t = rn.t0 + .35; t < rn.t1 - .2; t += .75) put("u_valla", ax + ux * t, ay + uy * t, { noClaim: true });
         } } }
 
+    // ---- las esquinas de la fuente (Parque Chas): el edificio copiado a mano, con la planta del lote; el café saca sus mesas
+    function esquinaChas(lot) {
+      const E = lot.chas, O = lot.o, u = lot.ux, n = lot.nOut, r2 = (v) => Math.round(v * 100) / 100;
+      const poly = lot.q.map(p => [r2((p[0] - O[0]) * u[0] + (p[1] - O[1]) * u[1]), r2((p[0] - O[0]) * n[0] + (p[1] - O[1]) * n[1])]);
+      addObj("chas", { t: "chas", tipo: E.tipo, p: E.pisos || 2, poly, rol: E.rol, cal: E.calles, cartelEn: E.cartelEn || "", cafe: E.cafe || "", a: aIdx(lot.phi) }, lot, O[0], O[1], qa(lot.phi), null, lot.q.map(p => [p[0], p[1]]));
+      const xs = lot.q.map(p => p[0]), ys = lot.q.map(p => p[1]);
+      for (let x = Math.min(...xs); x < Math.max(...xs); x += .4) for (let y = Math.min(...ys); y < Math.max(...ys); y += .4) { const l = W.lotAt(x, y); if (l === lot) occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); }
+      // las mesas del café en la vereda, frente a su lado sobre la calle del café (y en la ochava)
+      if (E.cafe && F.c_mesa_bar) for (let i = 0; i < lot.q.length; i++) { const rol = E.rol[i], calle = rol === "f1" ? E.calles[0] : rol === "f2" ? E.calles[1] : null;
+        if (calle !== E.cafe && rol !== "o") continue; const a = lot.q[i], b = lot.q[(i + 1) % lot.q.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 2) continue;
+        const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L;   // afuera: a la derecha del lado
+        for (let t = 1.4; t < L - 1; t += 2.3) put("c_mesa_bar", a[0] + ux * t + uy * 1.6, a[1] + uy * t - ux * 1.6, { rad: .7 }); }
+    }
     // ---- casa de esquina con ochava (world.js arma el lote): tres rubros por rumbo, para que el catálogo no crezca de más.
     // Los bares y cafés sacan dos mesitas a la vereda de la ochava
     function esquinaLote(lot) {
@@ -184,6 +208,7 @@ const Barrio = (() => {
       if (lot.kind === "sendero") continue;
       if (cruzaParedon(lot)) continue;
       if (lot.kind === "esquina") { esquinaLote(lot); continue; }
+      if (lot.kind === "esquinaChas") { esquinaChas(lot); continue; }
       if (lot.kind === "plaza") { if (lot.plaza.real) plazaReal(lot); else plaza(lot); continue; }
       if (lot.kind === "cancha") { cancha(lot); continue; }
       if (lot.kind === "nada") continue;
@@ -233,7 +258,8 @@ const Barrio = (() => {
       occRect(.2, lot.fw, -.6, depthTot + 1.5);
       let backV = 0;
       // en lotes hondos casi siempre hay algo en el fondo (PH, otra casa, un galpón), como en las manzanas de Flores
-      const pBack = (lot.w < .3 ? .65 : lot.w < .55 ? .4 : .12) * C.fondoConstr, hondo = lot.ld - depthTot > 22;
+      // (un barrio de la Capital tiene las manzanas llenas: estilo.fondos multiplica lo que se construye al fondo)
+      const pBack = Math.min(.9, (lot.w < .3 ? .65 : lot.w < .55 ? .4 : .12) * C.fondoConstr * ((W.estilo && W.estilo.fondos) || 1)), hondo = lot.ld - depthTot > 22;
       if (lot.kind !== "villa" && lot.ld - depthTot > 8 && (r() < pBack || (hondo && rx() < .75))) {
         const bw = Wb(Math.min(lot.fw, r.uni(4, lot.fw)), 2), bu = r() < .5 ? 0 : lot.fw - bw, bd = Math.min(lot.ld - depthTot - 4, r.uni(3.8, 5.5)) < 4.6 ? 4 : 5, bv = lot.ld - bd - .3;
         const k2 = r.pick(lot.w < .3 ? ["obra", "villa", "casa"] : ["casa", "casa", "obra"]), [bx, by] = LP(bu, bv);
@@ -511,6 +537,7 @@ const Barrio = (() => {
   function build3D(spec) {
     const phi = World.ANG[spec.a];
     if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17 + (spec.co ?? 0) * 613 + (spec.tj ?? 0) * 389 + (spec.ct ? spec.ct.length * 977 + spec.ct.charCodeAt(spec.ct.length - 1) * 131 : 0), wealth: [.25, .7][spec.wb], co: spec.co, al: spec.al, tj: spec.tj, ct: spec.ct, rb: spec.rb }, phi);
+    if (spec.t === "chas") return Houses.chas(spec, phi);
     if (spec.t === "esquina") return Houses.esquina({ W: spec.W, D: spec.D, c: spec.c, p: spec.p, rub: spec.rub, seed: 9000 + spec.rub * 7919 + spec.p * 104729 + spec.a * 31, wealth: .5 }, phi);
     if (spec.t === "paredon") return Houses.paredon(spec.W, 700 + spec.s, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);

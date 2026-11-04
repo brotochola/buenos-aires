@@ -17,7 +17,9 @@ const Contorno = (() => {
   // d: RGBA de w×h (se modifica). Pinta un anillo de t px por fuera de lo opaco (alfa ≥ 128): los pasos impares en cruz y
   // los pares en las 8 direcciones (queda un octógono, no un cuadrado). Lo opaco queda con alfa 255 (borde duro).
   // evitar(x, y), opcional: true donde no va contorno (la base de una rama, que sale de otra).
-  function aplicar(d, w, h, t, evitar) {
+  // suave (0..1, opcional): el anillo es el color del relleno llevado a su oscuro en esa medida (como el borde de las caras de
+  // las casas, R3.LIGHT.outline); sin suave, el oscuro entero (personajes y autos)
+  function aplicar(d, w, h, t, evitar, suave) {
     const n = w * h, src = new Int32Array(n).fill(-1);
     for (let k = 0; k < n; k++) if (d[k * 4 + 3] >= 128) { src[k] = k; d[k * 4 + 3] = 255; }
     if (t <= 0) return 0;
@@ -34,15 +36,15 @@ const Contorno = (() => {
         for (const [ox, oy] of N8) { const xx = x + ox, yy = y + oy; if (xx >= 0 && yy >= 0 && xx < w && yy < h && src[yy * w + xx] < 0) return true; } return false; }).concat(nq) : nq; }
     let pintados = 0;
     for (const k of anillo) { const x = k % w, y = (k - x) / w; if (evitar && evitar(x, y)) continue;
-      const s = src[k] * 4, c = oscuro(d[s], d[s + 1], d[s + 2]), i = k * 4;
-      d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; pintados++; }
+      const s = src[k] * 4, c = oscuro(d[s], d[s + 1], d[s + 2]), i = k * 4, a = suave == null ? 1 : suave;
+      d[i] = d[s] + (c[0] - d[s]) * a; d[i + 1] = d[s + 1] + (c[1] - d[s + 1]) * a; d[i + 2] = d[s + 2] + (c[2] - d[s + 2]) * a; d[i + 3] = 255; pintados++; }
     return pintados;
   }
   // un canvas con contorno: devuelve otro canvas t px más grande de cada lado (el dibujo corrido t px)
-  function canvas(cv, t, evitar) {
+  function canvas(cv, t, evitar, suave) {
     const w = cv.width + 2 * t, h = cv.height + 2 * t, out = document.createElement("canvas"); out.width = w; out.height = h;
     const g = out.getContext("2d", { willReadFrequently: true }); g.drawImage(cv, t, t);
-    const id = g.getImageData(0, 0, w, h); aplicar(id.data, w, h, t, evitar && ((x, y) => evitar(x - t, y - t))); g.putImageData(id, 0, 0);
+    const id = g.getImageData(0, 0, w, h); aplicar(id.data, w, h, t, evitar && ((x, y) => evitar(x - t, y - t)), suave); g.putImageData(id, 0, 0);
     return out;
   }
   return { aplicar, canvas, grosor, oscuro };

@@ -98,9 +98,10 @@ En el editor, con el parámetro `real` en 1 o 2 no se inventa el barrio: se arma
 El barrio de Frehner y Guerrico (1925): calles en anillos alrededor de la esquina de seis (Av. Victorica, Ávalos y Gándara), con
 nombres de ciudades europeas (Berlín, Ginebra, La Haya, Londres, Cádiz…), y cuadrícula hacia La Pampa, Triunvirato y Av. de los Incas.
 
-- **Qué entra:** 760 × 760 m jugables (más 40 m de margen) con centro a 300 m de la esquina de seis: los anillos enteros, las dos
-  plazoletas de adentro (Éxodo Jujeño y Cap. Domingo F. Sarmiento), Av. Victorica de punta a punta, un tramo de Av. de los Incas y de
-  La Pampa. El juego arranca en la esquina de seis. Girado 28,5°: es el giro con el que más calles caen en los rumbos de los autos.
+- **Qué entra:** 950 × 870 m jugables (más 40 m de margen): los anillos enteros y las cinco plazas del barrio (Éxodo Jujeño y
+  Cap. Domingo F. Sarmiento adentro de los anillos; Alfredo Nobel, Andrés Chazarreta y Jamaica al sur), Av. Victorica de punta a punta
+  y un tramo de Av. de los Incas. El juego arranca sobre Victorica, a 40 m de la fuente. Girado 265,25°: tan bueno como el mejor para
+  los rumbos de los autos y deja de frente a la cámara el Café Chas sobre Ávalos y Keops sobre Gándara.
 - **Calles y plazoletas:** del callejero de la Ciudad (red vial, una línea por cuadra con nombre, tipo y jerarquía). Las curvas se
   encajan en los 48 rumbos como las rectas (los nodos se mueven 5 m en promedio, 20 m como mucho en los anillos). Las plazoletas son
   la manzana que encierra a los árboles de cada espacio verde del censo.
@@ -112,11 +113,17 @@ nombres de ciudades europeas (Berlín, Ginebra, La Haya, Londres, Cádiz…), y 
   sobre las avenidas). Un 28 % de las casas tiene techo de tejas (`estilo.tejas`); las tejas son un material compartido del horneado
   con skew, como los techos planos y la chapa.
 - **La esquina de seis:** una rotonda con la fuente revestida de trencadís (el mosaico que pusieron los vecinos en 2016;
-  `herramientas/fuente_mosaico.py`). Los autos le dan la vuelta en sentido antihorario y cada uno elige por qué calle sale. Frente
-  a la fuente, la Pizzería Keops (Gándara 2699) y el Café Chas (sobre Ávalos; no encontré en cuál de las esquinas de Gándara y
-  Ávalos está, va en la que tiene el frente a la cámara), con su cartel y mesitas en la vereda.
-- **Exportado** con skew: 2855 casas, 1721 árboles (los del censo que caen en una vereda, más los de las plazoletas), 116 mil
-  piezas de pared y techo, atlas de 5706 × 4094.
+  `herramientas/fuente_mosaico.py`). Los autos le dan la vuelta en sentido antihorario y cada uno elige por qué calle sale.
+- **Las seis esquinas de la fuente, copiadas a mano** de la foto 360° desde la fuente (Hernán Apaza, 2018) y de las fotos de Google
+  Maps (`ESQUINAS` en `osm_real.py`, `Houses.chas`): cada una con la planta de la esquina (la ochava frente a la fuente) y su edificio.
+  Victorica y Gándara: la Pizzería Keops (roja, tres plantas, cartel amarillo con las pirámides); Gándara y Ávalos al este: ladrillo
+  rosado con el balcón cerrado blanco; Ávalos y Victorica al sudeste: la casa negra nueva; Victorica y Gándara al sudoeste: la casa
+  gris con garaje; Gándara y Ávalos al oeste: el edificio blanco art déco de esquina redonda con el Café Chas abajo (Ávalos 1554:
+  vidrieras de marco verde con reja de rombos, pilares de granito, letras blancas y las mesas en la vereda); Ávalos y Victorica al
+  noroeste: la casa crema con balaustrada. Con la cámara fija, de cada esquina se ven los lados que miran al sur.
+- **Veredas y patios:** veredas de 4,2 m (la mediana del censo de arbolado); casi sin pasto (patios de baldosa y de cemento, manzanas
+  llenas con más construcciones al fondo) y sin baldíos.
+- **Exportado** con skew: 4092 casas, 2445 árboles, 219 mil piezas de pared y techo.
 - **Rehacerlo:** los datos salen del portal data.buenosaires.gob.ar (red vial, arbolado público lineal y arbolado en espacios verdes;
   no se guardan acá, pesan 100 MB). `python3 herramientas/gcba_osm.py --barrio parquechas --red red-vial-CABA.geojson
   --arbolado arbolado_lineal.csv --verdes arbolado_verdes.csv` escribe `editor/recursos/osm_parquechas.json` en el formato de OSM;
@@ -159,6 +166,14 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 6. El editor usa los props HD en lugar de los v4 del mismo nombre y R3 pega las piezas de fachada en las paredes, sin suavizar. El exportador manda los props HD con su resolución y `META.escalas` le dice al juego a qué escala mostrarlos.
 
 ## Límites conocidos
+
+- Los props de Gemini que son cajas (parrillas, bancos, contenedores, juegos de plaza, motos) están dibujados en isométrica: sólo se
+  ponen donde la casa, la plaza o la calle está girada 50° ± 6° (módulo 90°), que es como se ve esa caja en la vista del juego. En
+  los demás lugares no van. Nada se pone delante de una puerta o un portón (las puertas salen del dibujo de cada casa). No hay
+  animales.
+- Contorno: las casas, los árboles y los props llevan el mismo borde fino, del color de la cosa oscurecido (las caras lisas y los
+  techos de material, con una tira de 1 px); los personajes y los autos, el suyo, más marcado. Los personajes LPC van un 6 % más
+  angostos.
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
 - Ese atlas (hasta 8192×4096 píxeles) lleva casas, gente, árboles, props y autos. Con WeedJS ff32c939 o posterior no hay tope de cuadros (antes, con más de 8192, no se dibujaba ningún sprite: N-111). Si un barrio no entra en los píxeles, el juego no carga («Could not fit … into atlas»): bajá la «variedad» de casas.

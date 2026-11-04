@@ -23,6 +23,7 @@ const Exportar = (() => {
     // las casas se dibujan con más detalle (DET px por px de mundo) y el juego las muestra a 1/DET, como a los personajes LPC
     const DET = opts.detalle || 5 / 3, TDp = SF * DET; R3.setDetalle(DET);
     const entries = [...B.cat.values()], SKEW = C.skew !== 0;
+    let PIES = null;   // de caras.js: pie, sombra y puertas de cada clave del catálogo
     let hojas = [], franjas = {}, casas = [], hojasCaras = 0, variantes = null, nTiles = 0;
     if (!SKEW) {
       const rendered = [], TOL = Math.round(8 * DET), PIEZA = Math.round(64 * DET), ANCHO = Math.round(64 * DET);
@@ -106,6 +107,7 @@ const Exportar = (() => {
       // hasta 64 px de mundo, y para cada clave del catálogo (diseño + rumbo) la lista de piezas con su lugar, escala,
       // skew, tinte y orden
       let H; try { H = Caras.hornear(entries, DET, (q) => progreso("caras " + Math.round(q * 100) + " %", q * .5)); } finally { R3.setDetalle(1); }
+      PIES = H.pies;
       progreso("hojas de caras", .52); await espera();
       const lienzo = new Map(), hojasC = []; let cur = null;
       for (const pz of H.piezas.slice().sort((a, b) => b.h - a.h)) {
@@ -192,19 +194,31 @@ const Exportar = (() => {
     // ---------- 4. props: sólo los cuadros usados del atlas del editor
     // los que miran a algún lado: frente o atrás (los de Gemini que la tienen) y espejo, vistos desde la cámara del juego
     // (los semáforos llevan su cruce y cuál de las dos calles muestran)
-    const props = B.props.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip, f = e.f;
+    // nada delante de una puerta o un portón (una planta tapaba la puerta): las puertas de cada casa (caras.js) en el mundo; afuera,
+    // hasta 1,3 m, no va ningún prop salvo lo que está pegado al piso
+    const puertas = [];
+    if (PIES) for (const o of B.objs) { const V = PIES[o.e.id]; if (!V || !V.puertas) continue;
+      for (const d of V.puertas) puertas.push({ a: [o.x0 + d.a[0], o.y0 + d.a[1]], b: [o.x0 + d.b[0], o.y0 + d.b[1]], n: d.afuera }); }
+    const tapaPuerta = (e) => { if (/^(gd_|sh_)/.test(e.f)) return false;
+      for (const d of puertas) { const ux = d.b[0] - d.a[0], uy = d.b[1] - d.a[1], L = Math.hypot(ux, uy) || 1, px = e.x - d.a[0], py = e.y - d.a[1];
+        const u = (px * ux + py * uy) / L, v = px * d.n[0] + py * d.n[1]; if (u > -.25 && u < L + .25 && v > -.2 && v < 1.3) return true; }
+      return false; };
+    const propsB = B.props.filter(e => !tapaPuerta(e));
+    if (puertas.length) console.log("puertas:", puertas.length, "props sacados de delante:", B.props.length - propsB.length);
+    const props = propsB.map(e => { const [x, y] = PW(e.x, e.y); let fl = e.flip, f = e.f;
       if (e.face) { const s0 = PW(e.x, e.y), s1 = PW(e.x + e.face[0], e.y + e.face[1]); [f, fl] = Barrio.vista(F, e.f, s1[0] - s0[0], s1[1] - s0[1]); }
       return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null, ...(e.cruce && e.cruce._cid >= 0 ? { cr: e.cruce._cid, ej: e.eje } : {}) }; });
     const anclas = {}, escalas = {}; let semAlto = 0;
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
       // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
       const S = (n) => F[n].hd || F[n];
-      // contorno como el de los personajes y los autos (contorno.js): por fuera, con el grosor que a la escala del juego
-      // (f.e, o 1) mide 1 px de mundo. Las sombras y lo que va pegado al piso, sin.
-      const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {};
+      // contorno como el de las casas y los árboles (no el de los personajes y los autos, que es más grueso y oscuro): por
+      // fuera, de ~0,6 px de mundo a la escala del juego (f.e, o 1), del color del relleno llevado a su oscuro como el borde de
+      // las caras (R3.LIGHT.outline). Las sombras y lo que va pegado al piso, sin.
+      const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline);
       for (const n of usados) { const f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
         c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
-        const t = SIN_CONTORNO.test(n) ? 0 : Contorno.grosor(f.e || 1); cuadro[n] = { cv: t ? Contorno.canvas(c, t) : c, t, f }; }
+        const t = SIN_CONTORNO.test(n) ? 0 : Math.max(1, Math.round(.6 / (f.e || 1))); cuadro[n] = { cv: t ? Contorno.canvas(c, t, null, SUAVE) : c, t, f }; }
       const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
       for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
@@ -212,7 +226,7 @@ const Exportar = (() => {
       // Muchas hojas de Gemini no dicen cuánto fondo tiene el objeto (la calesita quedaba con 0,3 m y el ancla casi en el borde de
       // abajo, así que el círculo caía debajo del dibujo): lo que choca tiene de fondo por lo menos su collider, y el centro
       // de la base queda cr·SYN·SF px de juego por encima del borde de abajo
-      const crDe = {}; B.props.forEach((e, i) => { if (e.cr > 0) { const f = props[i].f; crDe[f] = Math.max(crDe[f] || 0, e.cr); } });
+      const crDe = {}; propsB.forEach((e, i) => { if (e.cr > 0) { const f = props[i].f; crDe[f] = Math.max(crDe[f] || 0, e.cr); } });
       for (const n of ns) { const { cv: c, t, f } = cuadro[n], [px, py] = pos[n]; g.drawImage(c, px, py); frames[n] = fr(px, py, c.width, c.height);
         const oy = crDe[n] ? Math.min(f.oy, f.h - 1 - crDe[n] * SYN * SF / (f.e || 1)) : f.oy;
         anclas[n] = [r2((f.ox + t) / c.width), r2((oy + t) / c.height)];
@@ -290,8 +304,11 @@ const Exportar = (() => {
         // patio: el piso del lote (baldosa, cemento…) sólo en los primeros 13 m desde el frente (la casa y su patio); más al fondo,
         // pasto (tierra en los barrios pobres), como el fondo de las manzanas de Buenos Aires
         const lot = W.lotAt(x, y); if (lot) { const v = lot.nOut ? (x - lot.o[0]) * lot.nOut[0] + (y - lot.o[1]) * lot.nOut[1] : 0;
-          const pat = lot.patio !== "yuyo" && lot.kind !== "plaza" && lot.kind !== "sendero" && lot.kind !== "cancha" && v > 13 ? (lot.w < .3 ? "tierra" : "pasto") : lot.patio;
+          // (en la Capital el fondo también es patio: baldosa o cemento, no pasto)
+          const pat = lot.patio !== "yuyo" && lot.kind !== "plaza" && lot.kind !== "sendero" && lot.kind !== "cancha" && v > 13 && W.pasto >= .5 ? (lot.w < .3 ? "tierra" : "pasto") : lot.patio;
           cellB[o + 3] = (PAT[pat] || 5) | (lot.w < .4 ? 16 : 0); }
+        // en la Capital lo que queda entre lotes también es patio de cemento, no pasto (y no a parches: se veía un damero)
+        else if (W.pasto < .5 && cl.k === 0 && W.dentro(x, y) && W.wealthAt(x, y) >= .3) cellB[o + 3] = PAT.cem;
       } }
     const WGc = Math.ceil(MW / 10), HGc = Math.ceil(MH / 10), wealth = new Uint8Array(WGc * HGc);
     for (let j = 0; j < HGc; j++) for (let i = 0; i < WGc; i++) wealth[j * WGc + i] = Math.round(W.wealthAt(i * 10 + 5, j * 10 + 5) * 255);

@@ -42,7 +42,7 @@ const Caras = (() => {
       const z = f.O[2] + u * f.E1[2] + v * f.E2[2], ao = 1 - 0.2 * aoK * Math.max(0, 1 - z / 0.7), c = saturar(t.d[i] * ao, t.d[i + 1] * ao, t.d[i + 2] * ao);
       const o = (y * w + x) * 4; d[o] = c[0] * G; d[o + 1] = c[1] * G; d[o + 2] = c[2] * G; d[o + 3] = 255;
     }
-    contorno({ w, h, d }); return { w, h, d };
+    if (!f.sinContorno) contorno({ w, h, d }); return { w, h, d };
   }
   // el borde de lo opaco oscurecido como las aristas de R3
   function contorno(T) { const { w, h, d } = T, tA = Math.min(1, .7 * R3.LIGHT.outline); if (tA <= 0) return;
@@ -157,8 +157,8 @@ const Caras = (() => {
     entries.forEach((e, n) => {
       if (n % 16 === 0) progreso(n / entries.length);
       const kd = claveDiseno(e.spec); let D = disenos.get(kd);
-      if (!D) { const s = Barrio.build3D({ ...e.spec, a: 0 }).sc;
-        D = { faces: s.faces.filter(f => f.both || f.n[2] > -.5), casters: s.casters, acc: s.acc || [], tex: new Map() }; disenos.set(kd, D); }
+      if (!D) { const B3 = Barrio.build3D({ ...e.spec, a: 0 }), s = B3.sc;
+        D = { faces: s.faces.filter(f => f.both || f.n[2] > -.5), casters: s.casters, acc: s.acc || [], tex: new Map(), puertas: B3.puertas || [], frenteY: B3.frenteY || 0 }; disenos.set(kd, D); }
       const phi = World.ANG[e.spec.a], c = Math.cos(phi), s = Math.sin(phi), E = [], items = [];
       // ---- caras visibles, en piezas planas: [textura (grilla), O, E1, E2 (el paralelogramo que cubre), tinte]
       for (let fi = 0; fi < D.faces.length; fi++) { const F0 = D.faces[fi]; let n3 = rot(c, s, F0.n);
@@ -182,6 +182,21 @@ const Caras = (() => {
           st.propias++; let T = D.tex.get(fi); if (!T) { T = textura(F0); D.tex.set(fi, T); }
           sub.push({ T, O: F.O, E1: F.E1, E2: F.E2, tinte: hexDe(L.map(v => v / G * 255)), girable: !F.tri, clave: fi });
         }
+        // el contorno de las caras de color liso grandes y de los techos de material (las de dibujo propio lo traen en su textura):
+        // una tira de 1 px de textura por dentro de cada borde, del color de la cara llevado a su oscuro (como contorno()), con la
+        // textura blanca del motor
+        { const lisa = !F0.tex && !F0.tri, mat = F0.tex && F0.tex.mat && hashD(F0.tex.d) === F0.tex.limpia;
+          if ((lisa && len(F0.E1) > .6 && len(F0.E2) > .6) || mat) {
+            let base; if (lisa) base = saturar(F0.col[0] * L[0], F0.col[1] * L[1], F0.col[2] * L[2]);
+            else { const m = F0.tex.mat; if (!m.prom) { const d = m.tex.d; let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; } m.prom = [r / n, g / n, b / n]; }
+              const sp = saturar(m.prom[0], m.prom[1], m.prom[2]); base = [sp[0] * L[0], sp[1] * L[1], sp[2] * L[2]]; }
+            const os = Contorno.oscuro(base[0], base[1], base[2]), tA = Math.min(1, .7 * R3.LIGHT.outline), tn = hexDe(base.map((v, j) => v + (os[j] - v) * tA)), th = 1 / R3.TD;
+            const e1 = len(F.E1), e2 = len(F.E2), i1 = sc3(F.E1, th / e1), i2 = sc3(F.E2, th / e2), lejos1 = add(F.O, F.E1), lejos2 = add(F.O, F.E2);
+            for (const [O, E1, E2] of [[F.O, F.E1, i2], [sub3(lejos2, i2), F.E1, i2], [F.O, i1, F.E2], [sub3(lejos1, i1), i1, F.E2]]) {
+              // la orientación que deja escala y skew sanos (la textura blanca es igual de cualquier lado)
+              const A2 = J(E1), B2 = J(E2), la = Math.hypot(A2[0], A2[1]) || 1e-9, lb = Math.hypot(B2[0], B2[1]) || 1e-9;
+              const qn = Math.min(Math.abs(A2[0]) / la, Math.abs(B2[1]) / lb), qt = Math.min(Math.abs(B2[0]) / lb, Math.abs(A2[1]) / la);
+              sub.push(qt > qn ? { reg: BLANCO, O: add(O, E1), E1: E2, E2: sc3(E1, -1), tinte: tn, girable: false, borde: true } : { reg: BLANCO, O, E1, E2, tinte: tn, girable: false, borde: true }); } } }
         // orientación de cada pieza: la normal (u = E1) o la traspuesta (u = E2, v = −E1), la que deja escala y skew sanos
         for (const q of sub) { if (q.reg) continue;
           const A2 = J(q.E1), B2 = J(q.E2), la = Math.hypot(A2[0], A2[1]), lb = Math.hypot(B2[0], B2[1]);
@@ -216,7 +231,7 @@ const Caras = (() => {
           if (it.pared) { const F = it.F, d = sub3(P, F.O), L1 = len(F.E1), uu = Math.max(0, Math.min(1, (d[0] * F.E1[0] + d[1] * F.E1[1] + d[2] * F.E1[2]) / (L1 * L1))), Gp = add(F.O, add(sc3(F.E1, uu), F.E2)); objetivo = J([Gp[0], Gp[1], 0])[1]; }
           else objetivo = baseX(p[0]);
           const q0 = add(q.O, add(sc3(q.E1, g.x0 / T.w), sc3(q.E2, g.y0 / T.h))), da = J(sc3(q.E1, g.w / T.w)), db = J(sc3(q.E2, g.h / T.h)), j0 = J(q0);
-          tiles.push({ rank: r, cuadro: g.nombre, p, sx: g.nombre === "_white" ? A[0] / 8 : sx, sy: g.nombre === "_white" ? B[1] / 8 : sy, kx, ky, tn: q.tinte, iz, objetivo,
+          tiles.push({ rank: r, cuadro: g.nombre, p, sx: g.nombre === "_white" ? A[0] / 8 : sx, sy: g.nombre === "_white" ? B[1] / 8 : sy, kx, ky, tn: q.tinte, iz, objetivo, borde: !!q.borde,
             poli: [j0, [j0[0] + da[0], j0[1] + da[1]], [j0[0] + da[0] + db[0], j0[1] + da[1] + db[1]], [j0[0] + db[0], j0[1] + db[1]]] });
         }
       }
@@ -227,6 +242,7 @@ const Caras = (() => {
         for (let j = 0; j < i; j++) { if (tiles[j].rank === tiles[i].rank || tiles[j].clave <= k || separadas(cajas[i], cajas[j])) continue;
           const I = recortar(tiles[i].poli, tiles[j].poli); if (I.length >= 3 && Math.abs(area(I)) >= .5) k = tiles[j].clave; }
         tiles[i].clave = k; }
+      for (const t of tiles) if (t.borde) t.clave += .02;   // el borde, encima de su cara (misma y de orden y mismo innerZ)
       const r2 = (v) => Math.round(v * 100) / 100, r4 = (v) => Math.round(v * 1e4) / 1e4;
       variantes[e.id] = tiles.map(t => [t.cuadro, r2(t.p[0]), r2(t.p[1]), r4(t.sx), r4(t.sy), r4(t.kx), r4(t.ky), t.tn, r2(t.clave - t.p[1]), t.iz]);
       // el pie de la casa (de donde cuelgan el colisionador y la sombra): el punto más al frente de las cajas apoyadas
@@ -234,7 +250,9 @@ const Caras = (() => {
       for (const cs of D.casters) { if (cs.c[2] - cs.h[2] > .3) continue;
         for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const q = rot(c, s, [cs.c[0] + sx * cs.h[0] * cs.ax[0][0] + sy * cs.h[1] * cs.ax[1][0], cs.c[1] + sx * cs.h[0] * cs.ax[0][1] + sy * cs.h[1] * cs.ax[1][1], 0]);
           if (q[1] < fy - 1e-6) { fy = q[1]; foot = [q[0], q[1]]; } } }
-      pies[e.id] = { foot, casters: D.casters.map(cs => ({ c: rot(c, s, cs.c), ax: cs.ax.map(v => rot(c, s, v)), h: cs.h, noGround: cs.noGround })) };
+      pies[e.id] = { foot, casters: D.casters.map(cs => ({ c: rot(c, s, cs.c), ax: cs.ax.map(v => rot(c, s, v)), h: cs.h, noGround: cs.noGround })),
+        // las puertas del frente: de dónde a dónde (m, desde el origen de la casa) y hacia dónde es afuera
+        puertas: D.puertas.map(([a, b]) => ({ a: rot(c, s, [a, D.frenteY, 0]), b: rot(c, s, [b, D.frenteY, 0]), afuera: rot(c, s, [0, -1, 0]) })) };
     });
     } finally { Houses.setKit(false); }
     return { piezas, variantes, pies, nTexturas: texturas.size, nDisenos: disenos.size, st };

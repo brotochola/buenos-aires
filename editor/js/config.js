@@ -22,7 +22,7 @@ const CFG = (() => {
     ["Calles", "cantCentral", "Cantero central", 0, 6, .2, 3.2, "m", "world", ""],
     ["Calles", "pasaje", "Calzada de pasaje", 3, 8, .2, 5.2, "m", "world", ""],
     ["Calles", "pasillo", "Ancho de pasillo", 1, 3, .1, 1.8, "m", "world", "Pasillos de villa."],
-    ["Calles", "vereda", "Vereda", 1.5, 6, .1, 3.2, "m", "world", "En zonas pobres es más angosta."],
+    ["Calles", "vereda", "Vereda", 1.5, 6, .1, 3.8, "m", "world", "En zonas pobres es más angosta. Un barrio real puede traer la suya (Parque Chas: 4,2 m, la mediana del censo de arbolado)."],
     ["Calles", "manzana", "Tamaño de manzanas", .5, 2, .05, 1, "×", "world", ""],
     ["Calles", "pasajes", "Pasajes por manzana", 0, 1, .05, .25, "prob.", "world", ""],
     ["Calles", "adoquines", "Calles de adoquines", 0, 2.5, .1, 1, "×", "world", "Cuántas calles de barrios medios y ricos son de adoquines (1× ≈ un tercio)."],

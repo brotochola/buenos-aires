@@ -22,18 +22,31 @@ from scipy.sparse.linalg import lsqr
 # editor hace distinto: tipos de casa por calle o avenida, riqueza, árboles de vereda, variedad del catálogo)
 BARRIOS = {
     "carabobo": dict(SRC="editor/recursos/osm_carabobo.json", OUT="editor/recursos/real_carabobo.js", NOMBRE="Carabobo al 1500 y la villa 1-11-14",
-                     CEN=(-304.0, 48.0), ROT=-16.0, PW=480, PH=1080, MG=40, INICIO=(-34.6411515, -58.4462075), ESTILO=None),
+                     # en la Capital casi no hay pasto: patios de baldosa y manzanas llenas (la villa sigue con su tierra)
+                     CEN=(-304.0, 48.0), ROT=-16.0, PW=480, PH=1080, MG=40, INICIO=(-34.6411515, -58.4462075), ESTILO={"pasto": .2, "fondos": 2}, ESQUINAS=None),
     # Parque Chas (1925, Frehner y Guerrico): calles en anillos alrededor de la esquina de seis (Victorica, Ávalos, Gándara),
     # cuadrícula hacia las avenidas. Casas bajas de los años 30 a 60, PH y dúplex, alguna con tejas, lotes cortos; casi sin
     # comercio adentro; veredas angostas con árboles grandes. Las calles y las plazoletas salen del callejero de la Ciudad y
     # los árboles de vereda, uno por uno, del censo de arbolado (herramientas/gcba_osm.py): fresnos (casi la mitad),
     # plátanos, ficus, paraísos, tilos, crespones, jacarandás. "arboles" queda para las plazas
     "parquechas": dict(SRC="editor/recursos/osm_parquechas.json", OUT="editor/recursos/real_parquechas.js", NOMBRE="Parque Chas",
-                       CEN=(-70.0, 320.0), ROT=None, PW=760, PH=760, MG=40, INICIO=(-34.58218, -58.47922),
-                       ESTILO={"riqueza": .58, "variedad": 1.4, "tejas": .28,
-                               "casas": [["casa", 30], ["casa2", 26], ["ph", 24], ["chalet", 8], ["negocio_casa", 1.2], ["negocio", .8], ["obra", 2], ["baldio", 1], ["edificio", .4]],
+                       # la ventana entra los anillos y las cinco plazas del barrio (Éxodo Jujeño y Sarmiento adentro, Nobel, Chazarreta y
+                       # Jamaica al sur). Giro 265,25°: tan bueno como el mejor para los rumbos de los autos (costo 53) y deja a la
+                       # cámara el frente del Café Chas sobre Ávalos y el de Keops sobre Gándara (con 28,5° quedaban de espaldas)
+                       CEN=(-143.0, 114.0), ROT=265.25, PW=950, PH=870, MG=40, INICIO=(-34.58218, -58.47922),
+                       # vereda: la mediana del censo de arbolado (4,2 m); pasto: casi nada (patios de baldosa); fondos: manzanas llenas
+                       ESTILO={"riqueza": .58, "variedad": 1.4, "tejas": .28, "vereda": 4.2, "pasto": .15, "fondos": 2.5,
+                               "casas": [["casa", 30], ["casa2", 26], ["ph", 24], ["chalet", 8], ["negocio_casa", 1.2], ["negocio", .8], ["obra", 1], ["edificio", .4]],
                                "casasAvenida": [["negocio", 26], ["negocio_casa", 24], ["casa2", 16], ["ph", 14], ["edificio", 12], ["casa", 8], ["galpon", 2]],
-                               "arboles": {"fresno": 30, "tilo": 16, "platano": 12, "ficus": 10, "paraiso": 10, "jacaranda": 10, "crespon": 10, "tipa": 4}}),
+                               "arboles": {"fresno": 30, "tilo": 16, "platano": 12, "ficus": 10, "paraiso": 10, "jacaranda": 10, "crespon": 10, "tipa": 4}},
+                       # las seis esquinas de la fuente, copiadas a mano (foto 360° desde la fuente, Hernán Apaza, 2018; Keops y el Café Chas
+                       # en Google Maps, 2026): rumbo de brújula de la esquina desde la fuente, el edificio, las plantas
+                       ESQUINAS=[{"rumbo": 34, "tipo": "keops", "pisos": 3, "cartelEn": "Gándara"},          # Victorica y Gándara: Pizzería Keops (Gándara 2699)
+                                 {"rumbo": 92, "tipo": "ladrillo", "pisos": 2},                              # Gándara y Ávalos (al este)
+                                 {"rumbo": 152, "tipo": "moderno", "pisos": 2},                              # Ávalos y Victorica (al sudeste)
+                                 {"rumbo": 212, "tipo": "gris", "pisos": 2},                                 # Victorica y Gándara (al sudoeste)
+                                 {"rumbo": 272, "tipo": "artdeco", "pisos": 3, "redonda": True, "cafe": "Ávalos"},   # Gándara y Ávalos: Café Chas (Ávalos 1554)
+                                 {"rumbo": 332, "tipo": "balaustres", "pisos": 2}]),                         # Ávalos y Victorica (al noroeste)
 }
 _b = sys.argv[sys.argv.index("--barrio") + 1] if "--barrio" in sys.argv else "carabobo"
 CFG_B = BARRIOS[_b]
@@ -571,6 +584,7 @@ def main():
         "pois": pois,
         # rotonda: [x, y, radio de la isla, radio de la calzada, nombre de la fuente]
         **({"rotondas": rotondas} if rotondas else {}),
+        **({"esquinas": CFG_B["ESQUINAS"]} if CFG_B.get("ESQUINAS") else {}),
         **({"especies": especies, "arboles": arboles} if arboles else {}),
     }
     with open(OUT, "w") as f:

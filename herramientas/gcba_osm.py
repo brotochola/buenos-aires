@@ -24,10 +24,10 @@ BARRIOS = {
         # la fuente de la esquina de seis, en la rotonda (trencadís de los vecinos, 2016): el nodo de la red vial
         (-34.5825, -58.47925, {"amenity": "fountain", "name": "Fuente de Parque Chas", "rotonda": "si"}),
         # Pizzería Keops, Gándara 2699 (puntoclick.com.ar), en la esquina de seis
-        (-34.5823155, -58.4790348, {"amenity": "restaurant", "cuisine": "pizza", "name": "Pizzería Keops", "rubro": "PIZZERIA", "cartel": "PIZZERIA KEOPS", "addr:street": "Gándara"}),
-        # Café Chas, Gándara y Ávalos, frente a la fuente (parquechasweb.com.ar): la esquina no se sabe; ésta, la del este (el
-        # editor elige ahí el lote sobre Ávalos, que tiene el frente a la cámara del juego)
-        (-34.58251, -58.47906, {"amenity": "cafe", "name": "Café Chas", "rubro": "CAFE", "cartel": "CAFE CHAS", "addr:street": "Ávalos"}),
+        (-34.5823155, -58.4790348, {"amenity": "restaurant", "cuisine": "pizza", "name": "Pizzería Keops", "addr:street": "Gándara"}),
+        # Café Chas, Ávalos 1554, en la esquina con Gándara frente a la fuente (Google Maps). Keops y el café son edificios de las
+        # esquinas de la fuente (ESQUINAS en osm_real.py): acá sólo quedan anotados
+        (-34.5825312, -58.4795314, {"amenity": "cafe", "name": "Café Chas", "addr:street": "Ávalos"}),
     ]),
 }
 
