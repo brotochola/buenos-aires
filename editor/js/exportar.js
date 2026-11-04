@@ -129,8 +129,14 @@ const Exportar = (() => {
       const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
       for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
+      // el ancla va en el centro de la base: el juego pone ahí el collider (un círculo de radio cr·13,5 px) y ordena por ahí.
+      // Muchas hojas de Gemini no dicen cuánto fondo tiene el objeto (la calesita quedaba con 0,3 m y el ancla casi en el borde de
+      // abajo, así que el círculo caía debajo del dibujo): lo que choca tiene de fondo por lo menos su collider, y el centro
+      // de la base queda cr·SYN·SF px de juego por encima del borde de abajo
+      const crDe = {}; B.props.forEach((e, i) => { if (e.cr > 0) { const f = props[i].f; crDe[f] = Math.max(crDe[f] || 0, e.cr); } });
       for (const n of ns) { const { cv: c, t, f } = cuadro[n], [px, py] = pos[n]; g.drawImage(c, px, py); frames[n] = fr(px, py, c.width, c.height);
-        anclas[n] = [r2((f.ox + t) / c.width), r2((f.oy + t) / c.height)];
+        const oy = crDe[n] ? Math.min(f.oy, f.h - 1 - crDe[n] * SYN * SF / (f.e || 1)) : f.oy;
+        anclas[n] = [r2((f.ox + t) / c.width), r2((oy + t) / c.height)];
         if (f.e) escalas[n] = f.e; }
       archivos.push(["img/props.png", await png(cv)], ["img/props.json", json(hoja(frames, "props.png", cv))]); }
     // ---------- 5. autos y cables
