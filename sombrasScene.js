@@ -9,14 +9,15 @@ import { sombraAuto, altoAuto } from './sombraAuto.js';
 
 const { Scene, GameObject, RigidBody, Collider, SpriteRenderer, MeshRenderer, ShadowCaster, SpriteSheetRegistry, Camera, Mouse, Keyboard, Sun, Decoration, LAYER_KIND, enums } = WEED;
 const { ShapeType } = enums;
-const Q = new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
-const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'parquechas'; } catch (e) { return 'parquechas'; } })();
+// los parámetros vienen en la URL de la escena (sombras.html le pasa los suyos): en los workers location es la del worker
+const Q = (() => { try { return new URL(import.meta.url).searchParams; } catch (e) { return new URLSearchParams(''); } })();
+const DIR = BARRIOS[Q.get('barrio')] ? Q.get('barrio') : 'parquechas';
 const META = BARRIOS[DIR];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
 const u = (p) => new URL(p, import.meta.url).href;
 
 const AUTOS_MED = Object.fromEntries(Object.entries({ ...AUTOS, ...CHATARRA }).map(([m, d]) => [m.split('_')[0], [d.largo, d.ancho]]));
-const PISO_SHADER = (() => { try { return new URL(import.meta.url).searchParams.get('piso') === 'shader'; } catch (e) { return false; } })();
+const PISO_SHADER = Q.get('piso') === 'shader';
 const VIEJO = Q.get('autos') === 'viejo';   // ?autos=viejo: la sombra de antes (ShadowCaster del sprite)
 const _sb = new Float32Array(16);
 export const MODELOS = ['hatch_rojo', 'pickup_blanco', 'colectivo_azul', 'camion_rojo', 'policia', 'sedan_blanco'];
