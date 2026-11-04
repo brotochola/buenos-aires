@@ -150,14 +150,21 @@ const Exportar = (() => {
     // un tipo con cal ("_c") sólo agrega su tronco: las ramas son las del tipo base (mismo esqueleto)
     const tiposUsados = [...new Set(B.arboles.map(a => a.t))], arbolTipos = {}, base = (t) => t.replace(/_c$/, "");
     const aHornear = [...new Set(tiposUsados.flatMap(t => [t, base(t)]))];
+    // la silueta del árbol entero, chica (al 0,3 del dibujo: la sombra se dibuja a 1/4 de resolución): el juego la pone de sprite
+    // invisible del árbol para que proyecte sombra con el sol y los faroles (las decoraciones no proyectan)
+    const SIL = .3, silueta = (t) => { const R = Arboles.render(t), w = Math.max(1, Math.round(R.w * SIL)), h = Math.max(1, Math.round(R.h * SIL)), c = document.createElement("canvas");
+      c.width = w; c.height = h; const g = c.getContext("2d"); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(R.canvas, 0, 0, w, h);
+      return { canvas: c, w, h, i: "sil", ax: R.ox * SIL / w, ay: R.oy * SIL / h }; };
     { const items = []; for (const t of aHornear) Arboles.render(t).piezas.forEach((p, k) => { if (t === base(t) || p.i === 0) items.push({ t, p, k }); });
+      const sils = {}; for (const t of aHornear) if (t === base(t)) items.push({ t, p: sils[t] = silueta(t), k: -1 });
       items.sort((a, b) => b.p.h - a.p.h); let x = 0, y = 0, rowH = 0; const pos = [];
       for (const it of items) { if (x + it.p.w > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos.push([x, y]); x += it.p.w + 2; rowH = Math.max(rowH, it.p.h); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
       items.forEach((it, i) => { const [px, py] = pos[i], nm = it.t + "_" + it.p.i; g.drawImage(it.p.canvas, px, py); frames[nm] = fr(px, py, it.p.w, it.p.h); });
       for (const t of tiposUsados) { const R = Arboles.render(t), E = R.escala;
         // [cuadro, dx, dy (base de la pieza respecto del pie, px de mundo), anchorX, anchorY, orden dentro del árbol, se mece]
-        arbolTipos[t] = { escala: E, alto: r1(R.h * E), piezas: R.piezas.map(p => [(p.i === 0 ? t : base(t)) + "_" + p.i, r1(p.dx * E), r1(p.dy * E), r2(p.ax), r2(p.ay), p.z, p.sway ? 1 : 0]) }; }
+        arbolTipos[t] = { escala: E, alto: r1(R.h * E), piezas: R.piezas.map(p => [(p.i === 0 ? t : base(t)) + "_" + p.i, r1(p.dx * E), r1(p.dy * E), r2(p.ax), r2(p.ay), p.z, p.sway ? 1 : 0]),
+          sil: [base(t) + "_sil", +sils[base(t)].ax.toFixed(4), +sils[base(t)].ay.toFixed(4), SIL] }; }
       archivos.push(["img/arboles.png", await png(cv)], ["img/arboles.json", json(hoja(frames, "arboles.png", cv))]); }
     const arboles = B.arboles.map(a => { const [x, y] = PW(a.x, a.y); return { t: a.t, x: r1(x), y: r1(y), fl: a.flip ? 1 : 0, r: r1(a.cr * 13.5) }; });
     // ---------- 3b. tránsito (Ley 24.449 y Código de Tránsito de CABA), para que los autos del juego respeten la ley:
