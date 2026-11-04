@@ -10,6 +10,7 @@
 //     ("URBANIZACIÓN YA", "LA LUZ ES UN DERECHO"), del club o de la murga;
 //   - poesía de pared: fondo blanco, letras negras finas, una frase corta y tierna o irónica, sin consigna política;
 //   - firmas (tags) y bombas (letras gordas de dos colores con borde: plateado, amarillo, rosa) de los grafiteros;
+//   - contra el gobierno de turno: "NO AL AJUSTE", "FUERA MILEI", "LA PATRIA NO SE VENDE", "MACRI GATO";
 //   - lo práctico: SE VENDE, ALQUILO, NO ESTACIONAR, NO TIRAR BASURA, un teléfono;
 //   - en la villa, además, la fe de cada comunidad: Gauchito Gil, Virgen de Caacupé (paraguayos), Señor de los Milagros
 //     (peruanos), y el Padre Ricciardelli, que le da nombre al barrio.
@@ -29,6 +30,11 @@ const Graffiti = (() => {
   const INGENIO = ["NO PINTAR", "EL QUE LEE ES GIL", "PROHIBIDO PROHIBIR", "OTRA VEZ LUNES", "MAS MATE MENOS ODIO", "EL BONDI NO VIENE NUNCA",
     "SE BUSCA FUTURO", "VOLVE TE PERDONO EL FERNET", "FUI A COMPRAR PAN Y NO VOLVI", "DIOS ES ARGENTINO PERO NO ATIENDE ACA", "SONRIA NO LO FILMAMOS",
     "BAJO FLORES NO SE VENDE", "ACA NO SE RINDE NADIE", "LA CUADRA ES CORTA LA VIDA TAMBIEN", "MENOS PANTALLA MAS VEREDA", "TODO TIEMPO PASADO FUE ANTEAYER"];
+  // contra el gobierno (las que se ven en las paredes y en las marchas) y algunas de siempre
+  const POLITICA = ["NO AL AJUSTE", "FUERA MILEI", "LA PATRIA NO SE VENDE", "NO A LA MOTOSIERRA", "BASTA DE AJUSTE", "LOS JUBILADOS NO SE TOCAN",
+    "LA UNIVERSIDAD SE DEFIENDE", "EL AJUSTE NO ES CON EL PUEBLO", "FUERA FMI", "MACRI GATO", "MACRI PAGAME LA LUZ"];
+  // pedidas para el barrio
+  const PROPIAS = ["NO ME BAÑO", "VINO THE CAT", "SMOKE", "NADIE SE SALVA SOLO"];
   const SOCIAL = ["NUNCA MAS", "MEMORIA VERDAD Y JUSTICIA", "30.000 PRESENTES", "NI UNA MENOS", "URBANIZACION YA", "NI UN PIBE MENOS", "PAN TECHO Y TRABAJO",
     "TIERRA TECHO Y TRABAJO", "QUEREMOS AGUA", "LA LUZ ES UN DERECHO", "EDUCACION PUBLICA", "EL BARRIO ES NUESTRO"];
   const FE = ["GAUCHITO GIL", "VIRGEN DE CAACUPE", "SEÑOR DE LOS MILAGROS", "PADRE RICCIARDELLI PRESENTE", "CURAS VILLEROS", "VIVA PARAGUAY", "VIVA BOLIVIA", "DIOS ES FIEL"];
@@ -40,7 +46,7 @@ const Graffiti = (() => {
     ["LA ESPERANZA", "VIVE EN EL PASILLO"], ["SOMOS LO QUE HICIMOS", "CON LO QUE NOS TOCO"], ["AMAR ES CEBARTE", "EL MATE LAVADO", "Y SONREIR"],
     ["MIRAME", "QUE ME ESTOY YENDO"], ["TE QUIERO", "MAS QUE AL AGUINALDO"], ["EL BARRIO", "TAMBIEN SUEÑA"], ["OJALA LLUEVA", "Y SE LAVE TODO"],
     ["NO TE VAYAS", "QUE RECIEN LLEGO EL OTOÑO"], ["CUANDO NO ESTAS", "EL COLECTIVO TARDA MAS"]];
-  const CREWS = ["HMK", "BSAS", "DTK", "RKS", "SKOR", "ROKE", "KAOS", "FLOR", "BAJO", "NEKO", "TUKI", "ZONA"];
+  const CREWS = ["HMK", "BSAS", "DTK", "RKS", "SKOR", "ROKE", "KAOS", "FLOR", "BAJO", "NEKO", "TUKI", "ZONA", "SMOKE", "SMOKE"];
   let gr = Math.random;
   const num = (n) => { let s = ""; for (let i = 0; i < n; i++) s += (gr() * 10) | 0; return s; };
 
@@ -196,15 +202,16 @@ const Graffiti = (() => {
     if (tipo === "corazon") return corazon(t, x0, x1, y, pickC([[186, 30, 38], [24, 24, 28], [210, 60, 140], [236, 236, 232]]), 1.3 * k);
     if (tipo === "poesia") { const c = k; const p = pick(POESIA); if (Math.max(...p.map(l => ancho(l, c, 1))) + 4 * c <= W && p.length * 9 * c + 6 * c < t.h) { poesia(t, x0, x1, y, p, c); return true; } }
     if (tipo === "practico") { const p = pick(PRACTICO()), c = 1.2 * k; if (Math.max(...p.map(l => ancho(l, c, 1.1))) + 3 * c <= W && p.length * 9 * c + 4 < t.h) { aerosol(t, x0, x1, y, p, pickC([[24, 24, 28], [186, 30, 38], [36, 64, 170], [236, 236, 232]]), c); return true; } }
-    if (tipo === "pintor") { const lista = villa ? SOCIAL.concat(FE, CLUB) : SOCIAL.concat(CLUB), msg = pick(lista);
+    if (tipo === "pintor") { const lista = villa ? SOCIAL.concat(FE, CLUB, POLITICA, POLITICA) : SOCIAL.concat(CLUB, POLITICA, POLITICA, ["NADIE SE SALVA SOLO"]), msg = sinTilde(pick(lista));
       for (const c of pared ? [2 * k, 1.5 * k] : [1.5 * k, 1.2 * k]) { const lineas = partir(msg, Math.floor((W - 4 * c) / (6.2 * c))); if (lineas && lineas.length <= Math.min(3, Math.floor((t.h - 6 * c) / (9 * c)))) {
         const cols = gr() < .5 ? [pick([[30, 52, 150], [180, 28, 36], [20, 20, 24], [26, 110, 60]])] : [pick([[30, 52, 150], [20, 20, 24]]), pick([[180, 28, 36], [214, 160, 30]])];
         pintor(t, x0, x1, y, lineas, cols, c); return true; } } }
     // aerosol (lo de siempre, y lo que no entró como otra cosa)
-    const lista = (villa ? AMOR.concat(FUTBOL, FUTBOL, FE, SOCIAL) : pobre ? AMOR.concat(FUTBOL, BANDAS, INGENIO, SOCIAL) : AMOR.concat(FUTBOL, BANDAS, INGENIO, INGENIO));
+    const lista = (villa ? AMOR.concat(FUTBOL, FUTBOL, FE, SOCIAL, POLITICA, PROPIAS, PROPIAS) : pobre ? AMOR.concat(FUTBOL, BANDAS, INGENIO, SOCIAL, POLITICA, POLITICA, PROPIAS, PROPIAS)
+      : AMOR.concat(FUTBOL, BANDAS, INGENIO, INGENIO, POLITICA, POLITICA, PROPIAS, PROPIAS));
     for (let intento = 0; intento < 5; intento++) { const msg = sinTilde(pick(lista)), c = (gr() < .4 ? 1.5 : 1.15) * k, maxL = Math.min(3, Math.floor((t.h - 4) / (9 * c)));
       const lineas = partir(msg, Math.floor((W - 3 * c) / (6.4 * c))); if (lineas && lineas.length <= maxL) { aerosol(t, x0, x1, y, lineas, pickC(AEROSOL), c); return true; } }
     return tag(t, x0, x1, y, [24, 24, 28], 1.5 * k);
   }
-  return { pintar, FRASES: { AMOR, FUTBOL, BANDAS, INGENIO, SOCIAL, FE, CLUB, POESIA } };
+  return { pintar, FRASES: { AMOR, FUTBOL, BANDAS, INGENIO, POLITICA, PROPIAS, SOCIAL, FE, CLUB, POESIA } };
 })();
