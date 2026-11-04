@@ -7,6 +7,7 @@
 // Cada cuadro se guarda centrado en el punto donde el vehículo apoya en el piso, así el ancla (0,5, 0,5) no salta de un cuadro a otro.
 // (WeedJS ancla sobre el rectángulo del cuadro e ignora sourceSize; al armar el atlas recorta lo transparente, así que centrar no ocupa más atlas.)
 // Escribe img/autos/<hoja>.png|json y img/autos/autos.js (largo y ancho de cada modelo, lo importan todos los hilos).
+// Después: python3 herramientas/apoyo_autos.py (corta cada cuadro en la rueda más baja, para que el auto se ordene donde apoya).
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const PACK = process.argv[2] || 'D:/temp/TopDown Vehicles v1.17', OUT = path.join(__dirname, '..', 'img', 'autos');
 
