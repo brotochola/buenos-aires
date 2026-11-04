@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Pintadas</title>
+<style>body{margin:0;background:#222;color:#ddd;font:12px monospace} canvas{display:block;margin:6px;image-rendering:pixelated}</style></head><body>
+<script src="../js/config.js"></script><script src="../js/r3d.js"></script><script src="../js/graffiti.js"></script>
+<script>
+// paredes de prueba con pintadas de graffiti.js, al tamaño de la exportación (30 px/m) y ×2 para mirar
+R3.setDetalle(5 / 3);
+const ctxs = [{ paredon: true }, { pobre: true }, { villa: true }, {}];
+for (let fila = 0; fila < 8; fila++) {
+  const t = new R3.Tex(14, 3, 100 + fila); if (fila % 2) t.brick(); else { t.stucco([196, 186, 166], 1.4); t.runoff(.8, 1.2); t.peel(2); }
+  const r = R3.rng(777 + fila * 31);
+  for (let x0 = 6; x0 < t.w - 60;) { const x1 = Math.min(t.w - 4, x0 + 90 + ((r() * 60) | 0)); Graffiti.pintar(t, x0, x1, R3.px(.5 + r() * .5), r, ctxs[fila % 4]); x0 = x1 + 14; }
+  const cv = document.createElement('canvas'); cv.width = t.w; cv.height = t.h; const g = cv.getContext('2d'), im = g.createImageData(t.w, t.h);
+  for (let i = 0; i < t.w * t.h * 4; i++) im.data[i] = t.d[i]; g.putImageData(im, 0, 0); cv.style.width = t.w * 2 + 'px'; document.body.appendChild(cv);
+}
+window.__listo = true;
+</script></body></html>

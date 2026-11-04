@@ -412,9 +412,14 @@ const Barrio = (() => {
     // ---- autos (estacionados y circulando) y contenedores
     for (const s of W.segs) {
       if (s.type === "pasillo") continue;
-      const lanes = [], park = parkOff(s);
-      if (s.type !== "pasaje") for (const side of [1, -1]) lanes.push({ off: side * park, hd: r() < .5 ? 0 : Math.PI, p: (s.mat === "tierra" ? .06 : s.type === "ave" ? .14 : .13) * C.estacionados });
-      if (s.type !== "pasaje") { const lane = laneOff(s); lanes.push({ off: -lane, hd: 0, p: .03 * C.transito, moving: true }); lanes.push({ off: lane, hd: Math.PI, p: .03 * C.transito, moving: true }); }
+      // cuántos autos entran de ancho (2,45 m cada uno, con el lugar para pasar): por la calle tienen que poder pasar dos, y sólo se
+      // estaciona si entran tres (dos que pasan y uno estacionado); con cuatro, de los dos lados. En una avenida con cantero se cuenta
+      // cada mano; en la de tierra, sin las zanjas
+      const lanes = [], park = parkOff(s), CAR = 2.45, conMed = s.type === "ave" && s.med > .5;
+      const ancho = conMed ? s.hw - s.med - .15 : 2 * (s.mat === "tierra" ? s.hw - .9 : s.hw), nCar = Math.floor(ancho / CAR + 1e-6);
+      const lados = s.type === "pasaje" ? [] : conMed ? (nCar >= 3 ? [1, -1] : []) : nCar >= 4 ? [1, -1] : nCar >= 3 ? [s.id % 2 ? 1 : -1] : [];
+      for (const side of lados) lanes.push({ off: side * park, hd: r() < .5 ? 0 : Math.PI, p: (s.mat === "tierra" ? .06 : s.type === "ave" ? .14 : .13) * C.estacionados });
+      if (s.type !== "pasaje" && (conMed ? nCar >= 1 : nCar >= 2)) { const lane = laneOff(s); lanes.push({ off: -lane, hd: 0, p: .03 * C.transito, moving: true }); lanes.push({ off: lane, hd: Math.PI, p: .03 * C.transito, moving: true }); }
       const base = Math.atan2(s.dir[1], s.dir[0]);
       for (const ln of lanes) for (let t = r.uni(2, 8); t < s.len - 5;) {
         if (r() > ln.p) { t += 3; continue; }

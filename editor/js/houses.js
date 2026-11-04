@@ -15,8 +15,6 @@ const Houses = (() => {
   const GOODS = { VERDULERIA: [[232, 120, 30], [214, 44, 36], [100, 170, 60], [240, 200, 50], [140, 70, 120]], CARNICERIA: [[196, 60, 56], [232, 160, 150], [240, 232, 222]],
     POLLERIA: [[240, 200, 140], [230, 170, 100]], PANADERIA: [[212, 150, 80], [232, 194, 124], [176, 108, 50]], FARMACIA: [[240, 240, 240], [60, 160, 220], [230, 80, 90]],
     LIBRERIA: [[60, 110, 200], [230, 200, 60], [220, 70, 70], [240, 240, 230]], FERRETERIA: [[196, 60, 40], [60, 100, 180], [160, 160, 160], [230, 190, 40]] };
-  const PINTADAS = ["EL BARRIO ES NUESTRO", "NO AL AJUSTE", "VAMOS ARGENTINA", "AGUANTE EL BARRIO", "LOS PIBES DEL BARRIO", "TE AMO MARU",
-    "PAN Y TRABAJO", "SE VENDE", "ALQUILO", "NO ESTACIONAR", "CUMBIA", "VOLVE NENA", "FELIZ CUMPLE MICA", "ACA NO SE RINDE NADIE"];
   let GF = 3.2, UF = 2.9; const PAR = 0.85;
   // ninguna casa ni edificio pasa de pisosMax (2: más alto tapa la vista de la cámara)
   const PISOS = () => Math.max(1, (typeof CFG !== "undefined" && CFG.v.pisosMax) || 2);
@@ -92,13 +90,10 @@ const Houses = (() => {
     for (let k = 0; k < x1 - x0; k++) if (k % 19 < 4) for (let j = 0; j < 4; j++) { const yy = y0 + (k >> 1) + j; if (yy < y1) t.tint(x0 + k, yy, x0 + k + 1, yy + 1, [206, 224, 236], .45); }
     t.shade(x0, y0, x1, y0 + 2, .6);
   }
-  function pintada(t, x0, x1, y, r) {
-    const msg = r.pick(PINTADAS), maxc = Math.max(1, ((x1 - x0) / 7) | 0); const lines = []; let cur = "";
-    for (const w of msg.split(" ")) { if ((cur + " " + w).trim().length <= maxc) cur = (cur + " " + w).trim(); else { lines.push(cur); cur = w; } } lines.push(cur);
-    if (lines.some(l => l.length > maxc) || lines.length > 3) return false;
-    const c = r.pick([[32, 64, 168], [24, 24, 28], [186, 32, 40], [34, 120, 64], [230, 230, 230]]);
-    lines.forEach((l, i) => text(t, l, x0 + ((x1 - x0 - textW(l)) >> 1), y + i * 9, c, true, null, 1)); return true;
-  }
+  // pintadas: graffiti.js (relevamiento de las paredes porteñas: aerosol, de pintor, poesía, firmas, bombas). CTX dice dónde:
+  // lo pone cada constructor (casa pobre, villa, paredón) antes de pintar
+  let CTX = {};
+  function pintada(t, x0, x1, y, r) { return typeof Graffiti !== "undefined" ? Graffiti.pintar(t, x0, x1, y, r, CTX) : false; }
   function railingTex(wm, hm, seed, c = [28, 28, 32], gap = 4) { const t = new Tex(wm, hm, seed, [0, 0, 0], 0);
     t.rect(0, 0, t.w, 2, c); t.rect(0, t.h - 2, t.w, t.h, c); for (let x = 0; x < t.w; x += gap) t.rect(x, 0, x + 1, t.h, c); if (t.h > 14) t.rect(0, t.h >> 1, t.w, (t.h >> 1) + 1, c); return t; }
   function rejaTex(wm, hm, seed) { const t = new Tex(wm, hm, seed, [0, 0, 0], 0), c = [24, 24, 28];
@@ -179,7 +174,7 @@ const Houses = (() => {
     GF = CFG.v.pb; UF = CFG.v.piso;
     if (spec.kind === "edificio") return edificio(spec, phi);
     if (spec.kind === "petit") return petit(spec, phi);
-    const r = rng(spec.seed), kind = spec.kind, W = spec.W;
+    const r = rng(spec.seed), kind = spec.kind, W = spec.W; CTX = { pobre: spec.wealth < .4, villa: kind === "villa" };
     const sc = new Scene(); sc.setXform(phi);
     const wall = r.pick(WALLS);
     const finish = kind === "obra" ? "hueco" : kind === "villa" ? (r() < .62 ? "hueco" : "stucco") : (r() < .14 ? "brick" : "stucco");
@@ -582,7 +577,7 @@ const Houses = (() => {
 
   // tapial / alambrado de baldío
   function tapial(W, seed, kind, phi = 0) {
-    const sc = new Scene(); sc.setXform(phi); const r = rng(seed);
+    const sc = new Scene(); sc.setXform(phi); const r = rng(seed); CTX = { pobre: kind !== "ladrillo" };
     if (kind === "alambre") {
       const t = new Tex(W, 1.6, seed, [0, 0, 0], 0); for (let x = 0; x < t.w; x++) for (let y = 0; y < t.h; y++) if ((x + y) % 5 === 0 || (x - y + 500) % 5 === 0) t.p(x, y, [166, 170, 174]);
       t.rect(0, 0, t.w, 1, [140, 144, 150]); sc.box(0, 0, 0, W, .02, 1.6, { front: t, back: t, cast: false });
@@ -602,6 +597,7 @@ const Houses = (() => {
   const ESQ = [["ALMACEN", [36, 120, 64]], ["BAR", [120, 32, 30]], ["KIOSCO", [200, 34, 34]], ["FARMACIA", [24, 96, 168]], ["PIZZERIA", [186, 44, 36]],
     ["PANADERIA", [214, 150, 70]], ["CAFE", [92, 58, 36]], ["VERDULERIA", [40, 128, 56]], ["FERRETERIA", [34, 78, 160]], ["LIBRERIA", [36, 86, 168]]];
   function esquina(spec, phi = 0) {
+    CTX = { pobre: spec.wealth < .4 };
     const sc = new Scene(); sc.setXform(phi); const r = rng(spec.seed);
     const W = spec.W, D = spec.D, c = spec.c || 2.8, d = c * Math.SQRT2, storeys = Math.min(PISOS(), spec.p || 2), zr = GF + (storeys - 1) * UF, Htot = zr + PAR;
     const zt = (z) => px(Htot - z), X = (m) => px(m), wall = r.pick(WALLS), wear = (spec.wealth ?? .5) < .35 ? 1.4 : 1;
@@ -671,7 +667,7 @@ const Houses = (() => {
   // paredón del borde del área jugable: revoque gastado de 3 m con pilares cada 4 m, pintadas y alambre de púas arriba
   // (como los paredones de las vías). Local: a lo largo de x, el espesor hacia +y.
   function paredon(W, seed, phi = 0) {
-    const sc = new Scene(); sc.setXform(phi); const r = rng(seed), H = 3;
+    const sc = new Scene(); sc.setXform(phi); const r = rng(seed), H = 3; CTX = { paredon: true };
     const t = new Tex(W, H, seed); t.stucco(r.pick([[176, 170, 158], [196, 186, 166], [168, 160, 150], [190, 176, 150]]), 1.6); t.runoff(.9, 1.6); t.peel(3); t.humidity(.9);
     for (let x0 = 4 + r.int(0, 30); x0 < t.w - 50;) { const x1 = Math.min(t.w - 4, x0 + r.int(60, 100)); if (r() < .8) pintada(t, x0 + 8, x1 - 8, px(r.uni(.6, 1.5)), r); x0 = x1 + r.int(25, 60); }   // sin pisarse (la letra con borde es más ancha de lo que calcula pintada)
     sc.box(0, 0, 0, W, .3, H, { front: t, back: t, top: [150, 146, 138], right: [128, 124, 118], left: [138, 134, 128] });
