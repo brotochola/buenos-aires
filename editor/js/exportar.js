@@ -164,6 +164,7 @@ const Exportar = (() => {
     // - transito.bin: grilla de 1 m (Uint16): velocidad máxima (bits 0-3: 1 = 20 km/h tierra y pasajes, 2 = 30 llegando a un cruce
     //   sin semáforo, 3 = 40 calles, 4 = 60 avenidas), zona (bits 4-5: 1 = antes de la senda, donde se para; 2 = el cruce y la
     //   senda, donde no) y el cruce (bits 6-15: id + 1).
+    const ROT = W.rotondas || [], enRot = (x, y, m = 0) => ROT.some(q => Math.hypot(x - q[0], y - q[1]) < q[3] + m);   // rotondas: [x, y, isla, calzada]
     const cruces = [], scrDir = (d) => { const x = d[0] + K * d[1], y = -SYN * d[1], l = Math.hypot(x, y) || 1; return [r2(x / l), r2(y / l)]; };
     const anda = (q) => q.type === "ave" || q.type === "calle";
     for (const it of W.inters) { it._cid = -1; if (!anda(it.s) || !anda(it.o) || cruces.length >= 1022 || !W.dentro(it.p[0], it.p[1])) continue;
@@ -183,6 +184,10 @@ const Exportar = (() => {
         const ya = (v >> 4) & 3; if (ya === 2 && zona === 1) continue;         // el cruce de al lado manda
         if (zona === 1 && !it.sem && lim > 2) lim = 2;                         // llegando a una esquina sin semáforo: 30 km/h
         transito[k] = lim | zona << 4 | (it._cid + 1) << 6; } }
+    // rotonda: 20 km/h y sin esquina (adentro no se para nadie: el que entra frena por el que va adelante)
+    for (const q of ROT) { const R = q[3] + 6;
+      for (let j = Math.max(0, Math.floor(q[1] - R)); j < Math.min(TH, Math.ceil(q[1] + R)); j++) for (let i = Math.max(0, Math.floor(q[0] - R)); i < Math.min(TW, Math.ceil(q[0] + R)); i++) {
+        const k = j * TW + i; if (transito[k] && Math.hypot(i + .5 - q[0], j + .5 - q[1]) < R) transito[k] = 1; } }
     archivos.push(["transito.bin", new Uint8Array(transito.buffer)]);
     // ---------- 4. props: sólo los cuadros usados del atlas del editor
     // los que miran a algún lado: frente o atrás (los de Gemini que la tienen) y espejo, vistos desde la cámara del juego
@@ -216,7 +221,7 @@ const Exportar = (() => {
       archivos.push(["img/props.png", await png(cv)], ["img/props.json", json(hoja(frames, "props.png", cv))]); }
     // ---------- 5. autos y cables
     const scrRot = (hd) => Math.atan2(-SYN * Math.sin(hd), Math.cos(hd) + K * Math.sin(hd));
-    const autos = B.cars.map(c => { const [x, y] = PW(c.x, c.y); return { c: c.color, x: r1(x), y: r1(y), rot: Math.round(scrRot(c.hd) * 1000) / 1000, m: c.moving ? 1 : 0 }; });
+    const autos = B.cars.filter(c => !enRot(c.x, c.y, 2)).map(c => { const [x, y] = PW(c.x, c.y); return { c: c.color, x: r1(x), y: r1(y), rot: Math.round(scrRot(c.hd) * 1000) / 1000, m: c.moving ? 1 : 0 }; });
     const cables = B.cables.map(c => { const a = PW(c[0], c[1], c[2]), b = PW(c[3], c[4], c[5]); return [r1(a[0]), r1(a[1]), r1(b[0]), r1(b[1])]; });
     const lineas = (B.lineas || []).map(c => { const a = PW(c[0], c[1], 0), b = PW(c[2], c[3], 0); return [r1(a[0]), r1(a[1]), r1(b[0]), r1(b[1])]; });
     // ---------- 6. flowfields
@@ -250,7 +255,11 @@ const Exportar = (() => {
     archivos.push(["ff_veredas.json", ffJson("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
       W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); })]);
     // autos: a lo largo de su carril (mano derecha), tirando hacia el centro del carril
-    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null; W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
+    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null;
+      // rotonda: se da la vuelta en sentido antihorario (mano derecha), tirando al carril de adentro; la salida la elige cada auto
+      for (const q of ROT) { const dx = x - q[0], dy = y - q[1], d = Math.hypot(dx, dy); if (d >= q[3]) continue; if (d < q[2]) return null;
+        const pull = Math.max(-.6, Math.min(.6, (q[2] + 2.6 - d) * .35)); return toScr(-dy / d + dx / d * pull, dx / d + dy / d * pull); }
+      W.classifyInto(x, y, cl); if (cl.k !== 1) return null; const s = cl.s;
       if (s.mat === "pasillo" || s.type === "pasaje" || (s.type === "ave" && Math.abs(cl.ds) < s.med + .2)) return null;   // los pasajes (angostos, de tierra en la villa) no son para el tránsito
       const fwd = cl.ds < 0 ? 1 : -1, lane = laneOff(s), off = cl.ds - (-fwd * lane), pull = Math.max(-.6, Math.min(.6, -off * .35));
       // calle cortada por el paredón: los últimos 14 m antes de las vallas, el carril que va hacia afuera dobla al de vuelta (giro en U)
@@ -304,6 +313,12 @@ const Exportar = (() => {
       hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
       ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}),
+      // rotondas: centro en px de pantalla (x, y) y en m (mx, my), radios de la isla y de la calzada (m) y las salidas: rumbo de cada
+      // calle hacia afuera (m) y el corrimiento de su carril de salida (m, a la derecha)
+      ...(ROT.length ? { rotondas: ROT.map(q => { const [x, y] = PW(q[0], q[1]);
+        const sal = W.segs.filter(s => s.type !== "pasillo" && s.type !== "pasaje").flatMap(s => [[s.a, 1], [s.b, -1]].filter(([p]) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1.5)
+          .map(([, sg]) => [r2(s.dir[0] * sg), r2(s.dir[1] * sg), r2(laneOff(s))]));
+        return { x: r1(x), y: r1(y), mx: r2(q[0]), my: r2(q[1]), ri: q[2], re: q[3], sal }; }) } : {}),
       transito: { W: TW, H: TH, n: cruces.length, semAlto, nSem: props.filter(p => p.f === "u_semaforo" && p.cr >= 0).length } };
     archivos.push(["meta.json", json(meta)], ["meta.js", txt("// generado por el editor de barrios — no editar a mano\nexport const META = " + JSON.stringify(meta) + ";\n")], ["mundo.json", json({ casas, franjas, ...(SKEW ? { variantes } : {}), arboles, arbolTipos, props, autos, cables, lineas, cruces })]);
     progreso("zip", .98); await espera();

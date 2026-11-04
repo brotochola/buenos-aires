@@ -252,14 +252,19 @@ const Houses = (() => {
     let shop = null, coShop = false; const wins = [], balconies = [];
     // ---- frente, planta baja
     if (kind === "negocio" || kind === "negocio_casa") {
-      shop = SHOPS[spec.seed % SHOPS.length]; const [name] = shop;
+      // un comercio con nombre de un barrio real (spec.ct: Pizzería Keops, Café Chas): su cartel, del color de su rubro
+      shop = spec.ct ? [spec.ct, (ESQ.find(e => e[0] === spec.rb) || ESQ[1])[1]] : SHOPS[spec.seed % SHOPS.length]; const name = spec.ct ? spec.rb : shop[0];
       const dw = .95, dx = r.pick([.35, W - dw - .35]);
       const [g0, g1] = dx < W / 2 ? [dx + dw + .25, W - .35] : [.35, dx - .25];
       // frente de local de Gemini según el rubro (panadería, carnicería, verdulería...); si no hay, el dibujo de siempre
 
       const loc = spec.wealth < .3 && r() < .25 ? "cerrado" : LOC[name] || r.pick(["kiosco", "almacen"]);
       const co = spec.co != null ? "fd_local_co_" + CO[spec.co % CO.length] : null;
-      if (co && R3.DECALS[co] && W >= 3.2) { const lw = Math.min(W - .3, 3.5), lx = (W - lw) / 2; ft.blit(co, X(lx), zt(3.05), X(lw), zt(0) - zt(3.05)); coShop = true; }
+      if (spec.ct && (name === "CAFE" || name === "BAR" || name === "PIZZERIA")) {   // café o pizzería de barrio: vidriera con mesas, como el de la ochava
+        ft.rect(X(.15), zt(2.6), X(W - .15), zt(.45), [64, 40, 26]); glass(ft, X(.3), zt(2.45), X(W - .3), zt(.6), false);
+        for (let xm = .55; xm < W - .5; xm += 1.1) { ft.rect(X(xm), zt(.95), X(xm + .5), zt(.85), [90, 60, 36]); ft.rect(X(xm + .22), zt(.85), X(xm + .28), zt(.6), [70, 46, 28]); }
+        doorDecal(ft, X(dx), zt(2.3), X(1.1), px(2.28), "vidrio", wall); }
+      else if (co && R3.DECALS[co] && W >= 3.2) { const lw = Math.min(W - .3, 3.5), lx = (W - lw) / 2; ft.blit(co, X(lx), zt(3.05), X(lw), zt(0) - zt(3.05)); coShop = true; }
       else if (R3.DECALS["fd_local_" + loc] && W >= 3.2) { const lw = Math.min(W - .3, r.uniform(3, 4.2)), lx = (W - lw) / 2; ft.blit("fd_local_" + loc, X(lx), zt(2.55), X(lw), zt(0) - zt(2.55)); }
       else { goodsDecal(ft, X(g0), zt(2.35), X(g1), zt(.5), name); doorDecal(ft, X(dx), zt(2.25), X(dw), px(2.23), "chapa", wall); }
       if (r() < .5 && !coShop) ft.rect(X(.3), zt(2.57), X(W - .3), zt(2.35), [118, 120, 124]);
@@ -391,9 +396,15 @@ const Houses = (() => {
       const [name, scol] = shop, sw = W - .3, st = new Tex(sw, .62, spec.seed + 40); st.stucco(scol, .2);
       st.rect(0, 0, st.w, 1, add(scol, 40)); st.rect(0, st.h - 1, st.w, st.h, mul(scol, .6));
       if (textW(name) > st.w - 6) text(st, name, (st.w - textW(name, false)) >> 1, 2, [252, 250, 244], false, mul(scol, .45)); else text(st, name, (st.w - textW(name)) >> 1, 2, [252, 250, 244], true, mul(scol, .45));
+      // fileteado porteño en el cartel del café con nombre (el de Café Chas lo pintó un vecino): filete doble amarillo y rojo
+      // con una voluta en cada punta
+      if (spec.ct && spec.rb === "CAFE") { const Y = [236, 196, 60], R = [196, 52, 44], h = st.h;
+        st.rect(1, 1, st.w - 1, 2, Y); st.rect(1, h - 2, st.w - 1, h - 1, Y); st.rect(3, 3, st.w - 3, 4, R); st.rect(3, h - 4, st.w - 3, h - 3, R);
+        for (const x0 of [2, st.w - 9]) for (let k = 0; k < 7; k++) { const yy = (h >> 1) + Math.round(Math.sin(k * .9) * (h / 4)); st.rect(x0 + k, yy, x0 + k + 1, yy + 2, k % 2 ? R : Y); } }
       sc.box(.15, y0 - .16, 2.55, .15 + sw, y0, 3.17, { front: st, top: add(scol, 20), right: mul(scol, .6), left: mul(scol, .7) });
       // toldo sólo en algunos (desde arriba tapa la vidriera, que es lo que cuenta qué local es)
-      if ((!["FARMACIA", "LAVADERO", "PELUQUERIA", "REMIS"].includes(name) || r() < .3) && r() < (R3.DECALS.fd_local_kiosco ? .35 : 1)) {
+      // (el comercio con nombre, sin toldo: si no, el toldo tapa el cartel)
+      if (!spec.ct && (!["FARMACIA", "LAVADERO", "PELUQUERIA", "REMIS"].includes(name) || r() < .3) && r() < (R3.DECALS.fd_local_kiosco ? .35 : 1)) {
         const c2 = r.pick([[240, 236, 226], [240, 236, 226], [40, 40, 44]]), c1 = r() < .6 ? scol : r.pick([[204, 46, 40], [38, 116, 58], [36, 78, 156], [220, 120, 30]]);
         const at = new Tex(W, 1.1, spec.seed + 41); for (let xx = 0; xx < at.w; xx++) { const c = ((xx / 7) | 0) % 2 === 0 ? c1 : c2; for (let yy = 0; yy < at.h; yy++) at.p(xx, yy, mul(c, 1.04 - .18 * yy / at.h)); }
         sc.quad([-.05, y0 - .16, 2.5], [W + .1, 0, 0], [0, -1.1, -.55], at, { both: true });

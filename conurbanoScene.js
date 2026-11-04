@@ -71,7 +71,8 @@ export class AutoComp extends Component {
     // estado de la IA: en componentes (no en campos del objeto), porque una entidad puede pasar de un worker de lógica a otro
     sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array,
     pf: Float32Array,      // qué tan cerca de la máxima maneja (0,8 a 0,97: nadie se pasa)
-    espera: Float32Array };  // segundos esperando que pase el de la derecha (a los 4 s sigue: nadie se queda trabado)
+    espera: Float32Array,  // segundos esperando que pase el de la derecha (a los 4 s sigue: nadie se queda trabado)
+    rs: Int8Array };       // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -235,6 +236,7 @@ const _h = { frontX: 0, frontY: 0, rightX: 0, rightY: 0 }, _h2 = { frontX: 0, fr
 // 4 avenidas 60. Semáforos: ciclo de 40 s, cada calle 17 s verde, 3 s amarillo y 20 s rojo, desfasado en cada cruce. El reloj es
 // Date.now(), igual en todos los hilos, así las luces que se ven y los autos que frenan van juntos
 const TR = META.transito || { W: 0, H: 0, n: 0, semAlto: 0 }, LIM = [40, 20, 30, 40, 60], CICLO = 40;
+const ROT0 = (META.rotondas || [])[0] || null, TAU = Math.PI * 2;   // la rotonda del barrio (Parque Chas), si tiene
 function faseSemaforo(cid, eje) { const t = ((Date.now() / 1000 + Transito.cruces[cid * 6 + 5]) % CICLO + CICLO) % CICLO;
   return eje === 0 ? (t < 17 ? 0 : t < 20 ? 1 : 2) : (t < 20 ? 2 : t < 37 ? 0 : 1); }   // 0 verde, 1 amarillo, 2 rojo
 function celdaTransito(sx, sy) { if (!TR.W) return 0; const ym = META.MH - sy / (META.SYN * META.SF), xm = sx / META.SF - META.K * ym;
@@ -340,7 +342,7 @@ export class Chatarra extends Auto {}
 const _probe = [[0, 0], [0, 8], [0, -8], [16, 0], [-16, 0], [0, 16], [0, -16], [24, 0], [-24, 0], [24, 12], [24, -12], [-24, 12], [-24, -12], [0, 24], [0, -24], [48, 0], [-48, 0], [36, 24], [-36, 24], [36, -24], [-36, -24]];
 export class AutoIA extends Auto {
   onSpawned(c = {}) { super.onSpawned(c); const A = this.autoComp, rot = c.rot || 0;
-    A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; A.pf = .8 + rng() * .17; A.espera = 0; }
+    A.lx = Math.cos(rot); A.ly = Math.sin(rot); A.stuck = 0; A.libre = 0; A.parado = 0; A.sx = c.x; A.sy = c.y; A.sr = rot; A.pf = .8 + rng() * .17; A.espera = 0; A.rs = -1; }
   // el carril bajo el auto; si el auto se salió (cortó una esquina, se subió a la vereda), el carril más cercano de alrededor
   // y un empujón hacia él, así vuelve a la calle en vez de seguir paralelo por la vereda
   _sample(x, y) { for (let k = 0; k < _probe.length; k++) { NavGrid.requestVectorFromStaticFlowfield('calles', x + _probe[k][0], y + _probe[k][1], _v);
@@ -351,6 +353,17 @@ export class AutoIA extends Auto {
     const dts = (dt || 16) / 1000;
     if (this.x < 0 || this.y < 0 || this.x > META.WW || this.y > META.WH) { _v.x = META.WW / 2 - this.x; _v.y = META.WH / 2 - this.y; }   // se fue del mapa: volver
     else if (this._sample(this.x, this.y)) { AutoComp.lx[i] = _v.x; AutoComp.ly[i] = _v.y; } else { _v.x = AutoComp.lx[i]; _v.y = AutoComp.ly[i]; }
+    // rotonda (Parque Chas): el flowfield da la vuelta en sentido antihorario; al entrar cada auto elige por cuál calle sale (no por
+    // la que entró) y, llegando a ella, va a su carril de salida
+    if (ROT0) { const ym = META.MH - this.y / (META.SYN * META.SF), xm = this.x / META.SF - META.K * ym, dx = xm - ROT0.mx, dy = ym - ROT0.my, d = Math.sqrt(dx * dx + dy * dy);
+      if (d < ROT0.re + 1) { const S = ROT0.sal, th = Math.atan2(dy, dx);
+        if (AutoComp.rs[i] < 0) { let ent = 0, be = 9;
+          for (let k = 0; k < S.length; k++) { const a = Math.abs(((Math.atan2(S[k][1], S[k][0]) - th) % TAU + TAU + Math.PI) % TAU - Math.PI); if (a < be) { be = a; ent = k; } }
+          AutoComp.rs[i] = (ent + 1 + ((rng() * (S.length - 1)) | 0)) % S.length; }
+        const q = S[AutoComp.rs[i]], ccw = ((Math.atan2(q[1], q[0]) - th) % TAU + TAU) % TAU;
+        if (ccw < .7 || ccw > TAU - .25) { const ex = ROT0.mx + q[0] * (ROT0.re + 8) + q[1] * q[2] - xm, ey = ROT0.my + q[1] * (ROT0.re + 8) - q[0] * q[2] - ym;
+          _v.x = ex + META.K * ey; _v.y = -META.SYN * ey; } }
+      else if (d > ROT0.re + 8) AutoComp.rs[i] = -1; }
     const l2 = _v.x * _v.x + _v.y * _v.y; if (l2 < .01) return;
     const inv = 1 / Math.sqrt(l2), nx = _v.x * inv, ny = _v.y * inv, fx = this.forwardX, fy = this.forwardY;
     const cross = fx * ny - fy * nx, align = fx * nx + fy * ny;
@@ -520,7 +533,8 @@ export class ConurbanoScene extends Scene {
         textures: [{ name: 'cellA', format: 'rgba8unorm', size: { width: META.CW, height: META.CH } }, { name: 'cellB', format: 'rgba8unorm', size: { width: META.CW, height: META.CH } },
           { name: 'wealth', format: 'r8unorm', size: { width: META.WG, height: META.HG } }, { name: 'noiseT', format: 'rgba8unorm', size: { width: 256, height: 256 } },
           { name: 'segs', format: 'rgba8unorm', size: { width: 12, height: META.NS } }, { name: 'pits', format: 'rgba8unorm', size: { width: META.PW || 1, height: META.PH || 1 } }],
-        uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG), uPW: f32(META.PW || 1), uPH: f32(META.PH || 1) } } },
+        uniforms: { uMW: f32(META.MW), uMH: f32(META.MH), uK: f32(META.K), uSF: f32(META.SF), uSYN: f32(META.SYN), uGC: f32(META.GC), uCW: f32(META.CW), uCH: f32(META.CH), uWG: f32(META.WG), uHG: f32(META.HG), uPW: f32(META.PW || 1), uPH: f32(META.PH || 1),
+          uRX: f32(ROT0 ? ROT0.mx : 0), uRY: f32(ROT0 ? ROT0.my : 0), uRI: f32(ROT0 ? ROT0.ri : 0), uRE: f32(ROT0 ? ROT0.re : 0) } } },
       // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
       manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },

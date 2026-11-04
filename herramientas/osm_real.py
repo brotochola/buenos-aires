@@ -29,7 +29,7 @@ BARRIOS = {
     # los árboles de vereda, uno por uno, del censo de arbolado (herramientas/gcba_osm.py): fresnos (casi la mitad),
     # plátanos, ficus, paraísos, tilos, crespones, jacarandás. "arboles" queda para las plazas
     "parquechas": dict(SRC="editor/recursos/osm_parquechas.json", OUT="editor/recursos/real_parquechas.js", NOMBRE="Parque Chas",
-                       CEN=(-70.0, 320.0), ROT=None, PW=760, PH=760, MG=40, INICIO=(-34.58262, -58.47912),
+                       CEN=(-70.0, 320.0), ROT=None, PW=760, PH=760, MG=40, INICIO=(-34.58218, -58.47922),
                        ESTILO={"riqueza": .58, "variedad": 1.4, "tejas": .28,
                                "casas": [["casa", 30], ["casa2", 26], ["ph", 24], ["chalet", 8], ["negocio_casa", 1.2], ["negocio", .8], ["obra", 2], ["baldio", 1], ["edificio", .4]],
                                "casasAvenida": [["negocio", 26], ["negocio_casa", 24], ["casa2", 16], ["ph", 14], ["edificio", 12], ["casa", 8], ["galpon", 2]],
@@ -511,13 +511,25 @@ def main():
         if area(p) < 0: p = p[::-1]
         q = dp_ring(p, .8)
         if len(q) >= 3: edificios.append({"t": t.get("building"), "lv": lv, "p": q})
-    pois = []
+    pois, rotondas = [], []
     for nd in j["nodes"]:
         t = nd["t"]
+        if t.get("amenity") == "fountain" and t.get("rotonda"):
+            # una fuente en una rotonda (Parque Chas): el centro es el cruce más cercano, ya encajado; isla de 4,5 m de radio y
+            # calzada de la rotonda hasta los 12 m
+            q = mover(T(nd["x"]))
+            ext = [p_ for a_, b_, _ in segs for p_ in (a_, b_)]
+            c = min(ext, key=lambda p_: math.hypot(p_[0] - q[0], p_[1] - q[1]))
+            if math.hypot(c[0] - q[0], c[1] - q[1]) < 12 and en_mundo(c):
+                rotondas.append([round(c[0], 2), round(c[1], 2), float(t.get("rotonda:isla", 4.5)), float(t.get("rotonda:radio", 12)), t.get("name", "")])
+            continue
         if not (t.get("shop") or t.get("amenity") in ("restaurant", "cafe", "bar", "fast_food", "pharmacy", "place_of_worship", "school", "bank", "fuel", "kindergarten", "community_centre")): continue
         q = T(nd["x"])
         if not en_mundo(q): continue
-        pois.append({"x": round(q[0], 1), "y": round(q[1], 1), "k": t.get("shop") or t.get("amenity"), "n": t.get("name", "")})
+        q = mover(q)
+        pois.append({"x": round(q[0], 1), "y": round(q[1], 1), "k": t.get("shop") or t.get("amenity"), "n": t.get("name", ""),
+                     # un comercio con nombre que el editor pone en su lote (cartel y rubro: gcba_osm.py)
+                     **({"cartel": t["cartel"], "rubro": t.get("rubro", ""), "calle": t.get("addr:street", "")} if t.get("cartel") else {})})
 
     # árboles de vereda de un censo (gcba_osm.py: natural=tree con la especie del juego y la altura): cada uno donde está
     especies, arboles = [], []
@@ -557,12 +569,14 @@ def main():
         "industrias": [{"p": RP(dp_ring(c["p"], .5))} for c in industrias],
         "edificios": [{"t": e["t"], "lv": e["lv"], "p": RP(e["p"])} for e in edificios],
         "pois": pois,
+        # rotonda: [x, y, radio de la isla, radio de la calzada, nombre de la fuente]
+        **({"rotondas": rotondas} if rotondas else {}),
         **({"especies": especies, "arboles": arboles} if arboles else {}),
     }
     with open(OUT, "w") as f:
         f.write("// generado por herramientas/osm_real.py con datos de " + (j.get("fuente") or "OpenStreetMap (© colaboradores de OpenStreetMap, ODbL)") + "\n")
         f.write("// " + NOMBRE + "\n(window.REALES = window.REALES || {})." + _b + " = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
-    print(OUT, "segs", len(out["segs"]), "nombres", len(nombres), "pois", len(pois), "edificios", len(edificios), "árboles", len(arboles))
+    print(OUT, "segs", len(out["segs"]), "nombres", len(nombres), "pois", len(pois), "edificios", len(edificios), "árboles", len(arboles), "rotondas", rotondas)
 
     if "--png" in sys.argv:
         from PIL import Image, ImageDraw

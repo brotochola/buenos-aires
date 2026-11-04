@@ -13,6 +13,7 @@ uniform sampler2D noiseT;   // r = ruido a, g = b, b = c, a = granulado
 uniform sampler2D segs;     // 12 texels RGBA8 por calle: 24 valores de 16 bits (punto fijo)
 uniform sampler2D pits;     // cazuelas en celdas de 2 m: rg = centro en la celda, b = ángulo (/256 vuelta), a = tipo (1 ladrillo, 2 cemento, 3 sin borde) | 4 con pasto
 uniform float uMW, uMH, uK, uSF, uSYN, uGC, uCW, uCH, uWG, uHG, uPW, uPH;
+uniform float uRX, uRY, uRI, uRE;   // rotonda (Parque Chas): centro, radio de la isla y de la calzada, en m (uRE = 0: no hay)
 
 int b8(float v) { return int(v * 255.0 + 0.5); }
 float NA(int x, int y) { return texelFetch(noiseT, ivec2(x & 255, y & 255), 0).r; }
@@ -103,6 +104,11 @@ vec3 pixel(float wx, float wy) {
   if (wx < 0.0 || wy < 0.0 || wx > uMW || wy > uMH) return vec3(40, 46, 36);
   int ix = int(floor(wx * uSF)), iy = int(floor(wy * uSF));
   ivec2 cc = ivec2(clamp(int(wx / uGC), 0, int(uCW) - 1), clamp(int(wy / uGC), 0, int(uCH) - 1));
+  // rotonda: la isla de la fuente (cordón, baldosas rojas y pasto) y la calzada alrededor, que se come las puntas de las veredas
+  float dr = uRE > 0.0 ? length(vec2(wx - uRX, wy - uRY)) : 1e9;
+  if (dr < uRI) { float e = uRI - dr;
+    if (e < .16) return vec3(222, 218, 208); if (e < .2) return vec3(168, 164, 156);
+    if (e < 1.5) return tiles(wx, wy, ix, iy, 6, false); return grass(ix, iy, .3); }
   vec4 A = texelFetch(cellA, cc, 0), B = texelFetch(cellB, cc, 0);
   int ids[3]; ids[0] = b8(A.r) + b8(A.g) * 256 - 1; ids[1] = b8(A.b) + b8(A.a) * 256 - 1; ids[2] = b8(B.r) + b8(B.g) * 256 - 1;
   // clasificación exacta entre las candidatas (igual que World.classify)
@@ -111,6 +117,11 @@ vec3 pixel(float wx, float wy) {
     vec2 p = vec2(wx, wy) - s.a; float t = dot(p, s.dir), tc = clamp(t, 0.0, s.len), d = length(vec2(wx, wy) - (s.a + s.dir * tc)), ds = dot(p, s.n);
     if (d < s.hw) { float kk = (d - s.hw) - s.cls * .01; if (rid < 0 || kk < rk) { rid = id; rk = kk; rd = d; rt = t; rds = ds; } }
     else if (s.sw > 0.0 && d < s.hw + s.sw) { float kk = d - s.hw - s.sw; if (wid < 0 || kk < wk) { wid = id; wk = kk; wd = d; wt = t; wds = ds; } } }
+  if (dr < uRE) {   // calzada de la rotonda: asfalto liso; contra la vereda, cordón y cuneta
+    float e = uRE - dr;
+    if (rid < 0 && e < .07) return vec3(112, 110, 104);
+    if (rid < 0 && e < .4) { float f = .95 + .08 * NG(ix, iy); return vec3(160, 158, 152) * f; }
+    return asphalt(ix, iy); }
   if (rid >= 0) {
     Seg s = loadSeg(rid); float ad = abs(rds), edge = s.hw - rd;
     if (s.sw > 0.0 && s.mat != 2 && s.mat != 3 && edge < .07) return vec3(112, 110, 104);

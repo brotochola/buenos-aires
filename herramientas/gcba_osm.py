@@ -20,7 +20,15 @@ from shapely.ops import polygonize, unary_union
 
 BARRIOS = {
     # Parque Chas: origen cerca de la esquina de seis (Victorica, Ávalos, Gándara), radio de lo que se baja
-    "parquechas": dict(ORIGEN=(-34.5858, -58.4788), R=900, OUT="editor/recursos/osm_parquechas.json"),
+    "parquechas": dict(ORIGEN=(-34.5858, -58.4788), R=900, OUT="editor/recursos/osm_parquechas.json", PUNTOS=[
+        # la fuente de la esquina de seis, en la rotonda (trencadís de los vecinos, 2016): el nodo de la red vial
+        (-34.5825, -58.47925, {"amenity": "fountain", "name": "Fuente de Parque Chas", "rotonda": "si"}),
+        # Pizzería Keops, Gándara 2699 (puntoclick.com.ar), en la esquina de seis
+        (-34.5823155, -58.4790348, {"amenity": "restaurant", "cuisine": "pizza", "name": "Pizzería Keops", "rubro": "PIZZERIA", "cartel": "PIZZERIA KEOPS", "addr:street": "Gándara"}),
+        # Café Chas, Gándara y Ávalos, frente a la fuente (parquechasweb.com.ar): la esquina no se sabe; ésta, la del este (el
+        # editor elige ahí el lote sobre Ávalos, que tiene el frente a la cámara del juego)
+        (-34.58251, -58.47906, {"amenity": "cafe", "name": "Café Chas", "rubro": "CAFE", "cartel": "CAFE CHAS", "addr:street": "Ávalos"}),
+    ]),
 }
 
 # especie del censo (nombre científico, por prefijo) -> especie del juego. Lo que no está acá es un fresno, que es la mitad
@@ -136,6 +144,9 @@ def main():
         nodes.append({"id": int(r["nro_registro"]) + 8_000_000_000, "t": {"natural": "tree", "especie": e, "altura": h}, "x": q})
         cuenta[e] = cuenta.get(e, 0) + 1
     print("árboles", len(nodes), sorted(cuenta.items(), key=lambda kv: -kv[1]))
+    # lugares del barrio que no están en los datos de la Ciudad (fuentes, comercios con nombre)
+    for k, (lat, lon, t) in enumerate(B.get("PUNTOS", [])):
+        nodes.append({"id": 7_000_000_000 + k, "t": t, "x": M(lon, lat)})
     out = {"origen": [LAT0, LON0], "fuente": "GCBA, data.buenosaires.gob.ar: red vial, arbolado público lineal y arbolado en espacios verdes",
            "ways": ways, "rels": [], "nodes": nodes}
     json.dump(out, open(B["OUT"], "w"), ensure_ascii=False, separators=(",", ":"))

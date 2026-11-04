@@ -165,6 +165,12 @@ const World = (() => {
       for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { // sólo buckets cerca de la recta
         const cx = (gx + .5) * B, cy = (gy + .5) * B; if (segDist(s, cx, cy).d < rad + B * .75) buckets[gy * GW + gx].push(s); } }
     const near = (x, y) => { const gx = Math.floor(x / B), gy = Math.floor(y / B); return (gx < 0 || gy < 0 || gx >= GW || gy >= GH) ? [] : buckets[gy * GW + gx]; };
+    // rotondas de un barrio real (Parque Chas: la fuente de la esquina de seis): [x, y, radio de la isla, radio de la calzada].
+    // La isla no es calle ni vereda (ahí va la fuente); hasta el radio de la calzada todo es calle (se come las puntas de las
+    // veredas y de los lotes de las esquinas), de la calle más cercana
+    const ROTONDAS = (RM && RM.rotondas) || [];
+    function enRotonda(x, y) { for (let i = 0; i < ROTONDAS.length; i++) { const q = ROTONDAS[i], dx = x - q[0], dy = y - q[1], d2 = dx * dx + dy * dy;
+        if (d2 < q[3] * q[3]) return d2 < q[2] * q[2] ? 2 : 1; } return 0; }
     // clasificación de un punto (sin lotes)
     // igual que classify pero sin crear objetos: escribe en "o" (k: 0 nada, 1 calzada, 2 vereda) — para el horneado del piso
     function classifyInto(x, y, o) {
@@ -176,6 +182,9 @@ const World = (() => {
           const dx = x - (s.a[0] + s.dir[0] * tc), dy = y - (s.a[1] + s.dir[1] * tc), d = Math.sqrt(dx * dx + dy * dy), ds = px * s.n[0] + py * s.n[1];
           if (d < s.hw) { const k = (d - s.hw) - s.cls * .01; if (!rs || k < rk) { rs = s; rk = k; rd = d; rt = t; rds = ds; } }
           else if (s.sw > 0 && d < s.hw + s.sw) { const k = d - s.hw - s.sw; if (!ws || k < wk) { ws = s; wk = k; wd = d; wt = t; wds = ds; } } } }
+      if (ROTONDAS.length) { const rz = enRotonda(x, y);
+        if (rz === 2) { o.k = 0; o.s = null; return o; }
+        if (rz === 1 && !rs) { let bd = 1e9; const L = near(x, y); for (let i = 0; i < L.length; i++) { const s = L[i], q = segDist(s, x, y); if (q.d < bd) { bd = q.d; rs = s; rd = q.d; rt = q.t; rds = q.ds; } } } }
       if (rs) { o.k = 1; o.s = rs; o.d = rd; o.t = rt; o.ds = rds; } else if (ws) { o.k = 2; o.s = ws; o.d = wd; o.t = wt; o.ds = wds; } else { o.k = 0; o.s = null; }
       return o;
     }
@@ -186,6 +195,9 @@ const World = (() => {
         if (q.d < s.hw) { const k = (q.d - s.hw) - s.cls * .01; if (!road || k < rk) { road = { s, ...q }; rk = k; } }
         else if (s.sw > 0 && q.d < s.hw + s.sw) { const k = q.d - s.hw - s.sw; if (!walk || k < wk) { walk = { s, ...q }; wk = k; } }
       }
+      if (ROTONDAS.length) { const rz = enRotonda(x, y);
+        if (rz === 2) return null;
+        if (rz === 1 && !road) { let bd = 1e9; for (const s of near(x, y)) { const q = segDist(s, x, y); if (q.d < bd) { bd = q.d; road = { s, ...q }; } } } }
       if (road) return { k: "road", ...road };
       if (walk) return { k: "walk", ...walk };
       return null;
@@ -422,9 +434,18 @@ const World = (() => {
           lot.inner = true; lot.kind = "villa"; lots.push(lot); stamp(q, id); break; }
       }
     }
+    // barrio real: los comercios con nombre (Pizzería Keops, Café Chas) en el lote de su calle más cercano a donde están; un local
+    // de planta baja con su cartel
+    if (RM) for (const pq of RM.pois || []) { if (!pq.cartel) continue;
+      const calles = (pq.calle || "").split(";").filter(Boolean); let best = null, bd = 30;
+      for (const l of lots) { if (l.inner || !l.seg || !["casa", "casa2", "ph", "chalet", "negocio", "negocio_casa", "obra", "baldio", "edificio", "petit"].includes(l.kind)) continue;
+        if (calles.length && !calles.includes(l.seg.nombre)) continue;
+        // las casas están horneadas para una sola vista: mejor un lote con el frente a la cámara (al sur), así se ve el cartel
+        const fx = l.o[0] + l.ux[0] * l.fw / 2, fy = l.o[1] + l.ux[1] * l.fw / 2, d = Math.hypot(fx - pq.x, fy - pq.y) + (l.nOut[1] < 0 ? 12 : 0); if (d < bd) { bd = d; best = l; } }
+      if (best) { best.kind = pq.rubro === "PIZZERIA" ? "negocio_casa" : "negocio"; best.cartel = pq.cartel; best.rubro = pq.rubro || ""; best.nombre = pq.n; } }
     const lotAt = (x, y) => { const gx = (x * LR) | 0, gy = (y * LR) | 0; if (gx < 0 || gy < 0 || gx >= LW || gy >= LH) return null; const i = lotGrid[gy * LW + gx]; return i >= 0 ? lots[i] : null; };
     return { MW, MH, MG, dentro, segs, lots, districts, inters, classify, classifyInto, lotAt, wealthAt, near, raw, plazas, villaAt, zona, real: RM ? RM.nombre : null, carpeta: RM ? (RM.carpeta || "carabobo") : "barrio", estilo: (RM && RM.estilo) || {}, inicio: RM ? RM.inicio : null,
-      arbolesReales: RM && RM.arboles ? { especies: RM.especies, lista: RM.arboles } : null };
+      arbolesReales: RM && RM.arboles ? { especies: RM.especies, lista: RM.arboles } : null, rotondas: ROTONDAS };
   }
 
   // ---------- red de calles como grafo, con las reglas de Buenos Aires y el conurbano:

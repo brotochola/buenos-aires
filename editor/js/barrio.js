@@ -176,6 +176,9 @@ const Barrio = (() => {
       else if (nom === "ALMACEN" || nom === "KIOSCO" || nom === "VERDULERIA") { const q = LP(1.4, -1.1); put(nom === "VERDULERIA" && F.c_puesto_frutas ? "c_puesto_frutas" : "pizarra_0", q[0], q[1]); }
     }
 
+    // ---- la fuente de la rotonda (Parque Chas: trencadís de los vecinos, 2016), con su colisionador
+    for (const q of W.rotondas || []) put(F.pz_fuente_mosaico ? "pz_fuente_mosaico" : "pz_fuente", q[0], q[1], { noClaim: true, face: [0, -1] });
+
     // ---- casas y tapiales
     for (const lot of W.lots) {
       if (lot.kind === "sendero") continue;
@@ -223,6 +226,8 @@ const Barrio = (() => {
         : lot.kind === "villa" && W.real && W.villaAt(lot.o[0], lot.o[1]) ? { al: 1 } : {};   // la 1-11-14: casillas de ladrillo de 2 a 4 pisos
       // techo de tejas en las casas de un barrio que las pide (estilo.tejas: la parte de las casas que las tiene); sale del lote
       if (W.estilo && W.estilo.tejas && (lot.kind === "casa" || lot.kind === "casa2") && (lot.seed % 1000) / 1000 < W.estilo.tejas) co.tj = 1;
+      // un comercio con nombre de un barrio real (Pizzería Keops, Café Chas): su cartel y su rubro
+      if (lot.cartel) { co.ct = lot.cartel; co.rb = lot.rubro; }
       addObj("house", { t: "casa", k: lot.kind, W: wq, D, a: aIdx(lot.phi), wb, v: 0, ...co }, lot, o[0], o[1], phiQ, { u0: 0, uw: lot.fw, v0: 0 }, rect(0, lot.fw, 0, depthTot));
       const occRect = (u0, u1, v0, v1) => { for (let u = u0; u < u1; u += .4) for (let v = v0; v < v1; v += .4) { const [x, y] = LP(u, v); occ.add(Math.floor(x / OC) * 100000 + Math.floor(y / OC)); } };
       occRect(.2, lot.fw, -.6, depthTot + 1.5);
@@ -277,6 +282,8 @@ const Barrio = (() => {
             : ["pl_malvon", "pl_potus", "pl_aloe", "pl_cactus", "pl_sansevieria", "pl_hortensia", "plm_rosal", "pl_clivia", "pl_helecho", "pl_calas", "pl_malvon", "pl_jardinera", "pl_coleo", "pl_azalea", "pl_begonias", "pl_monstera"];
           const u0 = rx.uni(-lot.fw / 3, lot.fw / 3 - .5 * n);           // en fila, pegadas al frente
           for (let k = 0; k < n; k++) put(rx.pick(POT), ...nearX(rx.uni(.22, .36), u0 + k * rx.uni(.42, .6)), { noClaim: true }); }
+        // el café y la pizzería con nombre sacan sus mesitas a la vereda
+        if (lot.cartel && F.c_mesa_bar && s.sw >= 1.8) for (const du of [-lot.fw / 3, 0, lot.fw / 3]) put("c_mesa_bar", ...nearX(Math.min(1.7, s.sw - .6), du), { rad: .7 });
         // vida en la vereda: mesas de bar frente a los negocios, motos y bicis estacionadas, perros y gatos
         if (F.c_mesa_bar && (lot.kind === "negocio" || lot.kind === "negocio_casa") && s.sw >= 2.6 && rx() < .3) put("c_mesa_bar", ...nearX(rx.uni(1.5, 1.8), rx.uni(-lot.fw / 4, lot.fw / 4)), { rad: .75 });
         if (F.c_moto && rx() < (lot.kind === "negocio" ? .12 : .04)) put(rx() < .6 ? "c_moto" : "c_bici", ...nearX(rx.uni(1.05, 1.3), rx.uni(-lot.fw / 3, lot.fw / 3)), { rad: .4 });
@@ -469,12 +476,13 @@ const Barrio = (() => {
     // en el barrio real hay más edificios y galpones (casas más grandes): menos variedad, así el atlas del juego (8192×4096) alcanza
     { const tope = Math.round(Math.max(20, C.variedad | 0) * (W.estilo && W.estilo.variedad != null ? W.estilo.variedad : W.real ? .62 : 1)), hs = [...cat.values()].filter(e => e.spec.t === "casa").sort((a, b) => b.n - a.n), keep = new Set(hs.slice(0, tope).map(e => e.id));
       hs.filter(e => e.spec.co != null).slice(0, 20).forEach(e => keep.add(e.id));   // los locales coreanos de Carabobo no se pierden en el recorte
+      hs.filter(e => e.spec.ct).forEach(e => keep.add(e.id));   // ni los comercios con nombre
       const kept = hs.filter(e => keep.has(e.id));
       for (const o of objs) { if (o.e.spec.t !== "casa" || keep.has(o.e.id)) continue; const sp = o.e.spec; let best = null, bs = 1e9;
         // las casillas de la villa pueden tomar una de hasta dos rumbos de distancia (15°): en la villa nada está en escuadra, y los
         // pasillos van para todos lados (en el barrio real serían cientos de casillas distintas sólo por el rumbo)
         for (const e of kept) { const q = e.spec, da = Math.min(Math.abs(q.a - sp.a), 48 - Math.abs(q.a - sp.a)); if (da > (q.k === "villa" && sp.k === "villa" ? 2 : 0)) continue;
-          const ed = (k) => k === "edificio" || k === "petit", sc = da * 6 + (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0);
+          const ed = (k) => k === "edificio" || k === "petit", sc = da * 6 + (q.k === sp.k ? 0 : (q.k === "villa") !== (sp.k === "villa") || ed(q.k) || ed(sp.k) ? 50 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + (q.W > o.place.uw + .01 ? 30 : 0) + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0) + (q.ct !== sp.ct ? 60 : 0);
           if (sc < bs) { bs = sc; best = e; } }
         if (!best || bs > 40) { keep.add(o.e.id); kept.push(o.e); continue; }
         o.e.n--; best.n++; o.e = best;
@@ -484,7 +492,7 @@ const Barrio = (() => {
       { const fr = objs.filter(o => o.kind === "house" && !o.back && o.lot && o.lot.seg && o.place);
         const tOf = (o) => (o.lot.o[0] - o.lot.seg.a[0]) * o.lot.seg.dir[0] + (o.lot.o[1] - o.lot.seg.a[1]) * o.lot.seg.dir[1];
         fr.sort((a, b) => a.lot.seg.id - b.lot.seg.id || a.lot.side - b.lot.side || tOf(a) - tOf(b));
-        const score = (q, sp) => (q.k === sp.k ? 0 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0);
+        const score = (q, sp) => (q.k === sp.k ? 0 : 4) + Math.abs((q.p || 0) - (sp.p || 0)) * 8 + Math.abs(q.W - sp.W) * .6 + Math.abs(q.D - sp.D) * .4 + (q.wb !== sp.wb ? 1 : 0) + ((q.co != null) !== (sp.co != null) ? 12 : q.co !== sp.co ? 3 : 0) + (!q.tj !== !sp.tj ? 6 : 0) + (q.ct !== sp.ct ? 60 : 0);
         for (let i = 1; i < fr.length; i++) { const a = fr[i - 1], o = fr[i]; if (a.lot.seg !== o.lot.seg || a.lot.side !== o.lot.side || a.e !== o.e) continue;
           const sp = o.e.spec, ed = (k) => k === "edificio" || k === "petit" || k === "villa"; if (ed(sp.k)) continue;
           let best = null, bs = 1e9; for (const e of kept) { const q = e.spec; if (e === o.e || q.a !== sp.a || ed(q.k) || q.W > o.place.uw + .01) continue; const sc = score(q, sp); if (sc < bs) { bs = sc; best = e; } }
@@ -499,7 +507,7 @@ const Barrio = (() => {
   // la casa/tapial/poste 3D de una clave del catálogo (misma semilla en el visor y en la exportación)
   function build3D(spec) {
     const phi = World.ANG[spec.a];
-    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17 + (spec.co ?? 0) * 613 + (spec.tj ?? 0) * 389, wealth: [.25, .7][spec.wb], co: spec.co, al: spec.al, tj: spec.tj }, phi);
+    if (spec.t === "casa") return Houses.build({ kind: spec.k, W: spec.W, D: spec.D, p: spec.p, seed: 1000 + spec.v * 7919 + spec.wb * 104729 + spec.a * 31 + Math.round(spec.W * 10) * 17 + (spec.co ?? 0) * 613 + (spec.tj ?? 0) * 389 + (spec.ct ? spec.ct.length * 977 + spec.ct.charCodeAt(spec.ct.length - 1) * 131 : 0), wealth: [.25, .7][spec.wb], co: spec.co, al: spec.al, tj: spec.tj, ct: spec.ct, rb: spec.rb }, phi);
     if (spec.t === "esquina") return Houses.esquina({ W: spec.W, D: spec.D, c: spec.c, p: spec.p, rub: spec.rub, seed: 9000 + spec.rub * 7919 + spec.p * 104729 + spec.a * 31, wealth: .5 }, phi);
     if (spec.t === "paredon") return Houses.paredon(spec.W, 700 + spec.s, phi);
     if (spec.t === "tapial") return Houses.tapial(spec.W, 500 + spec.s, spec.tk, phi);
