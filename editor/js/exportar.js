@@ -10,6 +10,26 @@ const Exportar = (() => {
   const SF = R3.SF, K = R3.K, SYN = R3.SYN, CZ = R3.CZ;
   const espera = () => new Promise(r => setTimeout(r, 0));
   const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100;
+  // escala mínima a la que el juego dibuja un prop HD (ver la hoja de props)
+  const E_HD = .3;
+  // achica un canvas por r (< 1) promediando el área que cubre cada píxel nuevo, con el color premultiplicado por el alfa (así el
+  // fondo transparente no oscurece los bordes)
+  function achicarPromedio(src, r) {
+    const w = src.width, h = src.height, W2 = Math.max(1, Math.round(w * r)), H2 = Math.max(1, Math.round(h * r)), rx = W2 / w, ry = H2 / h;
+    const d = src.getContext("2d").getImageData(0, 0, w, h).data, P = new Float32Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) { const a = d[i * 4 + 3] / 255; P[i * 4] = d[i * 4] * a; P[i * 4 + 1] = d[i * 4 + 1] * a; P[i * 4 + 2] = d[i * 4 + 2] * a; P[i * 4 + 3] = a; }
+    // pesos de una dimensión: cuánto del texel i cae en el píxel nuevo j
+    const pesos = (n, n2, k) => { const L = []; for (let j = 0; j < n2; j++) { const a = j / k, b = (j + 1) / k, l = [];
+      for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b)); i++) { const o = Math.min(b, i + 1) - Math.max(a, i); if (o > 0) l.push(i, o * k); } L.push(l); } return L; };
+    const PX = pesos(w, W2, rx), PY = pesos(h, H2, ry), T = new Float32Array(W2 * h * 4), O = new Float32Array(W2 * H2 * 4);
+    for (let y = 0; y < h; y++) for (let j = 0; j < W2; j++) { const l = PX[j], o = (y * W2 + j) * 4;
+      for (let q = 0; q < l.length; q += 2) { const s = (y * w + l[q]) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) T[o + c] += P[s + c] * p; } }
+    for (let j = 0; j < H2; j++) { const l = PY[j]; for (let x = 0; x < W2; x++) { const o = (j * W2 + x) * 4;
+      for (let q = 0; q < l.length; q += 2) { const s = (l[q] * W2 + x) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) O[o + c] += T[s + c] * p; } } }
+    const c2 = document.createElement("canvas"); c2.width = W2; c2.height = H2; const g = c2.getContext("2d"), im = g.createImageData(W2, H2);
+    for (let i = 0; i < W2 * H2; i++) { const a = Math.min(1, O[i * 4 + 3]);
+      if (a > 0) { for (let c = 0; c < 3; c++) im.data[i * 4 + c] = Math.round(Math.min(255, O[i * 4 + c] / O[i * 4 + 3])); im.data[i * 4 + 3] = Math.round(a * 255); } }
+    g.putImageData(im, 0, 0); return c2; }
 
   async function exportar(B, atlas, F, progreso = () => {}, opts = {}) {
     const t0 = performance.now(), W = B.W, MW = W.MW, MH = W.MH, C = CFG.v;
@@ -29,7 +49,41 @@ const Exportar = (() => {
       for (let a = 0; a < 48; a++) for (const L of [0, 3, 10, 31]) { if (!L && a) continue;
         const dx = Math.cos(a / 48 * 2 * Math.PI) * L, dy = Math.sin(a / 48 * 2 * Math.PI) * L;
         for (const q of R3.hull(P.map((p, i) => [p[0] + p[2] * dx, p[1] + p[2] * dy, i]))) usa.add(q[2]); }
-      const out = []; for (const i of [...usa].sort((a, b) => a - b)) out.push(...P[i]); return out; };
+      const Q = simplificar([...usa].sort((a, b) => a - b).map(i => P[i]));
+      const out = []; for (const p of Q) out.push(...p); return out; };
+    // y de esos, se van sacando de a uno los que menos cambian la sombra, mientras ninguna de las 73 que se miran (sol a pique
+    // y 24 rumbos con 3 largos) pierda más del 1 % de su área: los tanques, las cumbreras bajas, los parapetos y los aleros
+    // casi no la mueven y el volumen (sombraAuto.js, volumenSombra) sale con un tercio menos de vértices y triángulos.
+    // Sacar puntos sólo achica la sombra: nunca sale más grande que la casa
+    const SOL = [[0, 0]]; for (let a = 0; a < 24; a++) for (const L of [3, 10, 31]) SOL.push([Math.cos(a / 24 * 2 * Math.PI) * L, Math.sin(a / 24 * 2 * Math.PI) * L]);
+    const areaPol = (H) => { let s = 0; for (let i = 0; i < H.length; i++) { const p = H[i], q = H[(i + 1) % H.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; };
+    const areasSol = (P) => SOL.map(([dx, dy]) => areaPol(R3.hull(P.map(p => [p[0] + p[2] * dx, p[1] + p[2] * dy]))));
+    const simplificar = (P, tol = .01) => { const A0 = areasSol(P);
+      while (P.length > 4) { let mejor = -1, me = Infinity;
+        for (let i = 0; i < P.length; i++) { const A = areasSol(P.slice(0, i).concat(P.slice(i + 1))); let e = 0;
+          for (let k = 0; k < A.length; k++) if (A0[k] > 0) e = Math.max(e, (A0[k] - A[k]) / A0[k]);
+          if (e < me) { me = e; mejor = i; } }
+        if (me > tol) break; P = P.slice(0, mejor).concat(P.slice(mejor + 1)); }
+      return P; };
+    // el pie de cada diseño se calcula una vez (la cuenta es la misma para todas sus casas, relativa al pie)
+    const sombraDe = new Map(), sombraCasa = (cts, o, fx, fy) => { let s = sombraDe.get(o.e.id); if (!s) { s = sombraPts(cts, o, fx, fy); sombraDe.set(o.e.id, s); } return s; };
+    // el colisionador de una casa (o tapial): la envolvente de las cajas que apoyan en el piso, lo que de verdad ocupa. Antes
+    // era el rectángulo del lote (barrio.js), con todo el ancho del frente: una casa de 4 m en un lote de 12 tenía un
+    // colisionador de hasta 7 veces su pie, que tapaba la vereda y el jardín. Box2D acepta hasta 8 vértices: si sobran se
+    // saca el que menos área le quita
+    const pieCol = (cts, o, fx, fy) => { const P = [];
+      for (const cs of cts) { if (cs.noGround || cs.c[2] - cs.h[2] > .3) continue;
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+          const q = PW(o.x0 + cs.c[0] + sx * cs.h[0] * cs.ax[0][0] + sy * cs.h[1] * cs.ax[1][0], o.y0 + cs.c[1] + sx * cs.h[0] * cs.ax[0][1] + sy * cs.h[1] * cs.ax[1][1]);
+          P.push([q[0] - fx, q[1] - fy]); } }
+      if (P.length < 3) return null;
+      const H = R3.hull(P);
+      while (H.length > 8) { let mi = 0, ma = Infinity;
+        for (let i = 0; i < H.length; i++) { const a = H[(i + H.length - 1) % H.length], b = H[i], c = H[(i + 1) % H.length];
+          const ar = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])); if (ar < ma) { ma = ar; mi = i; } }
+        H.splice(mi, 1); }
+      return H.length >= 3 && areaPol(H) > 4 ? H.map(([x, y]) => [r1(x), r1(y)]) : null; };
+    const colDe = (o, cts, fx, fy) => (cts.length && pieCol(cts, o, fx, fy)) || o.collider.map(([x, y]) => { const q = PW(x, y); return [r1(q[0] - fx), r1(q[1] - fy)]; });
     let nSombraPts = 0;
     const WW = Math.ceil((MW + K * MH) * SF), WH = Math.ceil(MH * SYN * SF);
     const archivos = [];   // [ruta, Uint8Array]
@@ -109,10 +163,10 @@ const Exportar = (() => {
       for (const o of B.objs) {
         const it = byId.get(o.e.id), fdx = it.foot[0], fdy = it.foot[1], [fx, fy] = PW(o.x0 + fdx, o.y0 + fdy);
         const rec = { o: it.hoja, a: "o" + o.e.id, x: r1(fx), y: r1(fy), k: o.kind };
-        if (o.collider) rec.col = o.collider.map(([x, y]) => { const q = PW(x, y); return [r1(q[0] - fx), r1(q[1] - fy)]; });
+        if (o.collider) rec.col = colDe(o, it.casters, fx, fy);
         else rec.r = r1(.15 * 13.5);
         if (o.e.spec.t === "poste" && o.e.spec.l) rec.l = 1;           // poste de madera con lámpara
-        if (it.casters.length) { rec.sp = sombraPts(it.casters, o, fx, fy); nSombraPts += rec.sp.length / 3; }
+        if (it.casters.length) { rec.sp = sombraCasa(it.casters, o, fx, fy); nSombraPts += rec.sp.length / 3; }
         casas.push(rec);
       }
     } else {
@@ -145,11 +199,11 @@ const Exportar = (() => {
         const V = H.pies[o.e.id], [ox, oy] = PW(o.x0, o.y0), [fx, fy] = PW(o.x0 + V.foot[0], o.y0 + V.foot[1]);
         const rec = { v: o.e.id, ox: r2(ox), oy: r2(oy), x: r1(fx), y: r1(fy), k: o.kind };
         nTiles += variantes[o.e.id].length;
-        if (o.collider) rec.col = o.collider.map(([x, y]) => { const q = PW(x, y); return [r1(q[0] - fx), r1(q[1] - fy)]; });
+        const cts = o.e.spec.t !== "poste" ? V.casters.filter(c => !c.noGround) : [];
+        if (o.collider) rec.col = colDe(o, cts, fx, fy);
         else rec.r = r1(.15 * 13.5);
         if (o.e.spec.t === "poste" && o.e.spec.l) rec.l = 1;
-        const cts = o.e.spec.t !== "poste" ? V.casters.filter(c => !c.noGround) : [];
-        if (cts.length) { rec.sp = sombraPts(cts, o, fx, fy); nSombraPts += rec.sp.length / 3; }
+        if (cts.length) { rec.sp = sombraCasa(cts, o, fx, fy); nSombraPts += rec.sp.length / 3; }
         casas.push(rec);
       }
     }
@@ -231,8 +285,12 @@ const Exportar = (() => {
       // fuera, de ~0,6 px de mundo a la escala del juego (f.e, o 1), del color del relleno llevado a su oscuro como el borde de
       // las caras (R3.LIGHT.outline). Las sombras y lo que va pegado al piso, sin.
       const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline);
-      for (const n of usados) { const f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+      for (const n of usados) { let f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
         c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+        // los que Gemini dibujó muy grandes (las plantas nuevas: ~100 px/m, que el juego mostraba a 0,18) se achican con promedio
+        // hasta E_HD: sin mipmaps, la placa tomaba 1 de cada 3 a 5 texeles con zoom 1 a 2,5 y se veían granulados, con el
+        // contorno oscuro salteado (chamuscados). A 0,3 un texel mide 1,2 px de pantalla con zoom 4, el máximo
+        if (f.e && f.e < E_HD * .9) { const r = f.e / E_HD; c = achicarPromedio(c, r); f = { ...f, w: c.width, h: c.height, ox: f.ox * r, oy: f.oy * r, e: E_HD }; }
         const t = SIN_CONTORNO.test(n) ? 0 : Math.max(1, Math.round(.6 / (f.e || 1))); cuadro[n] = { cv: t ? Contorno.canvas(c, t, null, SUAVE) : c, t, f }; }
       const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
       for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
