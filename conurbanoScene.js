@@ -348,7 +348,7 @@ function apoyoDe(sheet) { let t = _apoyo.get(sheet); if (t === undefined) { t = 
 const LUZ_FARO = 0xfff0d0, FARO_ADELANTE = 18;   // px delante del frente de la huella
 // las caras de las casas de noche (ConurbanoScene.carasFaroles): alcance de cada farol (m), distancia a la que su peso es la
 // mitad (m), cuánto se apaga una cara que le da la espalda a todos (0..1) y cuántas piezas se tiñen por cuadro
-const CARAS_R = 14, CARAS_R0 = 6, CARAS_K = .55, CARAS_POR_CUADRO = 20000;
+const CARAS_R = 14, CARAS_R0 = 6, CARAS_K = Q.get('caras') === '0' ? 0 : .55, CARAS_POR_CUADRO = 20000;   // ?caras=0: sin esto, para comparar
 export class Auto extends GameObject {
   static deriveSpeed = true;
   static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, LuzHora, AutoComp];
