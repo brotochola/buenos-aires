@@ -20,7 +20,7 @@ const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
 
 const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, Transform,
-  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
+  Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, LightOccluder, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
 // todas las luces del barrio: blanco amarillento de ciudad (~3000 K)
 const LUZ = 0xffdcaa;
 // la luz de la noche (lighting.sun.night): una luna azulada que WeedJS suma a la luz de la escena cuando el sol baja de 0,4
@@ -44,6 +44,12 @@ const Q = WEED.params || new URLSearchParams(typeof globalThis.location?.search 
 // personas, en dos pares, no cuesta (Pixi 5,94 / 5,44 ms sin, 5,62 / 5,29 ms con; 60 fps). ?siltex=0 vuelve a la silueta
 // invisible como sprite
 const SOMBRA_TEX = Q.get('siltex') !== '0';
+// ?raycast=1 (prueba, sección 7 del plan): las luces de faroles, postes y autos no atraviesan las casas. WeedJS arma un
+// polígono de visibilidad por luz (lighting.raycasted) con los colisionadores de las casas (LightOccluder); cada luz busca
+// obstáculos hasta su Collider.visualRange, que acá es su alcance (10·√intensidad). Con esto WeedJS apaga la capa de sombras
+// proyectadas (gente, árboles, postes): quedan las de volumen de casas y autos
+const RAYCAST = Q.get('raycast') === '1';
+const alcanceLuz = (I) => RAYCAST ? Math.ceil(10 * Math.sqrt(I)) : 0;
 const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
 const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
 const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
@@ -129,9 +135,11 @@ function luzHora(go) {
 export class Casa extends GameObject {
   static isStatic = true;
   static tickInterval = LUZ_TICK;
-  static components = [RigidBody, Collider, LightEmitter, LuzHora];
+  static components = [RigidBody, Collider, LightEmitter, LuzHora, ...(RAYCAST ? [LightOccluder] : [])];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
+    // con ?raycast=1 la planta de la casa (o el tapial) tapa las luces; el poste no
+    if (RAYCAST) { this.lightOccluder.maskMode = 0; this.lightOccluder.block = c.col ? 1 : 0; }
     if (c.col) {
       const p = c.col; let area = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; area += a[0] * b[1] - b[0] * a[1]; }
       const pts = area >= 0 ? p : p.slice().reverse(), flat = [];
@@ -147,7 +155,7 @@ export class Casa extends GameObject {
     // las casas no alumbran; los postes de madera con lámpara (calles de tierra y villas) sí
     const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
     L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
-    L.sourceHeight = on ? 50 : 0; L.lightIntensity = on ? 1500 * FAROL_K : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
+    L.sourceHeight = on ? 50 : 0; L.lightIntensity = on ? 1500 * FAROL_K : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? (alcanceLuz(L.lightIntensity) || 260) : this.collider.visualRange;
     luzNace(this, 0, 0, 0, c);   // el poste se prende a su hora (su brillo es el de la luz: hasGlowSprite)
   }
   tick() { luzHora(this); }
@@ -195,7 +203,7 @@ export class Prop extends GameObject {
       L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * (f === 'u_farola' ? .97 : .88);
       // la luz sale de la lámpara (sourceHeight, a media altura del poste: el charco queda más parejo) y por eso más fuerte
       L.sourceHeight = top * .5; L.lightIntensity = (f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800) * FAROL_K; L.hasGlowSprite = .55; L.active = 1;
-      this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
+      this.collider.visualRange = alcanceLuz(L.lightIntensity) || 260;   // alcance para las sombras que proyecta su luz (y, con ?raycast=1, las casas que la tapan)
       // brillo en cada lámpara (se prende con la luz): un centro chico y un halo. Van con las entidades, ordenados por y justo
       // delante del poste, así una casa o un árbol que está delante los tapa (en una capa aditiva arriba de todo se veían a
       // través de las casas). Quedan debajo de la luz, que en la lámpara es la del propio farol
@@ -379,6 +387,7 @@ export class Auto extends GameObject {
     const L = this.lightEmitter; A.faros = c.faros ? 1 : 0;
     if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros, y corre la luz)
       L.lightColor = LUZ_FARO; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = c.i || 700; L.offsetX = A.hl + FARO_ADELANTE; L.offsetY = 0; L.active = 1;
+      if (RAYCAST) this.collider.visualRange = alcanceLuz(L.lightIntensity) + A.hl + FARO_ADELANTE;   // la luz está corrida adelante
       for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8 });
       luzNace(this, 2, .9, .9);   // los faros se prenden a su hora, con sus dos brillos
     } else { L.lightIntensity = 0; L.offsetX = 0; L.offsetY = 0; L.active = 0; this.luzHora.base = 0; }
@@ -615,7 +624,7 @@ export class ConurbanoScene extends Scene {
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
       // groundScaleY: el piso se ve aplastado a SYN (0,5), así que los charcos de luz de los faroles son elipses
-      enabled: true, lightGlow: 'sprite', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
+      enabled: true, raycasted: RAYCAST, lightGlow: 'sprite', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2, shadowTextures: SOMBRA_TEX,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
