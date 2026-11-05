@@ -23,8 +23,10 @@ const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, Colli
   Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
 // todas las luces del barrio: blanco amarillento de ciudad (~3000 K)
 const LUZ = 0xffdcaa;
-// la luna (ver ConurbanoScene.luna): su color (rgb 0..1) y cuánto suma a la luz de la escena
+// la luna (ver ConurbanoScene.sol): su color (rgb 0..1) y cuánto suma a la luz de la escena
 const LUNA = [.33, .45, .95], LUNA_I = .3;
+// el día dura 8 minutos; la transparencia de las sombras con sol pleno (de noche se apagan: la luna no proyecta)
+const DIA_MIN = 8, SOL_SA = .5;
 // los faroles alumbran desde arriba (LightEmitter.sourceHeight): con la misma intensidad el pie quedaría oscuro
 const FAROL_K = 2.2;
 // capas de sombras horneadas o de mallas: se apagan con el sol
@@ -592,7 +594,7 @@ export class ConurbanoScene extends Scene {
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
       sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .5, startHour: 17.5,
-        dayCycle: { enabled: true, speed: 1, dayDurationMinutes: 8 } },
+        dayCycle: { enabled: false } },   // la hora la avanza la escena (ConurbanoScene.sol)
     },
     navigation: { enabled: true, cellSize: 64 },
     layers: {
@@ -767,7 +769,7 @@ export class ConurbanoScene extends Scene {
   }
 
   // salta a la próxima hora: mediodía, atardecer, noche, amanecer
-  nextTime() { const hs = [12, 18.6, 22, 6.2], h = Sun.hour || 12; let n = hs.find(x => x > h + .1); if (n == null) n = hs[0]; Sun.setTimeOfDay(n); return n; }
+  nextTime() { const hs = [12, 18.6, 22, 6.2], h = Sun.hour || 12; let n = hs.find(x => x > h + .1); if (n == null) n = hs[0]; Sun.hour = n; return n; }   // sol() pone el resto
   create() {
     Camera.setFree(false);
     Camera.setZoom(1); Camera.centerOn(this.focusX, this.focusY);
@@ -809,23 +811,29 @@ export class ConurbanoScene extends Scene {
     for (const S of this._sem) { const f = faseSemaforo(S.cid, S.eje); if (f === S.f) continue; const o = S.sk * 4, ids = Semaforos.ids;
       if (!ids[o] || !ids[o + 3]) continue; S.f = f;   // el semáforo todavía no armó sus luces
       al(ids[o] - 1, f === 2 ? .95 : 0); al(ids[o + 1] - 1, f === 1 ? .95 : 0); al(ids[o + 2] - 1, f === 0 ? .95 : 0); al(ids[o + 3] - 1, f === 2 ? 0 : .95); } }
-  // ---------- noche: luz de luna. WeedJS ilumina con el ambiente (gris, baseAmbient) más el color del sol por su intensidad; de
-  // noche el sol no está y todo quedaba gris oscuro. Cuando el sol baja, acá se lo cambia por una luna azulada: la escena se
-  // tiñe de azul conservando sus colores, y los faroles, que suman su luz cálida encima, siguen siendo naranjas. Corre después de
-  // que WeedJS avanzó la hora (antes de update) y devuelve la intensidad del sol de verdad, para lo que depende del día
-  luna() {
-    let I0 = Sun.intensity, C0 = Sun.color;
-    if (I0 === this._lunaW && C0 === this._lunaWC) { I0 = this._lunaI0; C0 = this._lunaC0; }   // la hora no avanzó: lo último es nuestro
-    this._lunaI0 = I0; this._lunaC0 = C0;
+  // ---------- el reloj del día y la luz de luna. WeedJS ilumina con el ambiente (gris, baseAmbient) más el color del sol por su
+  // intensidad; de noche el sol no está y todo quedaba gris oscuro. Cuando el sol baja, acá se lo cambia por una luna azulada: la
+  // escena se tiñe de azul conservando sus colores, y los faroles, que suman su luz cálida encima, siguen siendo naranjas.
+  // La hora la avanza la escena y no WeedJS (dayCycle apagado en la config): WeedJS escribía su intensidad y su color antes de
+  // update y la luna los pisaba después, pero el hilo que dibuja a veces leía en el medio, y de noche la escena saltaba entre gris
+  // y azul de un cuadro al otro. Acá cada valor del sol se escribe una sola vez por cuadro, ya con la luna. Las mismas cuentas que
+  // Sun.setTimeOfDay. Devuelve la intensidad del sol de verdad, para lo que depende del día
+  sol(ms) {
+    const h = (((Sun.hour + ms * 24 / (DIA_MIN * 60000)) % 24) + 24) % 24, d = h / 24;
+    const I0 = Math.max(0, Math.min(1, .5 - .5 * Math.cos(2 * Math.PI * d)));
+    const el = Math.max(0, Math.cos(Math.PI * Math.abs(h - 12) / 12) * 90);
+    const C0 = Sun._getColorForHour ? Sun._getColorForHour(h) : 0xfff4e0;
     const m = Math.max(0, Math.min(1, (.4 - I0) / .3));   // 0 de día, 1 de noche
-    if (m <= 0) { this._lunaW = NaN; return I0; }
-    const k = (c, s) => ((c >> s) & 255) / 255, mezcla = (s, L) => Math.round((k(C0, s) * (1 - m) + L * m) * 255);
-    Sun.intensity = Math.max(I0, LUNA_I * m); Sun.color = (mezcla(16, LUNA[0]) << 16) | (mezcla(8, LUNA[1]) << 8) | mezcla(0, LUNA[2]);
-    this._lunaW = Sun.intensity; this._lunaWC = Sun.color;
+    let I = I0, C = C0;
+    if (m > 0) { const k = (s) => ((C0 >> s) & 255) / 255, mezcla = (s, L) => Math.round((k(s) * (1 - m) + L * m) * 255);
+      I = Math.max(I0, LUNA_I * m); C = (mezcla(16, LUNA[0]) << 16) | (mezcla(8, LUNA[1]) << 8) | mezcla(0, LUNA[2]); }
+    if (!Sun._updateShadowValues) { Sun.setTimeOfDay(h); }   // otro WeedJS sin esa función: la dirección de las sombras, como antes
+    else { Sun.hour = h; Sun.angle = ((d - .25) * 360 + 360) % 360; Sun.elevation = el; Sun._updateShadowValues(el); }
+    Sun.intensity = I; Sun.color = C; Sun.shadowAlpha = SOL_SA * (1 - m);
     return I0;
   }
-  update(dtRatio = 1) {
-    const sol = this.luna();
+  update(dtRatio = 1, ms = dtRatio * 16.67) {
+    const sol = this.sol(ms);
     this.luces();
     this.afinarGente();
     // las sombras horneadas (casas, calcos) se desvanecen con el sol
