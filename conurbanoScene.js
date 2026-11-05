@@ -37,7 +37,11 @@ const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
 
 // ---------- cuánta gente. ?gente=N la fija; si no, arranca según el aparato y se ajusta sola mirando los fps de los workers
 // (los lugares se sortean en las veredas: las celdas con dirección del flowfield "veredas" del barrio)
-const Q = new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
+// (los parámetros de la página: WEED.params, iguales en todos los hilos; en un worker, location es la del worker)
+const Q = WEED.params || new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
+// ?siltex: la sombra del árbol con ShadowCaster.setTexture (el tronco vuelve a ser el sprite), para medirla contra la silueta
+// invisible de siempre (lighting.shadowTextures apaga para toda la escena un camino rápido de las sombras)
+const SOMBRA_TEX = Q.has('siltex');
 const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
 const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
 const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
@@ -216,13 +220,16 @@ export class Arbol extends GameObject {
     this.rigidBody.static = 1;
     const T = c.tipo, fl = c.fl ? -1 : 1, E = T.escala || ARB_ESCALA;   // el tipo viaja en la config: la escena lo lee en el hilo principal
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(2, c.r || 3); this.collider.visualRange = 200;
-    // el sprite del árbol es su silueta entera, invisible: sólo está para proyectar la sombra (con el sol y con los faroles),
-    // porque en WeedJS las decoraciones no proyectan. Lo que se ve son las piezas, todas decoraciones (el tronco también)
-    const S = T.sil;
-    if (S) { this.setSprite('arboles', S[0], 0); this.spriteRenderer.anchorX = S[1]; this.spriteRenderer.anchorY = S[2]; this.setScale(E / S[3] * fl, E / S[3]); this.alpha = 0; }
+    // la sombra es la de la silueta entera del árbol, porque en WeedJS las decoraciones (las ramas) no proyectan. Con
+    // ?siltex, la silueta es la textura de la sombra (ShadowCaster.setTexture) y el tronco es el sprite; si no, el sprite es la
+    // silueta, invisible (sólo para proyectar), y el tronco es una decoración más
+    const S = T.sil, TEX = SOMBRA_TEX && !!S;
+    this.alpha = 1;
+    if (S && !TEX) { this.setSprite('arboles', S[0], 0); this.spriteRenderer.anchorX = S[1]; this.spriteRenderer.anchorY = S[2]; this.setScale(E / S[3] * fl, E / S[3]); this.alpha = 0; }
     this.shadowCaster.heightMultiplier = S ? 1 : 0;
+    if (TEX) this.shadowCaster.setTexture('arboles_' + S[0], { anchorX: S[1], anchorY: S[2], scaleX: E / S[3] * fl, scaleY: E / S[3] });
     for (const p of T.piezas) {
-      if (p[5] === 0 && !S) { this.setSprite('arboles', p[0], 0); this.spriteRenderer.anchorX = fl > 0 ? p[3] : 1 - p[3]; this.spriteRenderer.anchorY = p[4]; this.setScale(E * fl, E); continue; }
+      if (p[5] === 0 && (!S || TEX)) { this.setSprite('arboles', p[0], 0); this.spriteRenderer.anchorX = fl > 0 ? p[3] : 1 - p[3]; this.spriteRenderer.anchorY = p[4]; this.setScale(E * fl, E); continue; }
       // las ramas de adelante (y su follaje) se ordenan casi 3 m más cerca de la cámara que el tronco: la copa está arriba y se
       // abre hacia adelante, así tapa la mesa o el banco que está debajo (si no, la silla salía encima de las hojas)
       this.addDecoration('arboles_' + p[0], p[1] * fl, p[2], E * fl, E, p[5], { anchorX: p[3], anchorY: p[4], sway: !!p[6], swayAmplitude: .022 + rng() * .02, swayFrequency: .45 + rng() * .4, sortOffsetY: p[5] > 0 ? COPA_ADELANTE : 0 });
@@ -592,7 +599,7 @@ export class ConurbanoScene extends Scene {
     lighting: {
       // groundScaleY: el piso se ve aplastado a SYN (0,5), así que los charcos de luz de los faroles son elipses
       enabled: true, lightGlow: 'add', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
-      shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
+      shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2, shadowTextures: SOMBRA_TEX,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
       sun: { enabled: true, angle: 135, elevation: 40, intensity: 1, color: 0xfff4e0, shadowAlpha: .5, startHour: 17.5,
