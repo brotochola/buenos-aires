@@ -28,8 +28,6 @@ const LUZ = 0xffdcaa;
 const LUNA = 0x5473f2, LUNA_I = .3;
 // los faroles alumbran desde arriba (LightEmitter.sourceHeight): con la misma intensidad el pie quedaría oscuro
 const FAROL_K = 2.2;
-// capas de sombras horneadas o de mallas: se apagan con el sol
-const SOMBRAS_CAPAS = ['sombrasCasas', 'sombrasAutos', 'sombras'];
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
@@ -140,7 +138,7 @@ export class SombraCasa extends GameObject {
   static components = [MeshRenderer, SombraComp];
   onSpawned(c = {}) {
     this.setLayer('sombrasCasas');
-    this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
+    this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;   // negro opaco: la capa pone la oscuridad del sol
     const S = this.sombraComp; S.ok = 0; S.n = 0;
     if (c.sh) { const flat = new Float32Array(c.sh.length * 2); c.sh.forEach((q, i) => { flat[i * 2] = q[0]; flat[i * 2 + 1] = q[1]; });
       this.meshRenderer.setMesh(flat); return; }       // convexo: abanico desde el vértice 0
@@ -350,7 +348,7 @@ export class Auto extends GameObject {
     // la sombra: un polígono (MeshRenderer) en su capa de mallas (la de las casas se rearma entera si cambia una malla: los
     // autos que doblan la rearmarían en cada cuadro); el sprite sigue en la de entidades
     const [sh, sk] = altoAuto(c.hoja); A.shH = sh; A.shK = sk; A.shOk = 0; A.shDx = 1e9; A.shDy = 1e9;
-    this.setLayer('sombrasAutos'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
+    this.setLayer('sombrasAutos'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;
     this._sombra(Math.cos(rot), Math.sin(rot));
     const L = this.lightEmitter; L.lightIntensity = 0; L.active = 0;
     A.faro = -1;
@@ -607,14 +605,19 @@ export class ConurbanoScene extends Scene {
           uRX: f32(ROT0 ? ROT0.mx : 0), uRY: f32(ROT0 ? ROT0.my : 0), uRI: f32(ROT0 ? ROT0.ri : 0), uRE: f32(ROT0 ? ROT0.re : 0) } } },
       // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
       manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
-      sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
-      sombrasAutos: { kind: LAYER_KIND.MESH, zIndex: 1.52 },
-      sombras: { zIndex: 1.6, ySorting: false, maxItems: Math.max(3000, META.nProps + META.nArboles) },
+      // las sombras de mallas, en negro opaco: alphaBySun 'shadow' las deja tan oscuras como la sombra de una persona, se
+      // apagan de noche y, como cada capa se compone una sola vez, dos mallas que se pisan no oscurecen doble
+      sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, alphaBySun: 'shadow' },
+      sombrasAutos: { kind: LAYER_KIND.MESH, zIndex: 1.52, alphaBySun: 'shadow' },
+      // las sombras horneadas de los objetos (sprites con su propia transparencia): se desvanecen con el sol, de 0 con
+      // intensidad 0,143 a 1 con 0,857
+      sombras: { zIndex: 1.6, ySorting: false, maxItems: Math.max(3000, META.nProps + META.nArboles), alphaBySun: { from: .143, to: .857 } },
       cables: { zIndex: 3.5, ySorting: false, maxItems: Math.max(4000, META.nCables + 500) },
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
       brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1000 },
-      // brillos de faroles y faros: se prenden al bajar el sol (update)
-      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000 },
+      // brillos de faroles y faros
+      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000,
+        alphaBySun: { from: .73, to: .22 } },   // se prenden al bajar el sol: 0 con intensidad 0,73, completos con 0,22
     },
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
@@ -815,10 +818,8 @@ export class ConurbanoScene extends Scene {
     const sol = Sun.intensity;   // el sol de verdad (la luz de la noche no lo toca)
     this.luces();
     this.afinarGente();
-    // las sombras horneadas (casas, calcos) se desvanecen con el sol
-    const si = Math.max(0, Math.min(1, (sol || 0) * 1.4 - .2));
-    for (const n of SOMBRAS_CAPAS) { const L = Layer.get(n); if (L && Math.abs(L.alpha - si) > .02) L.alpha = si; }
-    const Ln = Layer.get('noche'), no = Math.max(0, Math.min(1, 1.15 - si * 1.4)); if (Ln && Math.abs(Ln.alpha - no) > .02) Ln.alpha = no;
+    // cuánto de noche es para las luces (0 de día, 1 de noche): la misma rampa que la capa 'noche'
+    const no = Math.max(0, Math.min(1, (.73 - (sol || 0)) / (.73 - .22)));
     this.lamparas(no);
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
