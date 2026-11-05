@@ -39,9 +39,11 @@ const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
 // (los lugares se sortean en las veredas: las celdas con dirección del flowfield "veredas" del barrio)
 // (los parámetros de la página: WEED.params, iguales en todos los hilos; en un worker, location es la del worker)
 const Q = WEED.params || new URLSearchParams(typeof globalThis.location?.search === 'string' ? globalThis.location.search : '');
-// ?siltex: la sombra del árbol con ShadowCaster.setTexture (el tronco vuelve a ser el sprite), para medirla contra la silueta
-// invisible de siempre (lighting.shadowTextures apaga para toda la escena un camino rápido de las sombras)
-const SOMBRA_TEX = Q.has('siltex');
+// la sombra del árbol es su silueta entera como textura de sombra (ShadowCaster.setTexture), y el tronco es el sprite.
+// lighting.shadowTextures apaga para toda la escena un camino rápido de las sombras (E-191); medido en Parque Chas con 12 000
+// personas, en dos pares, no cuesta (Pixi 5,94 / 5,44 ms sin, 5,62 / 5,29 ms con; 60 fps). ?siltex=0 vuelve a la silueta
+// invisible como sprite
+const SOMBRA_TEX = Q.get('siltex') !== '0';
 const NAV = globalThis.navigator || {}, HC = NAV.hardwareConcurrency || 4;
 const MOVIL = /Android|iPhone|iPad|Mobile/i.test(NAV.userAgent || '') || (NAV.maxTouchPoints > 1 && /Macintosh/.test(NAV.userAgent || ''));
 const GENTE_FIJA = Q.has('gente') ? Math.max(100, Math.min(23000, Q.get('gente') | 0)) : 0;
@@ -220,9 +222,9 @@ export class Arbol extends GameObject {
     this.rigidBody.static = 1;
     const T = c.tipo, fl = c.fl ? -1 : 1, E = T.escala || ARB_ESCALA;   // el tipo viaja en la config: la escena lo lee en el hilo principal
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = Math.max(2, c.r || 3); this.collider.visualRange = 200;
-    // la sombra es la de la silueta entera del árbol, porque en WeedJS las decoraciones (las ramas) no proyectan. Con
-    // ?siltex, la silueta es la textura de la sombra (ShadowCaster.setTexture) y el tronco es el sprite; si no, el sprite es la
-    // silueta, invisible (sólo para proyectar), y el tronco es una decoración más
+    // la sombra es la de la silueta entera del árbol, porque en WeedJS las decoraciones (las ramas) no proyectan: la silueta es
+    // la textura de la sombra (ShadowCaster.setTexture) y el tronco es el sprite. Con ?siltex=0, el sprite es la silueta,
+    // invisible (sólo para proyectar), y el tronco es una decoración más
     const S = T.sil, TEX = SOMBRA_TEX && !!S;
     this.alpha = 1;
     if (S && !TEX) { this.setSprite('arboles', S[0], 0); this.spriteRenderer.anchorX = S[1]; this.spriteRenderer.anchorY = S[2]; this.setScale(E / S[3] * fl, E / S[3]); this.alpha = 0; }
