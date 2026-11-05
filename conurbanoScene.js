@@ -14,7 +14,7 @@ import { BARRIOS } from './barrios.js';
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
 // la sombra de los autos al sol: la del volumen (huella + techo corrido), no el sprite dado vuelta
-import { sombraAuto, altoAuto } from './sombraAuto.js';
+import { sombraAuto, altoAuto, sombraPuntos } from './sombraAuto.js';
 const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'barrio'; } catch (e) { return 'barrio'; } })();
 const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
@@ -23,6 +23,12 @@ const { Scene, GameObject, Component, SharedResource, RigidBody, Collider, Colli
   Camera, Keyboard, Mouse, NavGrid, Layer, LAYER_KIND, BLEND_MODES, SpriteSheetRegistry, LightEmitter, ShadowCaster, Sun, enums, rng, dot2 } = WEED;
 // todas las luces del barrio: blanco amarillento de ciudad (~3000 K)
 const LUZ = 0xffdcaa;
+// la luna (ver ConurbanoScene.luna): su color (rgb 0..1) y cuánto suma a la luz de la escena
+const LUNA = [.33, .45, .95], LUNA_I = .3;
+// los faroles alumbran desde arriba (LightEmitter.sourceHeight): con la misma intensidad el pie quedaría oscuro
+const FAROL_K = 2.2;
+// capas de sombras horneadas o de mallas: se apagan con el sol
+const SOMBRAS_CAPAS = ['sombrasCasas', 'sombrasAutos', 'sombras'];
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
@@ -59,6 +65,8 @@ export class Transito extends SharedResource {}
 // las luces de cada semáforo: índices de sus decoraciones (+1; 0 = todavía no), las pone el semáforo y las prende la escena
 export class Semaforos extends SharedResource {}
 export class Estado extends SharedResource {}
+// las sombras de las casas: los vértices de sus cajas (x, y del piso respecto del pie de la casa, z en m), de mundo.json
+export class SombrasData extends SharedResource {}
 
 // ---------- componentes
 export class PersonaComp extends Component {
@@ -77,6 +85,12 @@ export class AutoComp extends Component {
     rs: Int8Array,         // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
     // su sombra (sombraAuto.js): alto (px), achique del techo, y con qué rumbo y qué sol se armó el polígono (1 en shOk si ya hay)
     shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shDx: Float32Array, shDy: Float32Array, shOk: Uint8Array };
+}
+
+export class SombraComp extends Component {
+  // off, n: dónde empiezan y cuántos son sus puntos en SombrasData.pts; nv: vértices de su malla; k: con qué sol (redondeado,
+  // ver solRedondo) se armó; ok: 1 si ya tiene malla
+  static ARRAY_SCHEMA = { off: Int32Array, n: Uint16Array, nv: Uint8Array, k: Int32Array, ok: Uint8Array };
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -102,21 +116,46 @@ export class Casa extends GameObject {
     // las casas no alumbran; los postes de madera con lámpara (calles de tierra y villas) sí
     const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
     L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
-    L.lightIntensity = on ? 1500 : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
+    L.sourceHeight = on ? 50 : 0; L.lightIntensity = on ? 1500 * FAROL_K : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
   }
 }
 // una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
 // piezas de 64 px como decoraciones, que se ordenan con la y del padre pero se recortan cada una por su propio centro
 // sombra de cada casa al piso: un polígono convexo en una capa de mallas
+// Sigue al sol: mira cuánto se estira la sombra por metro (la misma cuenta que WeedJS usa para la gente:
+// Sun.shadowDirX/Y · shadowLengthRatio · px por metro de altura) y, si cambió, rehace la envolvente de sus cajas corridas.
+// El sol va redondeado (rumbo cada 1°, largo cada 3 %): así todas las casas cambian en los mismos cuadros (cada segundo y
+// pico con el día de 8 minutos) y la capa de sombras, que se vuelve a armar entera cuando cambia una malla, se arma pocas
+// veces. Un exporte viejo (sin los puntos) trae la sombra hecha con el sol fijo del editor.
+const SOMBRA_PXM = META.CZ * META.SF, _sc = [], _sol = { k: 0, dx: 0, dy: 0 };   // _sc[nv]: el arreglo de salida de nv vértices
+function solRedondo() {
+  const a = Math.round(Math.atan2(Sun.shadowDirY, Sun.shadowDirX) * 180 / Math.PI), l = Math.round(Math.log(Math.max(.05, Sun.shadowLengthRatio)) / Math.log(1.03));
+  const k = (a + 360) * 4096 + (l + 2048); if (k === _sol.k) return _sol;
+  const r = Math.pow(1.03, l) * SOMBRA_PXM, t = a * Math.PI / 180; _sol.k = k; _sol.dx = Math.cos(t) * r; _sol.dy = Math.sin(t) * r; return _sol;
+}
 export class SombraCasa extends GameObject {
   static isStatic = true;
-  static components = [MeshRenderer];
+  static tickInterval = 3;
+  static components = [MeshRenderer, SombraComp];
   onSpawned(c = {}) {
     this.setLayer('sombrasCasas');
     this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
-    const flat = new Float32Array(c.sh.length * 2); c.sh.forEach((q, i) => { flat[i * 2] = q[0]; flat[i * 2 + 1] = q[1]; });
-    this.meshRenderer.setMesh(flat);       // convexo: abanico desde el vértice 0
+    const S = this.sombraComp; S.ok = 0; S.n = 0;
+    if (c.sh) { const flat = new Float32Array(c.sh.length * 2); c.sh.forEach((q, i) => { flat[i * 2] = q[0]; flat[i * 2 + 1] = q[1]; });
+      this.meshRenderer.setMesh(flat); return; }       // convexo: abanico desde el vértice 0
+    S.off = c.off; S.n = c.n; S.nv = c.nv; S.k = -1;
+    this._sombra(true);
   }
+  _sombra(forzar) {
+    const i = this.index, S = SombraComp, n = S.n[i]; if (!n) return;
+    if (!forzar && !(Sun.intensity > .05)) return;   // de noche no se ve (la capa se apaga): no gastar
+    const sol = solRedondo(); if (S.ok[i] && sol.k === S.k[i]) return;
+    S.k[i] = sol.k;
+    const nv = S.nv[i], out = _sc[nv] || (_sc[nv] = new Float32Array(nv * 2));
+    sombraPuntos(out, nv, SombrasData.pts, S.off[i], n, sol.dx, sol.dy);
+    if (S.ok[i]) this.meshRenderer.setVertices(out); else { this.meshRenderer.setMesh(out); S.ok[i] = 1; }
+  }
+  tick() { this._sombra(false); }
 }
 // dónde están las lámparas de cada farol, como fracción del cuadro exportado (medidas a ojo; de atrás quedan en el mismo lugar)
 const LAMPARAS = { u_farola: [[.65, .09]], u_farola_orn: [[.5, .2]], u_farol_doble: [[.17, .27], [.77, .18]] };
@@ -137,7 +176,8 @@ export class Prop extends GameObject {
     const f = c.f.endsWith('_atras') ? c.f.slice(0, -6) : c.f;   // vista de atrás: el mismo objeto
     if (f.startsWith('u_farol')) {            // farol: charco de luz en la vereda + brillo en la lámpara
       L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = top * (f === 'u_farola' ? .97 : .88);
-      L.lightIntensity = f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800; L.hasGlowSprite = .55; L.active = 1;
+      // la luz sale de la lámpara (sourceHeight, a media altura del poste: el charco queda más parejo) y por eso más fuerte
+      L.sourceHeight = top * .5; L.lightIntensity = (f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800) * FAROL_K; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
       // brillo en cada lámpara, en la capa 'noche' (aditiva, se prende al bajar el sol): un centro chico y un halo
       const ls = LAMPARAS[f] || null, sw = this.spriteRenderer.originalWidth * e, sh = this.spriteRenderer.originalHeight * e;
@@ -306,9 +346,10 @@ export class Auto extends GameObject {
     this.setFixedRotation(0);
     this.rotation = c.rot || 0;
     A.active = 1;
-    // la sombra: un polígono (MeshRenderer) en la capa de las sombras de las casas; el sprite sigue en la de entidades
+    // la sombra: un polígono (MeshRenderer) en su capa de mallas (la de las casas se rearma entera si cambia una malla: los
+    // autos que doblan la rearmarían en cada cuadro); el sprite sigue en la de entidades
     const [sh, sk] = altoAuto(c.hoja); A.shH = sh; A.shK = sk; A.shOk = 0; A.shDx = 1e9; A.shDy = 1e9;
-    this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
+    this.setLayer('sombrasAutos'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3;
     this._sombra(Math.cos(rot), Math.sin(rot));
     const L = this.lightEmitter; L.lightIntensity = 0; L.active = 0;
     A.faro = -1;
@@ -545,7 +586,8 @@ export class ConurbanoScene extends Scene {
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
-      enabled: true, lightGlow: 'add', baseAmbient: .1, maxLights: 1024,
+      // groundScaleY: el piso se ve aplastado a SYN (0,5), así que los charcos de luz de los faroles son elipses
+      enabled: true, lightGlow: 'add', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
@@ -564,6 +606,7 @@ export class ConurbanoScene extends Scene {
       // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
       manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 },
+      sombrasAutos: { kind: LAYER_KIND.MESH, zIndex: 1.52 },
       sombras: { zIndex: 1.6, ySorting: false, maxItems: Math.max(3000, META.nProps + META.nArboles) },
       cables: { zIndex: 3.5, ySorting: false, maxItems: Math.max(4000, META.nCables + 500) },
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
@@ -579,11 +622,18 @@ export class ConurbanoScene extends Scene {
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 }, pits: { type: Uint8Array, length: (META.PW || 1) * (META.PH || 1) * 4 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
+    [SombrasData, { pts: { type: Float32Array, length: Math.max(3, (META.nSombraPts || 0) * 3) } }],
     [Transito, { grid: { type: Uint16Array, length: Math.max(1, TR.W * TR.H) }, cruces: { type: Float32Array, length: Math.max(6, TR.n * 6) } }],
     [Semaforos, { ids: { type: Int32Array, length: Math.max(4, (TR.nSem || 0) * 4) } }],
   ];
   static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1], [Faro, Math.max(8, META.nAutos) + 1]];
 
+  // la sombra de una casa: los puntos de sus cajas van a SombrasData (la entidad los mira desde su worker)
+  _sombra(h) {
+    if (h.sp && h.sp.length >= 9) { const n = h.sp.length / 3, off = this._sombraCur; SombrasData.pts.set(h.sp, off * 3); this._sombraCur += n;
+      SombraCasa.spawn({ x: h.x, y: h.y, off, n, nv: Math.max(3, Math.min(this._sombraTope, n)) }); }
+    else if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+  }
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
     const bin = await (await fetch(BARRIO + 'piso.bin')).arrayBuffer(), u8 = new Uint8Array(bin), parts = META.pisoPartes;
@@ -602,6 +652,11 @@ export class ConurbanoScene extends Scene {
     // ---- tránsito: la grilla (velocidades, esquinas) y los cruces (con o sin semáforo, rumbo de la primera calle, desfasaje)
     if (TR.n) { const tb = await (await fetch(BARRIO + 'transito.bin')).arrayBuffer(); Transito.grid.set(new Uint16Array(tb));
       (w.cruces || []).forEach((c, k) => { for (let q = 0; q < 6; q++) Transito.cruces[k * 6 + q] = c[q]; }); }
+    // sombras de las casas: los puntos de cada una en SombrasData; cuántos vértices lleva su malla (hasta 16, menos si no entran
+    // todas en las 65535 del arena junto con las de los autos)
+    { let tot = 0, tope = 16; const ns = w.casas.map(h => h.sp ? h.sp.length / 3 : 0), lugar = 65535 - 8 * ((META.nAutos || 0) + 80) - 64;
+      const suma = (t) => ns.reduce((a, n) => a + Math.min(t, n), 0); while (tope > 6 && suma(tope) > lugar) tope--;
+      this._sombraCur = 0; this._sombraTope = tope; tot = suma(tope); if (tot > lugar) console.warn('sombras de casas: no entran todas', tot, lugar); }
     this._sem = [];   // los semáforos: cruce, calle y número (sus luces, en Semaforos.ids)
     if (META.skew) {
       // casas por caras (WeedJS DX-DECOSKEW): la entidad lleva el colisionador; el dibujo son piezas de caras planas, decoraciones
@@ -610,13 +665,13 @@ export class ConurbanoScene extends Scene {
       // Un solo objeto de configuración para todas: cargar no crea basura por pieza.
       const cfg = { x: 0, y: 0, texture: '', scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, tint: 0xffffff, sortOffsetY: 0, innerZ: 0, anchorX: .5, anchorY: .5 };
       for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l });
-        if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
+        this._sombra(h);
         const V = w.variantes[h.v];
         for (let i = 0; i < V.length; i++) { const t = V[i];
           cfg.x = h.ox + t[1]; cfg.y = h.oy + t[2]; cfg.texture = t[0]; cfg.scaleX = t[3]; cfg.scaleY = t[4]; cfg.skewX = t[5]; cfg.skewY = t[6];
           cfg.tint = t[7]; cfg.sortOffsetY = t[8]; cfg.innerZ = t[9]; Decoration.spawn(cfg); } }
     } else for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
-      if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh }); }
+      this._sombra(h); }
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) { let sk = -1; if (p.f === 'u_semaforo' && p.cr >= 0 && this._sem.length < (TR.nSem || 0)) { sk = this._sem.length; this._sem.push({ cid: p.cr, eje: p.ej, sk, f: -1 }); }
@@ -752,12 +807,28 @@ export class ConurbanoScene extends Scene {
     for (const S of this._sem) { const f = faseSemaforo(S.cid, S.eje); if (f === S.f) continue; const o = S.sk * 4, ids = Semaforos.ids;
       if (!ids[o] || !ids[o + 3]) continue; S.f = f;   // el semáforo todavía no armó sus luces
       al(ids[o] - 1, f === 2 ? .95 : 0); al(ids[o + 1] - 1, f === 1 ? .95 : 0); al(ids[o + 2] - 1, f === 0 ? .95 : 0); al(ids[o + 3] - 1, f === 2 ? 0 : .95); } }
+  // ---------- noche: luz de luna. WeedJS ilumina con el ambiente (gris, baseAmbient) más el color del sol por su intensidad; de
+  // noche el sol no está y todo quedaba gris oscuro. Cuando el sol baja, acá se lo cambia por una luna azulada: la escena se
+  // tiñe de azul conservando sus colores, y los faroles, que suman su luz cálida encima, siguen siendo naranjas. Corre después de
+  // que WeedJS avanzó la hora (antes de update) y devuelve la intensidad del sol de verdad, para lo que depende del día
+  luna() {
+    let I0 = Sun.intensity, C0 = Sun.color;
+    if (I0 === this._lunaW && C0 === this._lunaWC) { I0 = this._lunaI0; C0 = this._lunaC0; }   // la hora no avanzó: lo último es nuestro
+    this._lunaI0 = I0; this._lunaC0 = C0;
+    const m = Math.max(0, Math.min(1, (.4 - I0) / .3));   // 0 de día, 1 de noche
+    if (m <= 0) { this._lunaW = NaN; return I0; }
+    const k = (c, s) => ((c >> s) & 255) / 255, mezcla = (s, L) => Math.round((k(C0, s) * (1 - m) + L * m) * 255);
+    Sun.intensity = Math.max(I0, LUNA_I * m); Sun.color = (mezcla(16, LUNA[0]) << 16) | (mezcla(8, LUNA[1]) << 8) | mezcla(0, LUNA[2]);
+    this._lunaW = Sun.intensity; this._lunaWC = Sun.color;
+    return I0;
+  }
   update(dtRatio = 1) {
+    const sol = this.luna();
     this.luces();
     this.afinarGente();
     // las sombras horneadas (casas, calcos) se desvanecen con el sol
-    const si = Math.max(0, Math.min(1, (Sun.intensity || 0) * 1.4 - .2)), Ls = Layer.get('sombrasCasas'), Ld = Layer.get('sombras');
-    if (Ls && Math.abs(Ls.alpha - si) > .02) Ls.alpha = si; if (Ld && Math.abs(Ld.alpha - si) > .02) Ld.alpha = si;
+    const si = Math.max(0, Math.min(1, (sol || 0) * 1.4 - .2));
+    for (const n of SOMBRAS_CAPAS) { const L = Layer.get(n); if (L && Math.abs(L.alpha - si) > .02) L.alpha = si; }
     const Ln = Layer.get('noche'), no = Math.max(0, Math.min(1, 1.15 - si * 1.4)); if (Ln && Math.abs(Ln.alpha - no) > .02) Ln.alpha = no;
     this.lamparas(no);
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);

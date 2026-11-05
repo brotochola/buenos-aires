@@ -1,4 +1,5 @@
-// ===================== sombraAuto.js — la sombra de un auto al sol =====================
+// ===================== sombraAuto.js — la sombra de los autos y de las casas al sol =====================
+// (las casas, al final: sombraPuntos, la envolvente de sus cajas corridas por el sol que haya)
 // La sombra que hace WeedJS (ShadowCaster) es el sprite dado vuelta desde el pie y estirado hacia donde va la sombra: sirve
 // para lo que está parado (gente, árboles, postes), pero un auto está dibujado visto desde arriba (techo y costado), así que
 // su "sombra" salía como otro auto acostado, corrido para el costado. Acá la sombra es la del volumen: el piso que tapa la
@@ -40,5 +41,29 @@ export function sombraAuto(out, rc, rs, ha, hb, dx, dy, k) {
   if (m > 8) m = 8;
   for (let q = 0; q < 8; q++) { const p = _hull[q < m ? q : m - 1], x = _x[p], y = _y[p];
     out[q * 2] = x * rc + y * rs; out[q * 2 + 1] = -x * rs + y * rc; }
+  return out;
+}
+
+// ---------- la sombra de una casa (o de lo que sea que esté hecho de cajas) con el sol que haya
+// P: puntos x, y, z (el punto del piso debajo, px de mundo respecto de la entidad, y la altura en m) desde off, n puntos.
+// Cada uno se corre z · (dx, dy) y out (2·nv floats) recibe la envolvente convexa con nv vértices: si tiene más, se sacan los
+// que menos área aportan (Visvalingam); si tiene menos, se repite el último (triángulos vacíos en el abanico)
+const MAXP = 256, _px = new Float64Array(MAXP), _py = new Float64Array(MAXP), _po = new Int32Array(MAXP), _ph = new Int32Array(MAXP * 2 + 1);
+function crP(o, a, b) { return (_px[a] - _px[o]) * (_py[b] - _py[o]) - (_py[a] - _py[o]) * (_px[b] - _px[o]); }
+export function sombraPuntos(out, nv, P, off, n, dx, dy) {
+  if (n > MAXP) n = MAXP;
+  for (let q = 0; q < n; q++) { const k = (off + q) * 3, z = P[k + 2]; _px[q] = P[k] + z * dx; _py[q] = P[k + 1] + z * dy; _po[q] = q; }
+  for (let a = 1; a < n; a++) { const t = _po[a]; let b = a - 1; while (b >= 0 && (_px[_po[b]] > _px[t] || (_px[_po[b]] === _px[t] && _py[_po[b]] > _py[t]))) { _po[b + 1] = _po[b]; b--; } _po[b + 1] = t; }
+  let m = 0;
+  for (let q = 0; q < n; q++) { const p = _po[q]; while (m >= 2 && crP(_ph[m - 2], _ph[m - 1], p) <= 0) m--; _ph[m++] = p; }
+  for (let q = n - 2, lo = m + 1; q >= 0; q--) { const p = _po[q]; while (m >= lo && crP(_ph[m - 2], _ph[m - 1], p) <= 0) m--; _ph[m++] = p; }
+  if (m > 1) m--;   // el último repite el primero
+  while (m > nv && m > 3) {   // sacar el vértice que menos área aporta
+    let best = 0, ba = Infinity;
+    for (let q = 0; q < m; q++) { const a = Math.abs(crP(_ph[(q + m - 1) % m], _ph[q], _ph[(q + 1) % m])); if (a < ba) { ba = a; best = q; } }
+    for (let q = best; q < m - 1; q++) _ph[q] = _ph[q + 1];
+    m--;
+  }
+  for (let q = 0; q < nv; q++) { const p = _ph[q < m ? q : m - 1]; out[q * 2] = _px[p]; out[q * 2 + 1] = _py[p]; }
   return out;
 }

@@ -14,6 +14,23 @@ const Exportar = (() => {
   async function exportar(B, atlas, F, progreso = () => {}, opts = {}) {
     const t0 = performance.now(), W = B.W, MW = W.MW, MH = W.MH, C = CFG.v;
     const PW = (x, y, z = 0) => [(x + K * y) * SF, (MH - y) * SYN * SF - z * CZ * SF];
+    // la sombra de una casa con el sol que haya en el juego: los vértices de sus cajas como x, y, z (el punto del piso que tienen
+    // debajo, en px de mundo respecto del pie, y la altura en m). El juego corre cada uno z · (cuánto se estira la sombra por
+    // metro, la misma cuenta que WeedJS usa para la gente) y toma la envolvente. Alcanza la envolvente de cada altura: correr
+    // todos los puntos de una altura lo mismo no cambia cuáles quedan en el borde
+    const sombraPts = (cts, o, fx, fy) => { const lv = new Map();
+      for (const cs of cts) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+        const p = [0, 1, 2].map(k => cs.c[k] + sx * cs.h[0] * cs.ax[0][k] + sy * cs.h[1] * cs.ax[1][k] + sz * cs.h[2] * cs.ax[2][k]);
+        const z = Math.round(Math.max(0, p[2]) * 20) / 20, q = PW(o.x0 + p[0], o.y0 + p[1]); if (!lv.has(z)) lv.set(z, []); lv.get(z).push([q[0] - fx, q[1] - fy]); }
+      // de esos, sólo los que alguna vez quedan en el borde: los que están en la envolvente con el sol en 48 rumbos y 3 largos
+      // (de 3 a 31 px por metro: shadowLengthRatio de 0,2 a 2 · CZ · SF), y sin el corrimiento (sol a pique)
+      const P = []; for (const [z, ps] of lv) for (const [x, y] of R3.hull(ps)) P.push([r1(x), r1(y), z]);
+      const usa = new Set();
+      for (let a = 0; a < 48; a++) for (const L of [0, 3, 10, 31]) { if (!L && a) continue;
+        const dx = Math.cos(a / 48 * 2 * Math.PI) * L, dy = Math.sin(a / 48 * 2 * Math.PI) * L;
+        for (const q of R3.hull(P.map((p, i) => [p[0] + p[2] * dx, p[1] + p[2] * dy, i]))) usa.add(q[2]); }
+      const out = []; for (const i of [...usa].sort((a, b) => a - b)) out.push(...P[i]); return out; };
+    let nSombraPts = 0;
     const WW = Math.ceil((MW + K * MH) * SF), WH = Math.ceil(MH * SYN * SF);
     const archivos = [];   // [ruta, Uint8Array]
     const txt = (s) => new TextEncoder().encode(s), json = (o) => txt(JSON.stringify(o));
@@ -88,18 +105,14 @@ const Exportar = (() => {
       for (const it of rendered) { const axF = it.ax + (it.foot[0] + K * it.foot[1]) * TDp, ayF = it.ay - it.foot[1] * SYN * TDp;
         franjas["o" + it.e.id] = it.strips.map(s => [r2((s.x - axF) / DET), r2((s.g - ayF) / DET), s.pieces.map(q => [r2(s.w / 2 / DET), r2((q.t + q.h / 2 - s.g) / DET)])]); }
       // ---------- 2. instancias de casas, tapiales y postes
-      const byId = new Map(rendered.map(it => [it.e.id, it])), SUN = R3.SUN;
+      const byId = new Map(rendered.map(it => [it.e.id, it]));
       for (const o of B.objs) {
         const it = byId.get(o.e.id), fdx = it.foot[0], fdy = it.foot[1], [fx, fy] = PW(o.x0 + fdx, o.y0 + fdy);
         const rec = { o: it.hoja, a: "o" + o.e.id, x: r1(fx), y: r1(fy), k: o.kind };
         if (o.collider) rec.col = o.collider.map(([x, y]) => { const q = PW(x, y); return [r1(q[0] - fx), r1(q[1] - fy)]; });
         else rec.r = r1(.15 * 13.5);
         if (o.e.spec.t === "poste" && o.e.spec.l) rec.l = 1;           // poste de madera con lámpara
-        if (it.casters.length) { const pts = [];
-          for (const cs of it.casters) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-            const p = [0, 1, 2].map(k => cs.c[k] + sx * cs.h[0] * cs.ax[0][k] + sy * cs.h[1] * cs.ax[1][k] + sz * cs.h[2] * cs.ax[2][k]);
-            const tt = Math.max(0, p[2]) / Math.max(.05, SUN[2]), q = PW(o.x0 + p[0] - SUN[0] * tt, o.y0 + p[1] - SUN[1] * tt); pts.push([q[0] - fx, q[1] - fy]); }
-          rec.sh = R3.hull(pts).map(([x, y]) => [r1(x), r1(y)]); }
+        if (it.casters.length) { rec.sp = sombraPts(it.casters, o, fx, fy); nSombraPts += rec.sp.length / 3; }
         casas.push(rec);
       }
     } else {
@@ -128,7 +141,6 @@ const Exportar = (() => {
       for (const id in H.variantes) variantes[id] = H.variantes[id].map(t => [nombreDe[t[0]], ...t.slice(1)]);
       console.log("caras:", H.nDisenos, "diseños,", H.nTexturas, "texturas,", H.piezas.length, "piezas en", hojasCaras, "hojas,", Object.keys(variantes).length, "variantes");
       // ---------- 2'. instancias: el origen de la casa (de ahí cuelgan las piezas), el pie (la entidad), colisionador y sombra
-      const SUN = R3.SUN;
       for (const o of B.objs) {
         const V = H.pies[o.e.id], [ox, oy] = PW(o.x0, o.y0), [fx, fy] = PW(o.x0 + V.foot[0], o.y0 + V.foot[1]);
         const rec = { v: o.e.id, ox: r2(ox), oy: r2(oy), x: r1(fx), y: r1(fy), k: o.kind };
@@ -137,11 +149,7 @@ const Exportar = (() => {
         else rec.r = r1(.15 * 13.5);
         if (o.e.spec.t === "poste" && o.e.spec.l) rec.l = 1;
         const cts = o.e.spec.t !== "poste" ? V.casters.filter(c => !c.noGround) : [];
-        if (cts.length) { const pts = [];
-          for (const cs of cts) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-            const p = [0, 1, 2].map(k => cs.c[k] + sx * cs.h[0] * cs.ax[0][k] + sy * cs.h[1] * cs.ax[1][k] + sz * cs.h[2] * cs.ax[2][k]);
-            const tt = Math.max(0, p[2]) / Math.max(.05, SUN[2]), q = PW(o.x0 + p[0] - SUN[0] * tt, o.y0 + p[1] - SUN[1] * tt); pts.push([q[0] - fx, q[1] - fy]); }
-          rec.sh = R3.hull(pts).map(([x, y]) => [r1(x), r1(y)]); }
+        if (cts.length) { rec.sp = sombraPts(cts, o, fx, fy); nSombraPts += rec.sp.length / 3; }
         casas.push(rec);
       }
     }
@@ -334,7 +342,7 @@ const Exportar = (() => {
     const nFranjas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
-      hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
+      hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nSombraPts, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
       ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}),
       // rotondas: centro en px de pantalla (x, y) y en m (mx, my), radios de la isla y de la calzada (m) y las salidas: rumbo de cada
