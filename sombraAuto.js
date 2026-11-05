@@ -1,11 +1,10 @@
-// ===================== sombraAuto.js — la sombra de los autos y de las casas al sol =====================
-// (las casas, al final: volumenSombra, el volumen convexo de sus cajas, que WeedJS proyecta con el sol en la placa)
-// La sombra que hace WeedJS (ShadowCaster) es el sprite dado vuelta desde el pie y estirado hacia donde va la sombra: sirve
-// para lo que está parado (gente, árboles, postes), pero un auto está dibujado visto desde arriba (techo y costado), así que
-// su "sombra" salía como otro auto acostado, corrido para el costado. Acá la sombra es la del volumen: el piso que tapa la
-// caja del auto, o sea la huella más el techo corrido por el sol (la envolvente convexa de los dos), un polígono de 8 vértices
-// que el auto lleva como MeshRenderer en la capa de sombras de las casas (mismo negro, misma transparencia, se apaga de noche).
-// La usan conurbanoScene.js y el banco de pruebas sombrasScene.js.
+// ===================== sombraAuto.js — las sombras de volumen de los autos y de las casas =====================
+// La sombra que hace WeedJS con un ShadowCaster es el sprite dado vuelta desde el pie y estirado hacia donde va la sombra: sirve
+// para lo que está parado (gente, árboles, postes). Un auto o una casa vistos desde arriba son volúmenes: acá se arman como
+// mallas con una altura por vértice (cajaAuto, volumenSombra) para la capa sunProjected de WeedJS, que corre cada vértice
+// según su altura y el sol de cada cuadro, igual que el sol corre el punto a esa altura en el sprite de un ShadowCaster.
+// Así casas, autos, gente y árboles proyectan para el mismo lado y con el mismo largo, y la capa (alphaBySun 'shadow') les da
+// la misma oscuridad. La usan conurbanoScene.js y el banco de pruebas sombrasScene.js.
 
 // los autos del paquete están dibujados con el piso aplastado a S (hornear_autos.js), a 18 px/m: una altura de h m se ve
 // de h·18·√(1−S²) px
@@ -19,28 +18,22 @@ export function altoAuto(hoja) {
   const m = String(hoja || '').split('_')[0], a = ALTO[m] || [1.45, .78];
   return [a[0] * AUTO_PXM * AUTO_CZ, a[1]];
 }
-const _x = new Float64Array(8), _y = new Float64Array(8), _o = new Int32Array(8), _hull = new Int32Array(17);
-function cr(o, a, b) { return (_x[a] - _x[o]) * (_y[b] - _y[o]) - (_y[a] - _y[o]) * (_x[b] - _x[o]); }
-// out (Float32Array de 16): los 8 vértices (x, y), en coordenadas locales del auto (girado rc, rs = cos y sen del rumbo de
-// pantalla). ha, hb: medio largo y medio ancho de la huella (px del dibujo). dx, dy: adónde cae el techo (px de mundo).
-// k: achique del techo. Una envolvente de menos de 8 vértices repite el último (triángulos vacíos en el abanico).
-export function sombraAuto(out, rc, rs, ha, hb, dx, dy, k) {
+const _x = new Float64Array(8), _y = new Float64Array(8);
+
+// ---------- la sombra de un auto como volumen (capa sunProjected de WeedJS)
+// La caja del auto: la huella a altura 0 y el techo (la huella achicada a k, centrada) a la altura del auto. La placa corre el
+// techo con el sol en cada cuadro, así que la malla sólo cambia cuando el auto gira: la huella en el piso aplastado depende del
+// rumbo. out (Float32Array de 16): los 8 vértices (x, y) en coordenadas locales del auto (girado rc, rs); CAJA_T, sus
+// triángulos (techo y cuatro costados: el piso queda tapado por ellos); cajaAlturas(alto), las alturas de los 8.
+export const CAJA_T = [4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7];
+export function cajaAlturas(alto) { return [0, 0, 0, 0, alto, alto, alto, alto]; }
+export function cajaAuto(out, rc, rs, ha, hb, k) {
   const n2 = rc * rc + rs * rs; if (!(n2 > 1e-6)) { rc = 1; rs = 0; } else { const l = Math.sqrt(n2); rc /= l; rs /= l; }
-  // rumbo verdadero θ (en el piso sin aplastar): tan θ = tan φ / S
   const th = Math.atan2(rs, AUTO_S * rc), ct = Math.cos(th), st = Math.sin(th);
   const ux = ha * ct, uy = ha * AUTO_S * st, vx = -hb * st, vy = hb * AUTO_S * ct;
   _x[0] = ux + vx; _y[0] = uy + vy; _x[1] = ux - vx; _y[1] = uy - vy; _x[2] = -ux - vx; _y[2] = -uy - vy; _x[3] = -ux + vx; _y[3] = -uy + vy;
-  for (let q = 0; q < 4; q++) { _x[q + 4] = _x[q] * k + dx; _y[q + 4] = _y[q] * k + dy; }
-  // envolvente convexa (cadena monótona)
-  for (let q = 0; q < 8; q++) _o[q] = q;
-  for (let a = 1; a < 8; a++) { const t = _o[a]; let b = a - 1; while (b >= 0 && (_x[_o[b]] > _x[t] || (_x[_o[b]] === _x[t] && _y[_o[b]] > _y[t]))) { _o[b + 1] = _o[b]; b--; } _o[b + 1] = t; }
-  let m = 0;
-  for (let q = 0; q < 8; q++) { const p = _o[q]; while (m >= 2 && cr(_hull[m - 2], _hull[m - 1], p) <= 0) m--; _hull[m++] = p; }
-  for (let q = 6, lo = m + 1; q >= 0; q--) { const p = _o[q]; while (m >= lo && cr(_hull[m - 2], _hull[m - 1], p) <= 0) m--; _hull[m++] = p; }
-  m--;   // el último repite el primero
-  if (m > 8) m = 8;
-  for (let q = 0; q < 8; q++) { const p = _hull[q < m ? q : m - 1], x = _x[p], y = _y[p];
-    out[q * 2] = x * rc + y * rs; out[q * 2 + 1] = -x * rs + y * rc; }
+  for (let q = 0; q < 4; q++) { _x[q + 4] = _x[q] * k; _y[q + 4] = _y[q] * k; }
+  for (let q = 0; q < 8; q++) { const x = _x[q], y = _y[q]; out[q * 2] = x * rc + y * rs; out[q * 2 + 1] = -x * rs + y * rc; }
   return out;
 }
 

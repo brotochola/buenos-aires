@@ -5,12 +5,12 @@
 import { BARRIOS } from './barrios.js';
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
-import { sombraAuto, altoAuto } from './sombraAuto.js';
+import { cajaAuto, CAJA_T, cajaAlturas, altoAuto } from './sombraAuto.js';
 
 const { Scene, GameObject, RigidBody, Collider, SpriteRenderer, MeshRenderer, ShadowCaster, SpriteSheetRegistry, Camera, Mouse, Keyboard, Sun, Decoration, LAYER_KIND, enums } = WEED;
 const { ShapeType } = enums;
-// los parámetros vienen en la URL de la escena (sombras.html le pasa los suyos): en los workers location es la del worker
-const Q = (() => { try { return new URL(import.meta.url).searchParams; } catch (e) { return new URLSearchParams(''); } })();
+// los parámetros de la página, iguales en todos los hilos (WEED.params: en un worker, location es la del worker)
+const Q = WEED.params || new URLSearchParams('');
 const DIR = BARRIOS[Q.get('barrio')] ? Q.get('barrio') : 'parquechas';
 const META = BARRIOS[DIR];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
@@ -49,19 +49,14 @@ export class CocheP extends GameObject {
     const k = ks[best]; this.setAnimation(k.n); this.flipX = k.f === 1;
     const ap = APOYO[c.hoja]; this.spriteRenderer.anchorY = (ap && ap[k.n]) || .5;
     this.shadowCaster.heightMultiplier = VIEJO ? .55 : 0;
-    this._hoja = c.hoja; this._rot = c.rot; this._dx = NaN; this._dy = NaN; this._mesh = false;
-    if (!VIEJO) { this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = .3; this.sombra(); }
+    this._hoja = c.hoja; this._rot = c.rot;
+    // la sombra como en el juego: la caja del auto (huella del modelo, a 9 px por metro, y techo achicado a su altura) en la capa
+    // sunProjected; la placa la corre con el sol
+    if (!VIEJO) { this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;
+      const d = AUTOS_MED[this._hoja.split('_')[0]] || [4.4, 1.8], [h, k] = altoAuto(this._hoja);
+      this.meshRenderer.setMesh(cajaAuto(_sb, Math.cos(this._rot), Math.sin(this._rot), d[0] * 9, d[1] * 9, k), CAJA_T);
+      this.meshRenderer.setHeights(cajaAlturas(h)); }
   }
-  // la huella del auto (del modelo: medio largo y medio ancho a 9 px por metro) y el techo corrido por el sol
-  sombra() {
-    const d = AUTOS_MED[this._hoja.split('_')[0]] || [4.4, 1.8], [h, k] = altoAuto(this._hoja), r = Sun.shadowLengthRatio * h;
-    const dx = Sun.shadowDirX * r, dy = Sun.shadowDirY * r;
-    if (Math.abs(dx - this._dx) + Math.abs(dy - this._dy) < .5) return;
-    this._dx = dx; this._dy = dy;
-    sombraAuto(_sb, Math.cos(this._rot), Math.sin(this._rot), d[0] * 9, d[1] * 9, dx, dy, k);
-    if (this._mesh) this.meshRenderer.setVertices(_sb); else { this.meshRenderer.setMesh(_sb); this._mesh = true; }
-  }
-  tick() { if (!VIEJO) this.sombra(); }
 }
 export class GenteP extends GameObject {
   static isStatic = true;
@@ -89,7 +84,7 @@ export class ArbolP extends GameObject {
 export class SombrasScene extends Scene {
   static config = {
     worldWidth: WW, worldHeight: WH, seed: 3,
-    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 4000, maxMeshIndices: 0 },
+    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 4000, maxMeshIndices: 4000 },
     physics: { gravity: { x: 0, y: 0 } },
     decoration: { maxDecorations: 4000, maxAttachedDecorationsPerEntity: 64 },
     lighting: {
@@ -100,7 +95,7 @@ export class SombrasScene extends Scene {
     },
     // ?piso=shader: el piso como el del barrio (capa worldRect con shader), para ver si las sombras del sol caen sobre él
     layers: { ...(PISO_SHADER ? { piso: { zIndex: .5, shader: { fragment: { webgl: 'pruebas/sombras/piso.frag' }, worldRect: { width: WW, height: WH },
-      textures: [{ name: 'nada', format: 'r8unorm', size: { width: 4, height: 4 } }], uniforms: { uK: { value: 1, type: 'f32' } } } } } : {}), sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5 }, fondo: { zIndex: .5, ySorting: false, maxItems: 4000 }, sombras: { zIndex: 1.6, ySorting: false, maxItems: 2000 }, rotulos: { zIndex: 6, ySorting: false, maxItems: 400 } },
+      textures: [{ name: 'nada', format: 'r8unorm', size: { width: 4, height: 4 } }], uniforms: { uK: { value: 1, type: 'f32' } } } } } : {}), sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, sunProjected: true }, fondo: { zIndex: .5, ySorting: false, maxItems: 4000 }, sombras: { zIndex: 1.6, ySorting: false, maxItems: 2000 }, rotulos: { zIndex: 6, ySorting: false, maxItems: 400 } },
   };
   static assets = { spritesheets: {
     arboles: { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles.png' },

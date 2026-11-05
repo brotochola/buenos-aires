@@ -14,7 +14,7 @@ import { BARRIOS } from './barrios.js';
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
 // la sombra de los autos al sol: la del volumen (huella + techo corrido), no el sprite dado vuelta
-import { sombraAuto, altoAuto, volumenSombra } from './sombraAuto.js';
+import { cajaAuto, CAJA_T, cajaAlturas, altoAuto, volumenSombra } from './sombraAuto.js';
 const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'barrio'; } catch (e) { return 'barrio'; } })();
 const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
@@ -29,8 +29,8 @@ const LUNA = 0x5473f2, LUNA_I = .3;
 // los faroles alumbran desde arriba (LightEmitter.sourceHeight): con la misma intensidad el pie quedaría oscuro
 const FAROL_K = 2.2;
 // lugar en el arena de mallas: los volúmenes de las casas tienen a lo sumo tantos vértices como puntos exportados (nSombraPts) y
-// a lo sumo el doble de triángulos; los autos, 8 vértices en abanico
-const MALLA_V = (META.nSombraPts || 0) + 8 * ((META.nAutos || 0) + 80) + 64, MALLA_I = 6 * (META.nSombraPts || 0) + 64;
+// a lo sumo el doble de triángulos; los autos, una caja de 8 vértices y 10 triángulos
+const MALLA_V = (META.nSombraPts || 0) + 8 * ((META.nAutos || 0) + 80) + 64, MALLA_I = 6 * (META.nSombraPts || 0) + 30 * ((META.nAutos || 0) + 80) + 64;
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
@@ -80,14 +80,14 @@ export class AutoComp extends Component {
     minSteerFactor: Float32Array, maxSteerSpeed: Float32Array, lastKey: Int16Array,
     hl: Float32Array, hw: Float32Array,   // medio largo y medio ancho del colisionador (px): la IA y la gente miran el tamaño de cada vehículo
     ha: Float32Array, hb: Float32Array,   // medio largo y medio ancho de la huella en el piso, en px del dibujo (18 px/m, piso aplastado a AUTO_S)
-    faro: Int32Array,                     // la entidad Faro que lleva adelante (-1: sin luces)
+    faros: Uint8Array,                    // 1: lleva faros (su luz, corrida adelante con offsetX, y dos brillos)
     // estado de la IA: en componentes (no en campos del objeto), porque una entidad puede pasar de un worker de lógica a otro
     sx: Float32Array, sy: Float32Array, sr: Float32Array, lx: Float32Array, ly: Float32Array, stuck: Float32Array, libre: Float32Array, parado: Float32Array,
     pf: Float32Array,      // qué tan cerca de la máxima maneja (0,8 a 0,97: nadie se pasa)
     espera: Float32Array,  // segundos esperando que pase el de la derecha (a los 4 s sigue: nadie se queda trabado)
     rs: Int8Array,         // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
-    // su sombra (sombraAuto.js): alto (px), achique del techo, y con qué rumbo y qué sol se armó el polígono (1 en shOk si ya hay)
-    shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shDx: Float32Array, shDy: Float32Array, shOk: Uint8Array };
+    // su sombra (cajaAuto, sombraAuto.js): alto (px), achique del techo, y con qué rumbo se armó la caja (1 en shOk si ya hay)
+    shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shOk: Uint8Array };
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -301,13 +301,9 @@ const _huella = [0, 0], _sb = new Float32Array(16);
 // donde toca el piso y no tapa a los árboles y a la gente que tiene adelante
 const _apoyo = new Map();
 function apoyoDe(sheet) { let t = _apoyo.get(sheet); if (t === undefined) { t = APOYO[sheet.slice(5)] || null; _apoyo.set(sheet, t); } return t; }
-// la luz de los faros: el LightEmitter alumbra desde el punto de su entidad, así que va en una entidad aparte que el auto
-// lleva delante (Auto.tick); los dos brillos de los faros van pegados al auto, en la capa 'noche'
-const LUZ_FARO = 0xfff0d0;
-export class Faro extends GameObject {
-  static components = [LightEmitter];
-  onSpawned(c = {}) { const L = this.lightEmitter; L.lightColor = LUZ_FARO; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = c.i || 700; L.active = 1; }
-}
+// los faros: la luz del propio auto, corrida hacia adelante (LightEmitter.offsetX gira con el auto), y dos brillos pegados al
+// auto, en la capa 'noche'
+const LUZ_FARO = 0xfff0d0, FARO_ADELANTE = 18;   // px delante del frente de la huella
 export class Auto extends GameObject {
   static deriveSpeed = true;
   static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, AutoComp];
@@ -326,28 +322,29 @@ export class Auto extends GameObject {
     this.setFixedRotation(0);
     this.rotation = c.rot || 0;
     A.active = 1;
-    // la sombra: un polígono (MeshRenderer) en su capa de mallas (la de las casas se rearma entera si cambia una malla: los
-    // autos que doblan la rearmarían en cada cuadro); el sprite sigue en la de entidades
-    const [sh, sk] = altoAuto(c.hoja); A.shH = sh; A.shK = sk; A.shOk = 0; A.shDx = 1e9; A.shDy = 1e9;
-    this.setLayer('sombrasAutos'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;
+    // la sombra: su caja (MeshRenderer con alturas) en la capa sunProjected de las casas, que se compone una vez: donde pisa la
+    // sombra de una casa no oscurece doble. La placa la corre con el sol; acá sólo se rehace cuando el auto gira. El sprite
+    // sigue en la capa de entidades
+    const [sh, sk] = altoAuto(c.hoja); A.shH = sh; A.shK = sk; A.shOk = 0;
+    this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;
     this._sombra(Math.cos(rot), Math.sin(rot));
-    const L = this.lightEmitter; L.lightIntensity = 0; L.active = 0;
-    A.faro = -1;
-    if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros)
-      const f = Faro.spawn({ x: c.x, y: c.y }); A.faro = f ? f.index : -1;
+    const L = this.lightEmitter; A.faros = c.faros ? 1 : 0;
+    if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros, y corre la luz)
+      L.lightColor = LUZ_FARO; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = c.i || 700; L.offsetX = A.hl + FARO_ADELANTE; L.offsetY = 0; L.active = 1;
       for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8, layer: 'noche' });
-    }
+    } else { L.lightIntensity = 0; L.offsetX = 0; L.offsetY = 0; L.active = 0; }
     this._frame();
   }
-  // rehace el polígono de la sombra si el auto giró más de 2° o el sol se corrió medio píxel desde la última vez
+  // rehace la caja de la sombra si el auto giró más de 2° desde la última vez (el sol lo pone la placa)
   _sombra(rc, rs) {
-    const i = this.index, A = AutoComp, r = Sun.shadowLengthRatio * A.shH[i], dx = Sun.shadowDirX * r, dy = Sun.shadowDirY * r;
-    if (A.shOk[i] && Math.abs(dx - A.shDx[i]) + Math.abs(dy - A.shDy[i]) < .5 && rc * A.shC[i] + rs * A.shS[i] > .9994) return;
-    A.shDx[i] = dx; A.shDy[i] = dy; A.shC[i] = rc; A.shS[i] = rs;
-    sombraAuto(_sb, rc, rs, A.ha[i], A.hb[i], dx, dy, A.shK[i]);
-    if (A.shOk[i]) this.meshRenderer.setVertices(_sb); else { this.meshRenderer.setMesh(_sb); A.shOk[i] = 1; }
+    const i = this.index, A = AutoComp;
+    if (A.shOk[i] && rc * A.shC[i] + rs * A.shS[i] > .9994) return;
+    A.shC[i] = rc; A.shS[i] = rs;
+    cajaAuto(_sb, rc, rs, A.ha[i], A.hb[i], A.shK[i]);
+    if (A.shOk[i]) this.meshRenderer.setVertices(_sb);
+    else { this.meshRenderer.setMesh(_sb, CAJA_T); this.meshRenderer.setHeights(cajaAlturas(A.shH[i])); A.shOk[i] = 1; }
   }
-  onDespawned() { const A = this.autoComp; A.active = 0; if (A.faro >= 0) { GameObject.despawn(A.faro); A.faro = -1; } }
+  onDespawned() { this.autoComp.active = 0; }
   // agarre lateral (las ruedas no patinan de costado)
   _friction() { const i = this.index; GameObject.getHeadingAxes(i, _h);
     const lat = dot2(RigidBody.vx[i], RigidBody.vy[i], _h.rightX, _h.rightY), k = AutoComp.lateralFriction[i];
@@ -373,12 +370,11 @@ export class Auto extends GameObject {
       // el colisionador, a la medida de la huella con este rumbo; los brillos de los faros, en el frente de la huella
       const [L, W] = huellaAuto(AutoComp, i, k.c, k.s, _huella);
       if (Math.abs(L * .5 - AutoComp.hl[i]) > .5 || Math.abs(W * .5 - AutoComp.hw[i]) > .5) { this.collider.width = L; this.collider.height = W; AutoComp.hl[i] = L * .5; AutoComp.hw[i] = W * .5; }
-      if (AutoComp.faro[i] >= 0 && this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; } } }
+      if (AutoComp.faros[i]) { LightEmitter.offsetX[i] = L * .5 + FARO_ADELANTE;   // la luz, delante del frente de la huella
+        if (this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; } } } }
   }
   tick() { const i = this.index; if (!Transform.active[i]) return; this._friction(); this._frame();
-    if (Transform.rotC) { const rc = Transform.rotC[i], rs = Transform.rotS[i]; if (rc * rc + rs * rs > .5) this._sombra(rc, rs); }
-    const f = AutoComp.faro[i];   // la luz de los faros, delante del auto
-    if (f >= 0) { GameObject.getHeadingAxes(i, _h); const d = AutoComp.hl[i] + 18; Transform.x[f] = Transform.x[i] + _h.frontX * d; Transform.y[f] = Transform.y[i] + _h.frontY * d; } }
+    if (Transform.rotC) { const rc = Transform.rotC[i], rs = Transform.rotS[i]; if (rc * rc + rs * rs > .5) this._sombra(rc, rs); } }
 }
 export class AutoEstacionado extends Auto {}
 export class Chatarra extends Auto {}
@@ -586,10 +582,10 @@ export class ConurbanoScene extends Scene {
           uRX: f32(ROT0 ? ROT0.mx : 0), uRY: f32(ROT0 ? ROT0.my : 0), uRI: f32(ROT0 ? ROT0.ri : 0), uRE: f32(ROT0 ? ROT0.re : 0) } } },
       // manchas, roturas y basura del piso (gd_*): arriba del piso, debajo de las sombras
       manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
-      // las sombras de mallas, en negro opaco: alphaBySun 'shadow' las deja tan oscuras como la sombra de una persona, se
-      // apagan de noche y, como cada capa se compone una sola vez, dos mallas que se pisan no oscurecen doble
+      // las sombras de casas y autos: volúmenes en negro opaco que la placa corre con el sol (sunProjected). alphaBySun 'shadow'
+      // las deja tan oscuras como la sombra de una persona y las apaga de noche; la capa se compone una sola vez, así que dos
+      // sombras que se pisan no oscurecen doble
       sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, sunProjected: true },   // alphaBySun 'shadow' por defecto
-      sombrasAutos: { kind: LAYER_KIND.MESH, zIndex: 1.52, alphaBySun: 'shadow' },
       // las sombras horneadas de los objetos (sprites con su propia transparencia): se desvanecen con el sol, de 0 con
       // intensidad 0,143 a 1 con 0,857
       sombras: { zIndex: 1.6, ySorting: false, maxItems: Math.max(3000, META.nProps + META.nArboles), alphaBySun: { from: .143, to: .857 } },
@@ -612,7 +608,7 @@ export class ConurbanoScene extends Scene {
     [Transito, { grid: { type: Uint16Array, length: Math.max(1, TR.W * TR.H) }, cruces: { type: Float32Array, length: Math.max(6, TR.n * 6) } }],
     [Semaforos, { ids: { type: Int32Array, length: Math.max(4, (TR.nSem || 0) * 4) } }],
   ];
-  static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1], [Faro, Math.max(8, META.nAutos) + 1]];
+  static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1]];
 
   // la sombra de una casa: su volumen, de los puntos de sus cajas, va a SombrasData (la entidad lo lee desde su worker)
   _sombra(h) {

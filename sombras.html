@@ -19,7 +19,7 @@
   addEventListener('error', (e) => { $('err').textContent = 'Error: ' + (e.message || e.error); });
   try {
     const game = new WEED.GameEngine({ debug: false, autoResize: true });
-    await game.loadScene(new URL('./sombrasScene.js' + location.search, import.meta.url).href);
+    await game.loadScene(new URL('./sombrasScene.js', import.meta.url).href);   // los parámetros los lee con WEED.params
     const sc = () => window.__sombras, show = () => { const S = WEED.Sun; $('hh').textContent = sc().hora + ' h · elevación ' + S.elevation.toFixed(0) + '° · rumbo ' + S.angle.toFixed(0) + '°'; };
     $('hM').onclick = () => { sc().setHora(sc().hora - 1); show(); }; $('hP').onclick = () => { sc().setHora(sc().hora + 1); show(); };
     show();
