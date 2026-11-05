@@ -90,12 +90,34 @@ export class AutoComp extends Component {
     shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shOk: Uint8Array };
 }
 
+// ---------- luces que se prenden a su hora: faroles, postes con lámpara y faros de autos
+// Cada luz sortea al nacer cuándo se prende (entre las 18 y las 19) y cuándo se apaga (entre las 6 y las 7), y su tick la
+// prende o la apaga con sus brillos. De día tienen que estar apagadas: su luz se sumaría a la del sol y, como la iluminación
+// recorta en 1, borraría las sombras de alrededor. En un componente (no en campos del objeto): los ve cualquier hilo
+export class LuzHora extends Component {
+  // prende, apaga: horas; base: intensidad de su luz (0: no es una luz); on: 1 prendida, 0 apagada, 2 sin decidir;
+  // ag: cuántas de sus decoraciones son brillos (las primeras), y su alfa (a0 la de las pares, a1 la de las impares)
+  static ARRAY_SCHEMA = { prende: Float32Array, apaga: Float32Array, base: Float32Array, on: Uint8Array, ag: Uint8Array, a0: Float32Array, a1: Float32Array };
+}
+const LUZ_TICK = 30;   // cada cuántos cuadros mira la hora cada luz (con el día de 8 minutos, 1 cuadro son 0,3 minutos de juego)
+function luzNace(go, ag, a0, a1) {
+  const i = go.index, L = LuzHora; L.prende[i] = 18 + rng(); L.apaga[i] = 6 + rng(); L.base[i] = LightEmitter.lightIntensity[i];
+  L.on[i] = 2; L.ag[i] = ag; L.a0[i] = a0; L.a1[i] = a1; luzHora(go);
+}
+function luzHora(go) {
+  const i = go.index, L = LuzHora; if (!(L.base[i] > 0)) return;
+  const h = Sun.hour, on = h >= L.prende[i] || h < L.apaga[i] ? 1 : 0; if (on === L.on[i]) return;
+  L.on[i] = on; LightEmitter.active[i] = on; LightEmitter.lightIntensity[i] = on ? L.base[i] : 0;
+  for (let q = 0, n = Math.min(L.ag[i], go.getAttachedDecorationCount()); q < n; q++) { const d = go.getAttachedDecoration(q); if (d) d.alpha = on ? (q & 1 ? L.a1[i] : L.a0[i]) : 0; }
+}
+
 // ---------- casas, tapiales y postes (sprites horneados con R3)
 // La entidad sólo lleva el colisionador y la luz de la ventana. El dibujo va en franjas verticales (Decoration), cada una
 // con su y de orden en la base de la pared de esa columna: así el ySort sabe qué tapa a qué aunque la casa esté girada.
 export class Casa extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, LightEmitter];
+  static tickInterval = LUZ_TICK;
+  static components = [RigidBody, Collider, LightEmitter, LuzHora];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     if (c.col) {
@@ -114,7 +136,9 @@ export class Casa extends GameObject {
     const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
     L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
     L.sourceHeight = on ? 50 : 0; L.lightIntensity = on ? 1500 * FAROL_K : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
+    luzNace(this, 0, 0, 0);   // el poste se prende a su hora (su brillo es el de la luz: hasGlowSprite)
   }
+  tick() { luzHora(this); }
 }
 // una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
 // piezas de 64 px como decoraciones, que se ordenan con la y del padre pero se recortan cada una por su propio centro
@@ -142,7 +166,8 @@ const LAMPARAS = { u_farola: [[.65, .09]], u_farola_orn: [[.5, .2]], u_farol_dob
 // árboles, faroles, semáforos, contenedores… (lo que frena un auto); lo demás va como Decoration
 export class Prop extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, LightEmitter];
+  static tickInterval = LUZ_TICK;
+  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, LightEmitter, LuzHora];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     this.setSprite('props', c.f, 0);
@@ -164,8 +189,9 @@ export class Prop extends GameObject {
       if (ls) for (const [fx, fy] of ls) { const dx = (fx - an[0]) * sw * (c.fl ? -1 : 1), dy = (fy - an[1]) * sh;
         this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5, layer: 'noche' });
         this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5, layer: 'noche' }); }
+      luzNace(this, ls ? ls.length * 2 : 0, 1, .5);   // se prende a su hora, con sus brillos (centro y halo de cada lámpara)
     } else {
-      L.lightIntensity = 0; L.active = 0;
+      L.lightIntensity = 0; L.active = 0; this.luzHora.base = 0;
       // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva);
       // de atrás (u_semaforo_atras) no se ven las luces
       // con datos de tránsito: rojo, amarillo y verde (y una tapa para la roja, que en el dibujo está prendida), pegados al semáforo
@@ -177,6 +203,7 @@ export class Prop extends GameObject {
       else if (c.f === 'u_semaforo' && !TR.n) { const rojo = rng() < .5; this.addDecoration('_lightGradient', 0, -top * (rojo ? .87 : .7), .35, .35, 0, { tint: rojo ? 0xff3b30 : 0x36d96b, alpha: .85, anchorX: .5, anchorY: .5, layer: 'brillos' }); }
     }
   }
+  tick() { luzHora(this); }
 }
 
 // árbol del editor: el tronco es el sprite; cada rama (con sus hojas) es una decoración colgada, anclada en su base, que se mece.
@@ -306,7 +333,7 @@ function apoyoDe(sheet) { let t = _apoyo.get(sheet); if (t === undefined) { t = 
 const LUZ_FARO = 0xfff0d0, FARO_ADELANTE = 18;   // px delante del frente de la huella
 export class Auto extends GameObject {
   static deriveSpeed = true;
-  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, AutoComp];
+  static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, LuzHora, AutoComp];
   onSpawned(c = {}) {
     // cada cuadro de las hojas está centrado en el punto donde el vehículo apoya en el piso
     this.setSpritesheet('auto_' + (c.hoja || 'hatch_rojo')); this.setAnimation('0');
@@ -332,7 +359,8 @@ export class Auto extends GameObject {
     if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros, y corre la luz)
       L.lightColor = LUZ_FARO; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = c.i || 700; L.offsetX = A.hl + FARO_ADELANTE; L.offsetY = 0; L.active = 1;
       for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8, layer: 'noche' });
-    } else { L.lightIntensity = 0; L.offsetX = 0; L.offsetY = 0; L.active = 0; }
+      luzNace(this, 2, .9, .9);   // los faros se prenden a su hora, con sus dos brillos
+    } else { L.lightIntensity = 0; L.offsetX = 0; L.offsetY = 0; L.active = 0; this.luzHora.base = 0; }
     this._frame();
   }
   // rehace la caja de la sombra si el auto giró más de 2° desde la última vez (el sol lo pone la placa)
@@ -373,7 +401,7 @@ export class Auto extends GameObject {
       if (AutoComp.faros[i]) { LightEmitter.offsetX[i] = L * .5 + FARO_ADELANTE;   // la luz, delante del frente de la huella
         if (this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; } } } }
   }
-  tick() { const i = this.index; if (!Transform.active[i]) return; this._friction(); this._frame();
+  tick() { const i = this.index; if (!Transform.active[i]) return; this._friction(); this._frame(); luzHora(this);
     if (Transform.rotC) { const rc = Transform.rotC[i], rs = Transform.rotS[i]; if (rc * rc + rs * rs > .5) this._sombra(rc, rs); } }
 }
 export class AutoEstacionado extends Auto {}
@@ -593,8 +621,7 @@ export class ConurbanoScene extends Scene {
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
       brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1000 },
       // brillos de faroles y faros
-      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000,
-        alphaBySun: { from: .73, to: .22 } },   // se prenden al bajar el sol: 0 con intensidad 0,73, completos con 0,22
+      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000 },   // cada luz prende y apaga los suyos (LuzHora)
     },
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
@@ -769,18 +796,6 @@ export class ConurbanoScene extends Scene {
     this.focusX = lo <= hi ? Math.max(lo, Math.min(hi, this.focusX)) : (lo + hi) / 2;
   }
 
-  // faroles, postes y faros alumbran de noche: de día su luz se sumaba a la del sol y, como el lighting recorta en 1, borraba
-  // las sombras (gente, árboles) cerca de cada farol. Cada luz guarda la intensidad que le puso su onSpawned (si cambió desde
-  // lo último que escribimos acá, es una luz nueva o reusada) y se escala por lo de noche que sea (0 de día, 1 de noche)
-  lamparas(no) { const ahora = Date.now(); if (ahora - (this._lampT || 0) < 250) return; this._lampT = ahora;
-    const LI = LightEmitter.lightIntensity, LG = LightEmitter.hasGlowSprite; if (!LI) return;
-    const n = LI.length; if (!this._lb || this._lb.length !== n) { this._lb = new Float32Array(n); this._lg = new Float32Array(n); this._lw = new Float32Array(n).fill(-1); }
-    const B = this._lb, G = this._lg, W = this._lw;
-    for (let i = 0; i < n; i++) { const v = LI[i];
-      if (v !== W[i]) { if (v > 0) { B[i] = v; G[i] = LG ? LG[i] : 0; } else { B[i] = 0; W[i] = v; continue; } }
-      const b = B[i]; if (!(b > 0)) continue;
-      const w = Math.fround(b * no); LI[i] = w; W[i] = w; if (LG) LG[i] = G[i] * no; }
-  }
   // cámara libre en el hilo principal: arrastrar, pellizcar, rueda, WASD/flechas
   // semáforos: cada cuarto de segundo, la luz de la fase de su cruce (la misma cuenta que usan los autos)
   luces() { const ahora = Date.now(); if (!this._sem || !this._sem.length || ahora - (this._lucesT || 0) < 250) return; this._lucesT = ahora;
@@ -789,12 +804,8 @@ export class ConurbanoScene extends Scene {
       if (!ids[o] || !ids[o + 3]) continue; S.f = f;   // el semáforo todavía no armó sus luces
       al(ids[o] - 1, f === 2 ? .95 : 0); al(ids[o + 1] - 1, f === 1 ? .95 : 0); al(ids[o + 2] - 1, f === 0 ? .95 : 0); al(ids[o + 3] - 1, f === 2 ? 0 : .95); } }
   update(dtRatio = 1) {
-    const sol = Sun.intensity;   // el sol de verdad (la luz de la noche no lo toca)
     this.luces();
     this.afinarGente();
-    // cuánto de noche es para las luces (0 de día, 1 de noche): la misma rampa que la capa 'noche'
-    const no = Math.max(0, Math.min(1, (.73 - (sol || 0)) / (.73 - .22)));
-    this.lamparas(no);
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
     const z = Camera.zoom || 1;
