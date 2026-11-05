@@ -196,11 +196,13 @@ export class Prop extends GameObject {
       // la luz sale de la lámpara (sourceHeight, a media altura del poste: el charco queda más parejo) y por eso más fuerte
       L.sourceHeight = top * .5; L.lightIntensity = (f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800) * FAROL_K; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = 260;        // alcance para las sombras que proyecta su luz
-      // brillo en cada lámpara, en la capa 'noche' (aditiva, se prende al bajar el sol): un centro chico y un halo
+      // brillo en cada lámpara (se prende con la luz): un centro chico y un halo. Van con las entidades, ordenados por y justo
+      // delante del poste, así una casa o un árbol que está delante los tapa (en una capa aditiva arriba de todo se veían a
+      // través de las casas). Quedan debajo de la luz, que en la lámpara es la del propio farol
       const ls = LAMPARAS[f] || null, sw = this.spriteRenderer.originalWidth * e, sh = this.spriteRenderer.originalHeight * e;
       if (ls) for (const [fx, fy] of ls) { const dx = (fx - an[0]) * sw * (c.fl ? -1 : 1), dy = (fy - an[1]) * sh;
-        this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5, layer: 'noche' });
-        this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5, layer: 'noche' }); }
+        this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5 });
+        this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5 }); }
       luzNace(this, ls ? ls.length * 2 : 0, 1, .5, c);   // se prende a su hora, con sus brillos (centro y halo de cada lámpara)
     } else {
       L.lightIntensity = 0; L.active = 0; this.luzHora.base = 0;
@@ -344,7 +346,8 @@ const _huella = [0, 0], _sb = new Float32Array(16);
 const _apoyo = new Map();
 function apoyoDe(sheet) { let t = _apoyo.get(sheet); if (t === undefined) { t = APOYO[sheet.slice(5)] || null; _apoyo.set(sheet, t); } return t; }
 // los faros: la luz del propio auto, corrida hacia adelante (LightEmitter.offsetX gira con el auto), y dos brillos pegados al
-// auto, en la capa 'noche'
+// auto, con las entidades: delante de la carrocería si el auto mira hacia la cámara, detrás si le da la espalda, y tapados
+// por lo que tenga delante (casas, árboles)
 const LUZ_FARO = 0xfff0d0, FARO_ADELANTE = 18;   // px delante del frente de la huella
 // las caras de las casas de noche (ConurbanoScene.carasFaroles): alcance de cada farol (m), distancia a la que su peso es la
 // mitad (m), cuánto se apaga una cara que le da la espalda a todos (0..1) y cuántas piezas se tiñen por cuadro
@@ -376,7 +379,7 @@ export class Auto extends GameObject {
     const L = this.lightEmitter; A.faros = c.faros ? 1 : 0;
     if (c.faros) {   // los dos brillos son las decoraciones 0 y 1 del auto (_frame las pone en los faros, y corre la luz)
       L.lightColor = LUZ_FARO; L.height = 0; L.hasGlowSprite = 0; L.lightIntensity = c.i || 700; L.offsetX = A.hl + FARO_ADELANTE; L.offsetY = 0; L.active = 1;
-      for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8, layer: 'noche' });
+      for (let k = 0; k < 2; k++) this.addDecoration('_lightGradient', 0, 0, .18, .18, 1, { tint: LUZ_FARO, alpha: .9, anchorX: .5, anchorY: .5, offsetY: -8 });
       luzNace(this, 2, .9, .9);   // los faros se prenden a su hora, con sus dos brillos
     } else { L.lightIntensity = 0; L.offsetX = 0; L.offsetY = 0; L.active = 0; this.luzHora.base = 0; }
     this._frame();
@@ -417,7 +420,10 @@ export class Auto extends GameObject {
       const [L, W] = huellaAuto(AutoComp, i, k.c, k.s, _huella);
       if (Math.abs(L * .5 - AutoComp.hl[i]) > .5 || Math.abs(W * .5 - AutoComp.hw[i]) > .5) { this.collider.width = L; this.collider.height = W; AutoComp.hl[i] = L * .5; AutoComp.hw[i] = W * .5; }
       if (AutoComp.faros[i]) { LightEmitter.offsetX[i] = L * .5 + FARO_ADELANTE;   // la luz, delante del frente de la huella
-        if (this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; } } } }
+        // el brillo se ordena en la línea de pie del auto (el borde de abajo de su dibujo) más sortOffsetY: si el frente mira
+        // hacia la cámara, encima de la carrocería; si no, un largo más atrás, debajo de ella (de espaldas no se ven los faros)
+        const atras = k.s < -.25 ? -L : 0;
+        if (this.getAttachedDecorationCount() >= 2) for (let q = 0; q < 2; q++) { const d = this.getAttachedDecoration(q); if (d) { d.localX = L * .5 - 2; d.localY = (q ? .3 : -.3) * W; d.sortOffsetY = atras; } } } }
   }
   tick() { const i = this.index; if (!Transform.active[i]) return; this._friction(); this._frame(); luzHora(this);
     if (Transform.rotC) { const rc = Transform.rotC[i], rs = Transform.rotS[i]; if (rc * rc + rs * rs > .5) this._sombra(rc, rs); } }
@@ -609,7 +615,7 @@ export class ConurbanoScene extends Scene {
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
       // groundScaleY: el piso se ve aplastado a SYN (0,5), así que los charcos de luz de los faroles son elipses
-      enabled: true, lightGlow: 'add', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
+      enabled: true, lightGlow: 'sprite', baseAmbient: .04, maxLights: 1024, groundScaleY: META.SYN,
       shadowsEnabled: true, maxShadowCastingLights: 16, maxShadowsPerLight: 64, maxShadowsPerEntity: 2, shadowTextures: SOMBRA_TEX,
       resolution: .25, shadowResolution: .25,
       // sol del sudoeste (igual que la luz horneada de las casas); arranca al atardecer para ver las luces enseguida
@@ -638,8 +644,6 @@ export class ConurbanoScene extends Scene {
       cables: { zIndex: 3.5, ySorting: false, maxItems: Math.max(4000, META.nCables + 500) },
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
       brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1000 },
-      // brillos de faroles y faros
-      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000 },   // cada luz prende y apaga los suyos (LuzHora)
     },
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
