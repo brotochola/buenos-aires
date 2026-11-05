@@ -14,7 +14,7 @@ import { BARRIOS } from './barrios.js';
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
 // la sombra de los autos al sol: la del volumen (huella + techo corrido), no el sprite dado vuelta
-import { sombraAuto, altoAuto, sombraPuntos } from './sombraAuto.js';
+import { sombraAuto, altoAuto, volumenSombra } from './sombraAuto.js';
 const DIR = (() => { try { const b = new URL(import.meta.url).searchParams.get('barrio'); return b && BARRIOS[b] ? b : 'barrio'; } catch (e) { return 'barrio'; } })();
 const META = BARRIOS[DIR] || BARRIOS[Object.keys(BARRIOS)[0]];
 const BARRIO = new URL('./' + DIR + '/', import.meta.url).href;
@@ -28,6 +28,9 @@ const LUZ = 0xffdcaa;
 const LUNA = 0x5473f2, LUNA_I = .3;
 // los faroles alumbran desde arriba (LightEmitter.sourceHeight): con la misma intensidad el pie quedaría oscuro
 const FAROL_K = 2.2;
+// lugar en el arena de mallas: los volúmenes de las casas tienen a lo sumo tantos vértices como puntos exportados (nSombraPts) y
+// a lo sumo el doble de triángulos; los autos, 8 vértices en abanico
+const MALLA_V = (META.nSombraPts || 0) + 8 * ((META.nAutos || 0) + 80) + 64, MALLA_I = 6 * (META.nSombraPts || 0) + 64;
 const { ShapeType } = enums;
 
 const NLPC = 19, NPED = META.peatones, PXM = META.PXM;
@@ -64,7 +67,8 @@ export class Transito extends SharedResource {}
 // las luces de cada semáforo: índices de sus decoraciones (+1; 0 = todavía no), las pone el semáforo y las prende la escena
 export class Semaforos extends SharedResource {}
 export class Estado extends SharedResource {}
-// las sombras de las casas: los vértices de sus cajas (x, y del piso respecto del pie de la casa, z en m), de mundo.json
+// las sombras de las casas: el volumen de cada una (ver volumenSombra), armado al cargar con los puntos de sus cajas de
+// mundo.json. v: x, y del piso respecto del pie de la casa y altura en px de pantalla, por vértice; t: sus triángulos
 export class SombrasData extends SharedResource {}
 
 // ---------- componentes
@@ -84,12 +88,6 @@ export class AutoComp extends Component {
     rs: Int8Array,         // en la rotonda: por cuál calle sale (índice de META.rotondas[0].sal; -1: no está en la rotonda)
     // su sombra (sombraAuto.js): alto (px), achique del techo, y con qué rumbo y qué sol se armó el polígono (1 en shOk si ya hay)
     shH: Float32Array, shK: Float32Array, shC: Float32Array, shS: Float32Array, shDx: Float32Array, shDy: Float32Array, shOk: Uint8Array };
-}
-
-export class SombraComp extends Component {
-  // off, n: dónde empiezan y cuántos son sus puntos en SombrasData.pts; nv: vértices de su malla; k: con qué sol (redondeado,
-  // ver solRedondo) se armó; ok: 1 si ya tiene malla
-  static ARRAY_SCHEMA = { off: Int32Array, n: Uint16Array, nv: Uint8Array, k: Int32Array, ok: Uint8Array };
 }
 
 // ---------- casas, tapiales y postes (sprites horneados con R3)
@@ -120,41 +118,24 @@ export class Casa extends GameObject {
 }
 // una franja vertical de una casa: la entidad está en la base de la pared (de ahí sale su y de orden) y lleva colgadas las
 // piezas de 64 px como decoraciones, que se ordenan con la y del padre pero se recortan cada una por su propio centro
-// sombra de cada casa al piso: un polígono convexo en una capa de mallas
-// Sigue al sol: mira cuánto se estira la sombra por metro (la misma cuenta que WeedJS usa para la gente:
-// Sun.shadowDirX/Y · shadowLengthRatio · px por metro de altura) y, si cambió, rehace la envolvente de sus cajas corridas.
-// El sol va redondeado (rumbo cada 1°, largo cada 3 %): así todas las casas cambian en los mismos cuadros (cada segundo y
-// pico con el día de 8 minutos) y la capa de sombras, que se vuelve a armar entera cuando cambia una malla, se arma pocas
-// veces. Un exporte viejo (sin los puntos) trae la sombra hecha con el sol fijo del editor.
-const SOMBRA_PXM = META.CZ * META.SF, _sc = [], _sol = { k: 0, dx: 0, dy: 0 };   // _sc[nv]: el arreglo de salida de nv vértices
-function solRedondo() {
-  const a = Math.round(Math.atan2(Sun.shadowDirY, Sun.shadowDirX) * 180 / Math.PI), l = Math.round(Math.log(Math.max(.05, Sun.shadowLengthRatio)) / Math.log(1.03));
-  const k = (a + 360) * 4096 + (l + 2048); if (k === _sol.k) return _sol;
-  const r = Math.pow(1.03, l) * SOMBRA_PXM, t = a * Math.PI / 180; _sol.k = k; _sol.dx = Math.cos(t) * r; _sol.dy = Math.sin(t) * r; return _sol;
-}
+// sombra de cada casa al piso: su volumen en la capa sunProjected 'sombrasCasas'. La malla se sube una sola vez; la placa corre
+// cada vértice según su altura y el sol de cada cuadro (la misma cuenta que WeedJS usa para la sombra de la gente), y la capa
+// pone la oscuridad (alphaBySun 'shadow'). Un exporte viejo (sin los puntos de las cajas) trae la sombra hecha con el sol fijo
+// del editor, sin alturas: queda quieta.
 export class SombraCasa extends GameObject {
   static isStatic = true;
-  static tickInterval = 3;
-  static components = [MeshRenderer, SombraComp];
+  static components = [MeshRenderer];
   onSpawned(c = {}) {
     this.setLayer('sombrasCasas');
     this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;   // negro opaco: la capa pone la oscuridad del sol
-    const S = this.sombraComp; S.ok = 0; S.n = 0;
     if (c.sh) { const flat = new Float32Array(c.sh.length * 2); c.sh.forEach((q, i) => { flat[i * 2] = q[0]; flat[i * 2 + 1] = q[1]; });
       this.meshRenderer.setMesh(flat); return; }       // convexo: abanico desde el vértice 0
-    S.off = c.off; S.n = c.n; S.nv = c.nv; S.k = -1;
-    this._sombra(true);
+    const n = c.n | 0, tn = c.tn | 0, off = c.off | 0, toff = c.toff | 0; if (n < 3 || tn < 3) return;
+    const V = SombrasData.v, T = SombrasData.t, xy = new Float32Array(n * 2), h = new Float32Array(n), idx = new Uint16Array(tn);
+    for (let q = 0; q < n; q++) { const k = (off + q) * 3; xy[q * 2] = V[k]; xy[q * 2 + 1] = V[k + 1]; h[q] = V[k + 2]; }
+    for (let q = 0; q < tn; q++) idx[q] = T[toff + q];
+    this.meshRenderer.setMesh(xy, idx); this.meshRenderer.setHeights(h);
   }
-  _sombra(forzar) {
-    const i = this.index, S = SombraComp, n = S.n[i]; if (!n) return;
-    if (!forzar && !(Sun.intensity > .05)) return;   // de noche no se ve (la capa se apaga): no gastar
-    const sol = solRedondo(); if (S.ok[i] && sol.k === S.k[i]) return;
-    S.k[i] = sol.k;
-    const nv = S.nv[i], out = _sc[nv] || (_sc[nv] = new Float32Array(nv * 2));
-    sombraPuntos(out, nv, SombrasData.pts, S.off[i], n, sol.dx, sol.dy);
-    if (S.ok[i]) this.meshRenderer.setVertices(out); else { this.meshRenderer.setMesh(out); S.ok[i] = 1; }
-  }
-  tick() { this._sombra(false); }
 }
 // dónde están las lámparas de cada farol, como fracción del cuadro exportado (medidas a ojo; de atrás quedan en el mismo lugar)
 const LAMPARAS = { u_farola: [[.65, .09]], u_farola_orn: [[.5, .2]], u_farol_doble: [[.17, .27], [.77, .18]] };
@@ -579,9 +560,9 @@ export class ConurbanoScene extends Scene {
     particle: { maxParticles: 500, decals: false },
     // piezas de casas y árboles, props (y sus sombras), cables y líneas de canchas
     decoration: { maxDecorations: META.nPiezas + (META.nTiles || 0) + META.nPiezasArboles + 2 * META.nProps + META.nArboles + META.nCables + (META.nLineas || 0) + 8 * ((META.transito && META.transito.n) || 0) + 3000, maxAttachedDecorationsPerEntity: 255 },
-    // mallas: las sombras de las casas (hasta ~38 mil vértices en Carabobo: con 12 mil se quedaban sin lugar y faltaban) y las
-    // de los autos (8 cada uno)
-    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 65535, maxMeshIndices: 0 },
+    // mallas: las sombras de las casas (sus volúmenes: unos 78 mil vértices en Carabobo, más de 65 535, así que los índices van de
+    // 32 bits) y las de los autos (8 cada uno)
+    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: MALLA_V, maxMeshIndices: MALLA_I },
     // las casas son decoraciones: que no se desvanezcan al alejar
     preRender: { startFadingDecorationsAtZoom: .2, hideDecorationsAtZoom: .1, cullingRatio: .3 },
     lighting: {
@@ -607,7 +588,7 @@ export class ConurbanoScene extends Scene {
       manchas: { zIndex: 1.4, ySorting: false, maxItems: Math.max(6000, META.nProps + (META.nLineas || 0)) },
       // las sombras de mallas, en negro opaco: alphaBySun 'shadow' las deja tan oscuras como la sombra de una persona, se
       // apagan de noche y, como cada capa se compone una sola vez, dos mallas que se pisan no oscurecen doble
-      sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, alphaBySun: 'shadow' },
+      sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, sunProjected: true },   // alphaBySun 'shadow' por defecto
       sombrasAutos: { kind: LAYER_KIND.MESH, zIndex: 1.52, alphaBySun: 'shadow' },
       // las sombras horneadas de los objetos (sprites con su propia transparencia): se desvanecen con el sol, de 0 con
       // intensidad 0,143 a 1 con 0,857
@@ -627,16 +608,17 @@ export class ConurbanoScene extends Scene {
     [PisoData, { cellA: { type: Uint8Array, length: META.CW * META.CH * 4 }, cellB: { type: Uint8Array, length: META.CW * META.CH * 4 },
       wealth: { type: Uint8Array, length: META.WG * META.HG }, noise: { type: Uint8Array, length: 256 * 256 * 4 }, segs: { type: Uint8Array, length: META.NS * 48 }, pits: { type: Uint8Array, length: (META.PW || 1) * (META.PH || 1) * 4 } }],
     [Estado, { manejando: { type: Int32Array, length: 1, mailbox: true } }],
-    [SombrasData, { pts: { type: Float32Array, length: Math.max(3, (META.nSombraPts || 0) * 3) } }],
+    [SombrasData, { v: { type: Float32Array, length: Math.max(3, (META.nSombraPts || 0) * 3) }, t: { type: Uint16Array, length: Math.max(3, (META.nSombraPts || 0) * 6) } }],
     [Transito, { grid: { type: Uint16Array, length: Math.max(1, TR.W * TR.H) }, cruces: { type: Float32Array, length: Math.max(6, TR.n * 6) } }],
     [Semaforos, { ids: { type: Int32Array, length: Math.max(4, (TR.nSem || 0) * 4) } }],
   ];
   static entities = [[Casa, META.nCasas + 8], [SombraCasa, META.nCasas + 8], [Arbol, META.nArboles + 8], [Prop, META.nProps + 64], [Persona, GENTE_MAX], [AutoIA, Math.max(8, META.nAutos)], [AutoEstacionado, Math.max(8, META.nAutos)], [Chatarra, 64], [AutoJugador, 1], [Faro, Math.max(8, META.nAutos) + 1]];
 
-  // la sombra de una casa: los puntos de sus cajas van a SombrasData (la entidad los mira desde su worker)
+  // la sombra de una casa: su volumen, de los puntos de sus cajas, va a SombrasData (la entidad lo lee desde su worker)
   _sombra(h) {
-    if (h.sp && h.sp.length >= 9) { const n = h.sp.length / 3, off = this._sombraCur; SombrasData.pts.set(h.sp, off * 3); this._sombraCur += n;
-      SombraCasa.spawn({ x: h.x, y: h.y, off, n, nv: Math.max(3, Math.min(this._sombraTope, n)) }); }
+    if (h.sp && h.sp.length >= 12) { const off = this._sombraV, toff = this._sombraT, n = h.sp.length / 3;
+      const nv = volumenSombra(h.sp, 0, n, META.CZ * META.SF, SombrasData.v.subarray(off * 3), SombrasData.t.subarray(toff)), tn = volumenSombra.nt;
+      if (nv) { this._sombraV += nv; this._sombraT += tn; SombraCasa.spawn({ x: h.x, y: h.y, off, n: nv, toff, tn }); } }
     else if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
   }
   async preload() {
@@ -657,11 +639,7 @@ export class ConurbanoScene extends Scene {
     // ---- tránsito: la grilla (velocidades, esquinas) y los cruces (con o sin semáforo, rumbo de la primera calle, desfasaje)
     if (TR.n) { const tb = await (await fetch(BARRIO + 'transito.bin')).arrayBuffer(); Transito.grid.set(new Uint16Array(tb));
       (w.cruces || []).forEach((c, k) => { for (let q = 0; q < 6; q++) Transito.cruces[k * 6 + q] = c[q]; }); }
-    // sombras de las casas: los puntos de cada una en SombrasData; cuántos vértices lleva su malla (hasta 16, menos si no entran
-    // todas en las 65535 del arena junto con las de los autos)
-    { let tot = 0, tope = 16; const ns = w.casas.map(h => h.sp ? h.sp.length / 3 : 0), lugar = 65535 - 8 * ((META.nAutos || 0) + 80) - 64;
-      const suma = (t) => ns.reduce((a, n) => a + Math.min(t, n), 0); while (tope > 6 && suma(tope) > lugar) tope--;
-      this._sombraCur = 0; this._sombraTope = tope; tot = suma(tope); if (tot > lugar) console.warn('sombras de casas: no entran todas', tot, lugar); }
+    this._sombraV = 0; this._sombraT = 0;   // sombras de las casas: cuántos vértices y triángulos van en SombrasData
     this._sem = [];   // los semáforos: cruce, calle y número (sus luces, en Semaforos.ids)
     if (META.skew) {
       // casas por caras (WeedJS DX-DECOSKEW): la entidad lleva el colisionador; el dibujo son piezas de caras planas, decoraciones

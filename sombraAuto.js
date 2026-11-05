@@ -1,5 +1,5 @@
 // ===================== sombraAuto.js — la sombra de los autos y de las casas al sol =====================
-// (las casas, al final: sombraPuntos, la envolvente de sus cajas corridas por el sol que haya)
+// (las casas, al final: volumenSombra, el volumen convexo de sus cajas, que WeedJS proyecta con el sol en la placa)
 // La sombra que hace WeedJS (ShadowCaster) es el sprite dado vuelta desde el pie y estirado hacia donde va la sombra: sirve
 // para lo que está parado (gente, árboles, postes), pero un auto está dibujado visto desde arriba (techo y costado), así que
 // su "sombra" salía como otro auto acostado, corrido para el costado. Acá la sombra es la del volumen: el piso que tapa la
@@ -44,26 +44,63 @@ export function sombraAuto(out, rc, rs, ha, hb, dx, dy, k) {
   return out;
 }
 
-// ---------- la sombra de una casa (o de lo que sea que esté hecho de cajas) con el sol que haya
-// P: puntos x, y, z (el punto del piso debajo, px de mundo respecto de la entidad, y la altura en m) desde off, n puntos.
-// Cada uno se corre z · (dx, dy) y out (2·nv floats) recibe la envolvente convexa con nv vértices: si tiene más, se sacan los
-// que menos área aportan (Visvalingam); si tiene menos, se repite el último (triángulos vacíos en el abanico)
-const MAXP = 256, _px = new Float64Array(MAXP), _py = new Float64Array(MAXP), _po = new Int32Array(MAXP), _ph = new Int32Array(MAXP * 2 + 1);
-function crP(o, a, b) { return (_px[a] - _px[o]) * (_py[b] - _py[o]) - (_py[a] - _py[o]) * (_px[b] - _px[o]); }
-export function sombraPuntos(out, nv, P, off, n, dx, dy) {
+const MAXP = 256;   // puntos por casa, como mucho
+
+// ---------- la sombra de una casa como volumen (capa sunProjected de WeedJS)
+// La sombra de antes era la envolvente de los puntos corridos por el sol, y eso es exactamente la sombra del volumen convexo que
+// encierra los puntos (x, y del piso que tienen debajo, y su altura). Acá se arma ese volumen una sola vez, al cargar: la placa
+// corre cada vértice h · Sun.shadowLengthRatio · (Sun.shadowDirX, Sun.shadowDirY) en cada cuadro, lo mismo que el sol le hace al
+// punto a esa altura en el sprite de un ShadowCaster, y lo que pintan sus caras es la sombra, con el sol que haya.
+// P: x, y, z (m) desde off, n puntos; kz: px de pantalla por m de altura. V recibe x, y, h (px) de cada vértice usado y T los
+// triángulos (índices locales), sin las caras del piso: con los tres vértices a altura 0 quedan debajo del dibujo de la casa.
+// Devuelve cuántos vértices escribió (y deja en volumenSombra.nt cuántos índices); 0 si los puntos no encierran volumen.
+// Envolvente incremental: corre al cargar (unas 5 000 casas de hasta 32 puntos), no en cada cuadro.
+export function volumenSombra(P, off, n, kz, V, T) {
+  volumenSombra.nt = 0;
   if (n > MAXP) n = MAXP;
-  for (let q = 0; q < n; q++) { const k = (off + q) * 3, z = P[k + 2]; _px[q] = P[k] + z * dx; _py[q] = P[k + 1] + z * dy; _po[q] = q; }
-  for (let a = 1; a < n; a++) { const t = _po[a]; let b = a - 1; while (b >= 0 && (_px[_po[b]] > _px[t] || (_px[_po[b]] === _px[t] && _py[_po[b]] > _py[t]))) { _po[b + 1] = _po[b]; b--; } _po[b + 1] = t; }
-  let m = 0;
-  for (let q = 0; q < n; q++) { const p = _po[q]; while (m >= 2 && crP(_ph[m - 2], _ph[m - 1], p) <= 0) m--; _ph[m++] = p; }
-  for (let q = n - 2, lo = m + 1; q >= 0; q--) { const p = _po[q]; while (m >= lo && crP(_ph[m - 2], _ph[m - 1], p) <= 0) m--; _ph[m++] = p; }
-  if (m > 1) m--;   // el último repite el primero
-  while (m > nv && m > 3) {   // sacar el vértice que menos área aporta
-    let best = 0, ba = Infinity;
-    for (let q = 0; q < m; q++) { const a = Math.abs(crP(_ph[(q + m - 1) % m], _ph[q], _ph[(q + 1) % m])); if (a < ba) { ba = a; best = q; } }
-    for (let q = best; q < m - 1; q++) _ph[q] = _ph[q + 1];
-    m--;
+  if (n < 4) return 0;
+  const X = new Float64Array(n), Y = new Float64Array(n), Z = new Float64Array(n);
+  let ext = 0;
+  for (let q = 0; q < n; q++) { const k = (off + q) * 3; X[q] = P[k]; Y[q] = P[k + 1]; Z[q] = Math.max(0, P[k + 2]) * kz;
+    ext = Math.max(ext, Math.abs(X[q] - X[0]), Math.abs(Y[q] - Y[0]), Math.abs(Z[q] - Z[0])); }
+  const eps = 1e-6 * Math.max(1, ext);
+  // el tetraedro de arranque: el punto más a la izquierda, el más lejano a él, el más lejano a esa recta y el más lejano a ese plano
+  let a = 0; for (let q = 1; q < n; q++) if (X[q] < X[a]) a = q;
+  let b = -1, bd = 0; for (let q = 0; q < n; q++) { const d = (X[q] - X[a]) ** 2 + (Y[q] - Y[a]) ** 2 + (Z[q] - Z[a]) ** 2; if (d > bd) { bd = d; b = q; } }
+  if (b < 0 || bd < eps * eps) return 0;
+  const ux = X[b] - X[a], uy = Y[b] - Y[a], uz = Z[b] - Z[a];
+  let c = -1, cd = 0; for (let q = 0; q < n; q++) { const wx = X[q] - X[a], wy = Y[q] - Y[a], wz = Z[q] - Z[a];
+    const cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx, d = cx * cx + cy * cy + cz * cz; if (d > cd) { cd = d; c = q; } }
+  if (c < 0 || Math.sqrt(cd) < eps * Math.sqrt(bd)) return 0;
+  const cara = (i, j, k) => { const ax = X[j] - X[i], ay = Y[j] - Y[i], az = Z[j] - Z[i], bx = X[k] - X[i], by = Y[k] - Y[i], bz = Z[k] - Z[i];
+    let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1; nx /= l; ny /= l; nz /= l;
+    return { i, j, k, nx, ny, nz, d: nx * X[i] + ny * Y[i] + nz * Z[i], viva: true }; };
+  const base = cara(a, b, c);
+  let e = -1, ed = 0; for (let q = 0; q < n; q++) { const d = Math.abs(base.nx * X[q] + base.ny * Y[q] + base.nz * Z[q] - base.d); if (d > ed) { ed = d; e = q; } }
+  if (e < 0 || ed < eps) return 0;   // plano: no hay volumen
+  const mx = (X[a] + X[b] + X[c] + X[e]) / 4, my = (Y[a] + Y[b] + Y[c] + Y[e]) / 4, mz = (Z[a] + Z[b] + Z[c] + Z[e]) / 4;
+  const afuera = (i, j, k) => { const f = cara(i, j, k); return f.nx * mx + f.ny * my + f.nz * mz - f.d > 0 ? cara(i, k, j) : f; };
+  let caras = [afuera(a, b, c), afuera(a, e, b), afuera(b, e, c), afuera(c, e, a)];
+  for (let p = 0; p < n; p++) {
+    if (p === a || p === b || p === c || p === e) continue;
+    let hay = false;
+    for (const f of caras) { f.ve = f.nx * X[p] + f.ny * Y[p] + f.nz * Z[p] - f.d > eps; if (f.ve) hay = true; }
+    if (!hay) continue;   // adentro (o sobre el borde)
+    const bordes = new Set();
+    for (const f of caras) if (f.ve) { bordes.add(f.i * 1024 + f.j); bordes.add(f.j * 1024 + f.k); bordes.add(f.k * 1024 + f.i); }
+    const nuevas = [];
+    for (const f of caras) {
+      if (!f.ve) { nuevas.push(f); continue; }
+      for (const [u, v] of [[f.i, f.j], [f.j, f.k], [f.k, f.i]]) if (!bordes.has(v * 1024 + u)) nuevas.push(cara(u, v, p));   // horizonte
+    }
+    caras = nuevas;
   }
-  for (let q = 0; q < nv; q++) { const p = _ph[q < m ? q : m - 1]; out[q * 2] = _px[p]; out[q * 2 + 1] = _py[p]; }
-  return out;
+  const mapa = new Int32Array(n).fill(-1); let nv = 0, nt = 0;
+  for (const f of caras) {
+    if (Z[f.i] < 1e-3 && Z[f.j] < 1e-3 && Z[f.k] < 1e-3) continue;   // cara del piso
+    for (const q of [f.i, f.j, f.k]) { if (mapa[q] < 0) { mapa[q] = nv; V[nv * 3] = X[q]; V[nv * 3 + 1] = Y[q]; V[nv * 3 + 2] = Z[q]; nv++; } T[nt++] = mapa[q]; }
+  }
+  volumenSombra.nt = nt;
+  return nt >= 3 ? nv : 0;
 }
+volumenSombra.nt = 0;
