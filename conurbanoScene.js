@@ -682,7 +682,9 @@ export class ConurbanoScene extends Scene {
           ...(p.f.startsWith('gd_') ? { layer: 'manchas' } : {}) }); }   // manchas y roturas: pegadas al piso, debajo de todo
     }
     const ash = META.anclas.sh_tree;
-    for (const a of w.arboles) { Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: w.arbolTipos[a.t] }); if (ash) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }
+    // la mancha horneada (una elipse fija debajo del tronco) sólo para los árboles sin silueta: los que la tienen ya proyectan
+    // su sombra de verdad con el sol (ShadowCaster), y al atardecer quedaba la elipse sola debajo de cada árbol
+    for (const a of w.arboles) { const T = w.arbolTipos[a.t]; Arbol.spawn({ x: a.x, y: a.y, fl: a.fl, r: a.r, tipo: T }); if (ash && !T.sil) Decoration.spawn({ x: a.x, y: a.y, texture: 'props_sh_tree', anchorX: ash[0], anchorY: ash[1], alpha: .4, layer: 'sombras' }); }
     for (const c of w.cables) { const dx = c[2] - c[0], dy = c[3] - c[1], L2 = Math.hypot(dx, dy);
       Decoration.spawn({ x: c[0], y: c[1], texture: '_white', anchorX: 0, anchorY: .5, scaleX: L2 / 8, scaleY: 1 / 8, rotation: Math.atan2(dy, dx), tint: 0x17171b, alpha: .85, layer: 'cables' }); }
     // líneas pintadas de las canchas: finas, pegadas al piso
