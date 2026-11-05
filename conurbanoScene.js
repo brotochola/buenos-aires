@@ -665,7 +665,8 @@ export class ConurbanoScene extends Scene {
   // ---------- de noche, las caras de las casas que le dan la espalda a los faroles se apagan
   // La luz de WeedJS es una cuenta por píxel de pantalla: el charco de un farol aclara todo lo que se dibuja ahí, sin saber hacia
   // dónde mira cada pared. Las piezas de las caras traen del editor su normal y su altura: al cargar, cada pieza guarda cuánto le
-  // llega (w) y cuánto mira (c) a los faroles que tiene cerca (hasta 4), y de noche su tinte se oscurece según cuánto les da la
+  // llega (w) y cuánto mira (c: el coseno por 2, hasta 1; una cara de frente o de tres cuartos cuenta entera) a los faroles que
+  // tiene cerca (hasta 4), y de noche su tinte se oscurece según cuánto les da la
   // espalda a los que están prendidos: tinte · (1 − K · noche · (1 − Σ w·c / Σ w)). El tinte sólo oscurece: el efecto es por
   // contraste. Los faroles son fijos y sus horas salen de su posición (horasLuz), así que el hilo principal sabe cuándo se prende
   // cada uno; los faros de los autos quedan afuera
@@ -687,7 +688,7 @@ export class ConurbanoScene extends Scene {
     const gx = Math.floor(mx / CARAS_R), gy = Math.floor(my / CARAS_R), cand = [];
     for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) { const a = F.grid.get(F.clave(ix, iy)); if (!a) continue;
       for (const k of a) { const dx = F.LX[k] - mx, dy = F.LY[k] - my, dz = F.LZ[k] - z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > CARAS_R * CARAS_R) continue;
-        const d = Math.sqrt(d2) || 1, c = Math.max(0, (nx * dx + ny * dy + nz * dz) / d), wgt = 1 / (1 + d2 / (CARAS_R0 * CARAS_R0)); cand.push([wgt, k, c]); } }
+        const d = Math.sqrt(d2) || 1, c = Math.min(1, 2 * Math.max(0, (nx * dx + ny * dy + nz * dz) / d)), wgt = 1 / (1 + d2 / (CARAS_R0 * CARAS_R0)); cand.push([wgt, k, c]); } }
     if (!cand.length) return;
     cand.sort((a, b) => b[0] - a[0]); if (cand.length > 4) cand.length = 4;
     const q = F.di.length; F.di.push(di); F.tn.push(t[7]);
