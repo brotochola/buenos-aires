@@ -125,7 +125,7 @@ const Caras = (() => {
 
   // ---------- todo el catálogo
   // entries: las claves del catálogo (cada una con su rumbo spec.a). Devuelve { piezas: [{nombre, T, x0, y0, w, h}],
-  // variantes: { id: [[cuadro, dx, dy, sx, sy, kx, ky, tinte, sortDy, innerZ], …] }, pies: { id: {foot, casters} } }
+  // variantes: { id: [[cuadro, dx, dy, sx, sy, kx, ky, tinte, sortDy, innerZ(, nx, ny, nz, z)], …] }, pies: { id: {foot, casters} } }
   function hornear(entries, DET, progreso = () => {}) {
     const TILE = Math.round(128 * DET), disenos = new Map(), texturas = new Map(), piezas = [], variantes = {}, pies = {};
     const st = { caras: 0, lisas: 0, material: 0, propias: 0, accesorios: 0 };
@@ -231,7 +231,7 @@ const Caras = (() => {
           if (it.pared) { const F = it.F, d = sub3(P, F.O), L1 = len(F.E1), uu = Math.max(0, Math.min(1, (d[0] * F.E1[0] + d[1] * F.E1[1] + d[2] * F.E1[2]) / (L1 * L1))), Gp = add(F.O, add(sc3(F.E1, uu), F.E2)); objetivo = J([Gp[0], Gp[1], 0])[1]; }
           else objetivo = baseX(p[0]);
           const q0 = add(q.O, add(sc3(q.E1, g.x0 / T.w), sc3(q.E2, g.y0 / T.h))), da = J(sc3(q.E1, g.w / T.w)), db = J(sc3(q.E2, g.h / T.h)), j0 = J(q0);
-          tiles.push({ rank: r, cuadro: g.nombre, p, sx: g.nombre === "_white" ? A[0] / 8 : sx, sy: g.nombre === "_white" ? B[1] / 8 : sy, kx, ky, tn: q.tinte, iz, objetivo, borde: !!q.borde,
+          tiles.push({ rank: r, cuadro: g.nombre, p, sx: g.nombre === "_white" ? A[0] / 8 : sx, sy: g.nombre === "_white" ? B[1] / 8 : sy, kx, ky, tn: q.tinte, iz, objetivo, borde: !!q.borde, n: it.F.n, z: P[2],
             poli: [j0, [j0[0] + da[0], j0[1] + da[1]], [j0[0] + da[0] + db[0], j0[1] + da[1] + db[1]], [j0[0] + db[0], j0[1] + db[1]]] });
         }
       }
@@ -244,7 +244,10 @@ const Caras = (() => {
         tiles[i].clave = k; }
       for (const t of tiles) if (t.borde) t.clave += .02;   // el borde, encima de su cara (misma y de orden y mismo innerZ)
       const r2 = (v) => Math.round(v * 100) / 100, r4 = (v) => Math.round(v * 1e4) / 1e4;
-      variantes[e.id] = tiles.map(t => [t.cuadro, r2(t.p[0]), r2(t.p[1]), r4(t.sx), r4(t.sy), r4(t.kx), r4(t.ky), t.tn, r2(t.clave - t.p[1]), t.iz]);
+      // las piezas de caras llevan además hacia dónde mira su cara (la normal, ya girada como la casa) y la altura de su centro (m):
+      // con eso el juego sabe cuánto la alumbra cada farol (ConurbanoScene.carasFaroles)
+      variantes[e.id] = tiles.map(t => { const v = [t.cuadro, r2(t.p[0]), r2(t.p[1]), r4(t.sx), r4(t.sy), r4(t.kx), r4(t.ky), t.tn, r2(t.clave - t.p[1]), t.iz];
+        if (t.n) v.push(r2(t.n[0]), r2(t.n[1]), r2(t.n[2]), r2(t.z)); return v; });
       // el pie de la casa (de donde cuelgan el colisionador y la sombra): el punto más al frente de las cajas apoyadas
       let foot = [0, 0], fy = 1e9;
       for (const cs of D.casters) { if (cs.c[2] - cs.h[2] > .3) continue;

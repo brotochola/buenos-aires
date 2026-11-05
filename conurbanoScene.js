@@ -106,8 +106,14 @@ export class LuzHora extends Component {
   static ARRAY_SCHEMA = { prende: Float32Array, apaga: Float32Array, base: Float32Array, on: Uint8Array, ag: Uint8Array, a0: Float32Array, a1: Float32Array };
 }
 const LUZ_TICK = 30;   // cada cuántos cuadros mira la hora cada luz (con el día de 8 minutos, 1 cuadro son 0,3 minutos de juego)
-function luzNace(go, ag, a0, a1) {
-  const i = go.index, L = LuzHora; L.prende[i] = 18 + rng(); L.apaga[i] = 6 + rng(); L.base[i] = LightEmitter.lightIntensity[i];
+// las horas de una luz fija salen de su posición (el mismo sorteo en cualquier hilo: el principal las necesita para las caras
+// de las casas, ver carasFaroles); las de los autos, al azar
+const _hl = [0, 0];
+function horasLuz(x, y, out) { const a = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453, b = Math.sin(x * 39.346 + y * 11.135) * 24634.6345;
+  out[0] = 18 + (a - Math.floor(a)); out[1] = 6 + (b - Math.floor(b)); return out; }
+function luzNace(go, ag, a0, a1, c) {
+  const i = go.index, L = LuzHora; if (c) { horasLuz(c.x, c.y, _hl); L.prende[i] = _hl[0]; L.apaga[i] = _hl[1]; } else { L.prende[i] = 18 + rng(); L.apaga[i] = 6 + rng(); }
+  L.base[i] = LightEmitter.lightIntensity[i];
   L.on[i] = 2; L.ag[i] = ag; L.a0[i] = a0; L.a1[i] = a1; luzHora(go);
 }
 function luzHora(go) {
@@ -142,7 +148,7 @@ export class Casa extends GameObject {
     const L = this.lightEmitter, on = c.k === 'poste' && !!c.l;
     L.lightColor = LUZ; L.height = 0; L.glowHeightOffset = 7 * META.CZ * META.SF; L.hasGlowSprite = on ? .5 : 0;
     L.sourceHeight = on ? 50 : 0; L.lightIntensity = on ? 1500 * FAROL_K : 0; L.active = on ? 1 : 0; this.collider.visualRange = on ? 260 : this.collider.visualRange;
-    luzNace(this, 0, 0, 0);   // el poste se prende a su hora (su brillo es el de la luz: hasGlowSprite)
+    luzNace(this, 0, 0, 0, c);   // el poste se prende a su hora (su brillo es el de la luz: hasGlowSprite)
   }
   tick() { luzHora(this); }
 }
@@ -195,7 +201,7 @@ export class Prop extends GameObject {
       if (ls) for (const [fx, fy] of ls) { const dx = (fx - an[0]) * sw * (c.fl ? -1 : 1), dy = (fy - an[1]) * sh;
         this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5, layer: 'noche' });
         this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5, layer: 'noche' }); }
-      luzNace(this, ls ? ls.length * 2 : 0, 1, .5);   // se prende a su hora, con sus brillos (centro y halo de cada lámpara)
+      luzNace(this, ls ? ls.length * 2 : 0, 1, .5, c);   // se prende a su hora, con sus brillos (centro y halo de cada lámpara)
     } else {
       L.lightIntensity = 0; L.active = 0; this.luzHora.base = 0;
       // semáforo: sin luz al piso, sólo un punto de color en la lámpara (el gradiente de WeedJS, en una capa aditiva);
@@ -340,6 +346,9 @@ function apoyoDe(sheet) { let t = _apoyo.get(sheet); if (t === undefined) { t = 
 // los faros: la luz del propio auto, corrida hacia adelante (LightEmitter.offsetX gira con el auto), y dos brillos pegados al
 // auto, en la capa 'noche'
 const LUZ_FARO = 0xfff0d0, FARO_ADELANTE = 18;   // px delante del frente de la huella
+// las caras de las casas de noche (ConurbanoScene.carasFaroles): alcance de cada farol (m), distancia a la que su peso es la
+// mitad (m), cuánto se apaga una cara que le da la espalda a todos (0..1) y cuántas piezas se tiñen por cuadro
+const CARAS_R = 14, CARAS_R0 = 6, CARAS_K = .55, CARAS_POR_CUADRO = 20000;
 export class Auto extends GameObject {
   static deriveSpeed = true;
   static components = [RigidBody, Collider, CollisionListener, SpriteRenderer, MeshRenderer, LightEmitter, LuzHora, AutoComp];
@@ -653,6 +662,61 @@ export class ConurbanoScene extends Scene {
       if (nv) { this._sombraV += nv; this._sombraT += tn; SombraCasa.spawn({ x: h.x, y: h.y, off, n: nv, toff, tn }); } }
     else if (h.sh) SombraCasa.spawn({ x: h.x, y: h.y, sh: h.sh });
   }
+  // ---------- de noche, las caras de las casas que le dan la espalda a los faroles se apagan
+  // La luz de WeedJS es una cuenta por píxel de pantalla: el charco de un farol aclara todo lo que se dibuja ahí, sin saber hacia
+  // dónde mira cada pared. Las piezas de las caras traen del editor su normal y su altura: al cargar, cada pieza guarda cuánto le
+  // llega (w) y cuánto mira (c) a los faroles que tiene cerca (hasta 4), y de noche su tinte se oscurece según cuánto les da la
+  // espalda a los que están prendidos: tinte · (1 − K · noche · (1 − Σ w·c / Σ w)). El tinte sólo oscurece: el efecto es por
+  // contraste. Los faroles son fijos y sus horas salen de su posición (horasLuz), así que el hilo principal sabe cuándo se prende
+  // cada uno; los faros de los autos quedan afuera
+  _carasFaroles(w) {
+    const S = META.SF, K = META.K, SYN = META.SYN, MH = META.MH, CEL = CARAS_R;
+    const L = []; const lamp = (x, y, hz) => { const my = MH - y / (SYN * S), mx = x / S - K * my; horasLuz(x, y, _hl); L.push([mx, my, hz, _hl[0], _hl[1]]); };
+    for (const p of w.props || []) if (p.r > 0 && p.f && p.f.startsWith('u_farol')) lamp(p.x, p.y, p.f.startsWith('u_farola_orn') ? 4 : p.f.startsWith('u_farola') ? 6.5 : 5.5);
+    for (const h of w.casas || []) if (h.k === 'poste' && h.l) lamp(h.x, h.y, 5);
+    const n = L.length, LX = new Float32Array(n), LY = new Float32Array(n), LZ = new Float32Array(n), LP = new Float32Array(n), LA = new Float32Array(n);
+    const grid = new Map(), clave = (gx, gy) => gx * 100003 + gy;
+    L.forEach((l, k) => { LX[k] = l[0]; LY[k] = l[1]; LZ[k] = l[2]; LP[k] = l[3]; LA[k] = l[4];
+      const g = clave(Math.floor(l[0] / CEL), Math.floor(l[1] / CEL)); let a = grid.get(g); if (!a) grid.set(g, a = []); a.push(k); });
+    this._cf = { n, LX, LY, LZ, LP, LA, grid, clave, on: new Uint8Array(n).fill(2), di: [], tn: [], l: [], wv: [], wc: [], m: -1, sucio: 0 };
+  }
+  // una pieza de cara: x, y en pantalla (px de mundo); t[10..12] su normal, t[13] la altura de su centro (m)
+  _caraPieza(di, sx, sy, t) {
+    const F = this._cf; if (!F || !F.n) return;
+    const S = META.SF, z = t[13], my = META.MH - (sy + z * META.CZ * S) / (META.SYN * S), mx = sx / S - META.K * my, nx = t[10], ny = t[11], nz = t[12];
+    const gx = Math.floor(mx / CARAS_R), gy = Math.floor(my / CARAS_R), cand = [];
+    for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) { const a = F.grid.get(F.clave(ix, iy)); if (!a) continue;
+      for (const k of a) { const dx = F.LX[k] - mx, dy = F.LY[k] - my, dz = F.LZ[k] - z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > CARAS_R * CARAS_R) continue;
+        const d = Math.sqrt(d2) || 1, c = Math.max(0, (nx * dx + ny * dy + nz * dz) / d), wgt = 1 / (1 + d2 / (CARAS_R0 * CARAS_R0)); cand.push([wgt, k, c]); } }
+    if (!cand.length) return;
+    cand.sort((a, b) => b[0] - a[0]); if (cand.length > 4) cand.length = 4;
+    const q = F.di.length; F.di.push(di); F.tn.push(t[7]);
+    for (let j = 0; j < 4; j++) { const e = cand[j]; F.l.push(e ? e[1] : -1); F.wv.push(e ? e[0] : 0); F.wc.push(e ? e[0] * e[2] : 0); }
+  }
+  _carasListas() {
+    const F = this._cf; if (!F) return;
+    F.di = Int32Array.from(F.di); F.tn = Uint32Array.from(F.tn); F.l = Int32Array.from(F.l); F.wv = Float32Array.from(F.wv); F.wc = Float32Array.from(F.wc);
+    F.cuenta = F.di.length; F.sucio = F.cuenta; F.pos = 0; F.t = 0;
+  }
+  // en update: cada cuarto de segundo mira la noche y qué faroles están prendidos; si algo cambió, vuelve a teñir las piezas con
+  // faroles, de a CARAS_POR_CUADRO por cuadro
+  carasFaroles() {
+    const F = this._cf; if (!F || !F.cuenta) return;
+    const ahora = Date.now();
+    if (ahora - F.t >= 250) { F.t = ahora;
+      const h = Sun.hour, m = Sun.nightFactor || 0; let cambio = Math.abs(m - F.m) > .03;
+      for (let k = 0; k < F.n; k++) { const on = h >= F.LP[k] || h < F.LA[k] ? 1 : 0; if (on !== F.on[k]) { F.on[k] = on; cambio = true; } }
+      if (cambio) { F.m = m; F.sucio = F.cuenta; F.pos = 0; } }
+    if (!F.sucio) return;
+    const T = WEED.DecorationComponent && WEED.DecorationComponent.tint; if (!T) return;
+    const fin = Math.min(F.cuenta, F.pos + CARAS_POR_CUADRO), m = F.m;
+    for (let q = F.pos; q < fin; q++) {
+      let wv = 0, wc = 0; for (let j = 0; j < 4; j++) { const k = F.l[q * 4 + j]; if (k < 0 || !F.on[k]) continue; wv += F.wv[q * 4 + j]; wc += F.wc[q * 4 + j]; }
+      const b = F.tn[q], f = wv > .05 ? 1 - CARAS_K * m * (1 - wc / wv) : 1;
+      T[F.di[q]] = f >= .999 ? b : ((((b >> 16) & 255) * f) << 16) | ((((b >> 8) & 255) * f) << 8) | ((b & 255) * f);
+    }
+    F.sucio -= fin - F.pos; F.pos = fin;
+  }
   async preload() {
     // ---- piso: datos horneados -> memoria compartida -> texturas del shader
     const bin = await (await fetch(BARRIO + 'piso.bin')).arrayBuffer(), u8 = new Uint8Array(bin), parts = META.pisoPartes;
@@ -673,6 +737,7 @@ export class ConurbanoScene extends Scene {
       (w.cruces || []).forEach((c, k) => { for (let q = 0; q < 6; q++) Transito.cruces[k * 6 + q] = c[q]; }); }
     this._sombraV = 0; this._sombraT = 0;   // sombras de las casas: cuántos vértices y triángulos van en SombrasData
     this._sem = [];   // los semáforos: cruce, calle y número (sus luces, en Semaforos.ids)
+    this._carasFaroles(w);   // los faroles, para las caras de las casas de noche (antes de armar las casas)
     if (META.skew) {
       // casas por caras (WeedJS DX-DECOSKEW): la entidad lleva el colisionador; el dibujo son piezas de caras planas, decoraciones
       // del mundo (no colgadas: la casa no se mueve, así no pasan por el paso de las colgadas cada cuadro), cada una con su
@@ -684,7 +749,9 @@ export class ConurbanoScene extends Scene {
         const V = w.variantes[h.v];
         for (let i = 0; i < V.length; i++) { const t = V[i];
           cfg.x = h.ox + t[1]; cfg.y = h.oy + t[2]; cfg.texture = t[0]; cfg.scaleX = t[3]; cfg.scaleY = t[4]; cfg.skewX = t[5]; cfg.skewY = t[6];
-          cfg.tint = t[7]; cfg.sortOffsetY = t[8]; cfg.innerZ = t[9]; Decoration.spawn(cfg); } }
+          cfg.tint = t[7]; cfg.sortOffsetY = t[8]; cfg.innerZ = t[9]; const di = Decoration.spawn(cfg);
+          if (t.length >= 14 && di >= 0) this._caraPieza(di, cfg.x, cfg.y, t); } }
+      this._carasListas();
     } else for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
       this._sombra(h); }
     for (const p of w.props) {
@@ -814,6 +881,7 @@ export class ConurbanoScene extends Scene {
       al(ids[o] - 1, f === 2 ? .95 : 0); al(ids[o + 1] - 1, f === 1 ? .95 : 0); al(ids[o + 2] - 1, f === 0 ? .95 : 0); al(ids[o + 3] - 1, f === 2 ? 0 : .95); } }
   update(dtRatio = 1) {
     this.luces();
+    this.carasFaroles();
     this.afinarGente();
     if (Keyboard.isPressed && (Keyboard.isPressed('v'))) this.setDriving(!this.driving);
     if (this.driving) { if (Mouse.count >= 2) this.zoomBy(Mouse.pinchRatio()); if (Mouse.wheel) this.zoomBy(Math.exp(-Mouse.wheel * .0012)); Camera.targetZoom = this.zoomT; return; }
