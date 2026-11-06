@@ -182,6 +182,17 @@ export class SombraCasa extends GameObject {
   }
 }
 // dónde están las lámparas de cada farol, como fracción del cuadro exportado (medidas a ojo; de atrás quedan en el mismo lugar)
+// geometría plana para _lamparasTapadas: envolvente convexa, punto dentro de un polígono convexo y la y más baja en pantalla
+// (la más adelante) de un polígono en una x
+function envolvente(P) { const p = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = []; for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  up.pop(); lo.pop(); return lo.concat(up); }
+function dentroConvexo(H, x, y) { let sg = 0; for (let i = 0; i < H.length; i++) { const a = H[i], b = H[(i + 1) % H.length], c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+  if (c !== 0) { if (sg === 0) sg = c > 0 ? 1 : -1; else if ((c > 0 ? 1 : -1) !== sg) return false; } } return H.length >= 3; }
+function frenteEn(H, x) { let m = -Infinity; for (let i = 0; i < H.length; i++) { const a = H[i], b = H[(i + 1) % H.length];
+  if ((a[0] - x) * (b[0] - x) > 0 || a[0] === b[0]) { if (a[0] === x) m = Math.max(m, a[1]); continue; }
+  m = Math.max(m, a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])); } return m; }
 const LAMPARAS = { u_farola: [[.65, .09]], u_farola_orn: [[.5, .2]], u_farol_doble: [[.17, .27], [.77, .18]] };
 // árboles, faroles, semáforos, contenedores… (lo que frena un auto); lo demás va como Decoration
 export class Prop extends GameObject {
@@ -204,13 +215,13 @@ export class Prop extends GameObject {
       // la luz sale de la lámpara (sourceHeight, a media altura del poste: el charco queda más parejo) y por eso más fuerte
       L.sourceHeight = top * .5; L.lightIntensity = (f === 'u_farol_doble' ? 2600 : f === 'u_farola' ? 2200 : 1800) * FAROL_K; L.hasGlowSprite = .55; L.active = 1;
       this.collider.visualRange = alcanceLuz(L.lightIntensity) || 260;   // alcance para las sombras que proyecta su luz (y, con ?raycast=1, las casas que la tapan)
-      // brillo en cada lámpara (se prende con la luz): un centro chico y un halo. Van con las entidades, ordenados por y justo
-      // delante del poste, así una casa o un árbol que está delante los tapa (en una capa aditiva arriba de todo se veían a
-      // través de las casas). Quedan debajo de la luz, que en la lámpara es la del propio farol
-      const ls = LAMPARAS[f] || null, sw = this.spriteRenderer.originalWidth * e, sh = this.spriteRenderer.originalHeight * e;
+      // brillo en cada lámpara (se prende con la luz): un centro chico y un halo, en la capa 'noche' (aditiva, arriba de todo:
+      // debajo de la luz, multiplicados por el charco, no se veían). Esa capa no se ordena con las casas: el farol que tiene su
+      // lámpara detrás de una casa (c.tp, ConurbanoScene._lamparasTapadas, al cargar) va sin brillo
+      const ls = c.tp ? null : LAMPARAS[f] || null, sw = this.spriteRenderer.originalWidth * e, sh = this.spriteRenderer.originalHeight * e;
       if (ls) for (const [fx, fy] of ls) { const dx = (fx - an[0]) * sw * (c.fl ? -1 : 1), dy = (fy - an[1]) * sh;
-        this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5 });
-        this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5 }); }
+        this.addDecoration('_lightGradient', dx, dy, .26, .26, 1, { tint: 0xfff2d0, alpha: 1, anchorX: .5, anchorY: .5, layer: 'noche' });
+        this.addDecoration('_lightGradient', dx, dy, .8, .8, 1, { tint: LUZ, alpha: .5, anchorX: .5, anchorY: .5, layer: 'noche' }); }
       luzNace(this, ls ? ls.length * 2 : 0, 1, .5, c);   // se prende a su hora, con sus brillos (centro y halo de cada lámpara)
     } else {
       L.lightIntensity = 0; L.active = 0; this.luzHora.base = 0;
@@ -653,6 +664,8 @@ export class ConurbanoScene extends Scene {
       cables: { zIndex: 3.5, ySorting: false, maxItems: Math.max(4000, META.nCables + 500) },
       // aditivas de verdad (WeedJS compone las capas de sprites con shader.containerBlend, no con blendMode)
       brillos: { zIndex: 5.5, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 1000 },
+      // brillos de las lámparas de los faroles (los de los faros van con las entidades)
+      noche: { zIndex: 5.6, blendMode: BLEND_MODES.ADD, shader: { containerBlend: BLEND_MODES.ADD }, ySorting: false, maxItems: 2000 },
     },
   };
   // atlas pre-horneado (herramientas/hornear_atlas.js): el celu no tiene que decodificar y empaquetar ~60 imágenes al arrancar
@@ -693,6 +706,22 @@ export class ConurbanoScene extends Scene {
     L.forEach((l, k) => { LX[k] = l[0]; LY[k] = l[1]; LZ[k] = l[2]; LP[k] = l[3]; LA[k] = l[4];
       const g = clave(Math.floor(l[0] / CEL), Math.floor(l[1] / CEL)); let a = grid.get(g); if (!a) grid.set(g, a = []); a.push(k); });
     this._cf = { n, LX, LY, LZ, LP, LA, grid, clave, on: new Uint8Array(n).fill(2), di: [], tn: [], l: [], wv: [], wc: [], m: -1, sucio: 0 };
+  }
+  // los faroles cuya lámpara queda detrás de una casa: la lámpara (a la altura del farol, como en _carasFaroles) cae dentro del
+  // dibujo de la casa (la envolvente de su planta y de sus puntos de sombra subidos a su altura) y el pie del farol está más
+  // atrás que el frente de la casa en esa x. Los faroles no se mueven: se calcula una vez, al cargar
+  _lamparasTapadas(w) {
+    const KZ = META.CZ * META.SF, G = 256, grilla = new Map(), out = new Set();
+    for (const h of w.casas || []) { if (!h.col || !h.sp) continue;
+      const pie = h.col.map(([x, y]) => [h.x + x, h.y + y]), P = pie.slice();
+      for (let i = 0; i < h.sp.length; i += 3) P.push([h.x + h.sp[i], h.y + h.sp[i + 1] - h.sp[i + 2] * KZ]);
+      let x0 = Infinity, x1 = -Infinity; for (const q of pie) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; }
+      const c = { pie, sil: envolvente(P), x0, x1 };
+      for (let g = Math.floor(x0 / G); g <= Math.floor(x1 / G); g++) { let l = grilla.get(g); if (!l) grilla.set(g, l = []); l.push(c); } }
+    for (const p of w.props || []) { if (!(p.r > 0) || !p.f || !p.f.startsWith('u_farol')) continue;
+      const hz = p.f.startsWith('u_farola_orn') ? 4 : p.f.startsWith('u_farola') ? 6.5 : 5.5, hy = p.y - hz * KZ, l = grilla.get(Math.floor(p.x / G));
+      if (l) for (const c of l) if (p.x >= c.x0 && p.x <= c.x1 && dentroConvexo(c.sil, p.x, hy) && p.y < frenteEn(c.pie, p.x)) { out.add(p); break; } }
+    return out;
   }
   // una pieza de cara: x, y en pantalla (px de mundo); t[10..12] su normal, t[13] la altura de su centro (m)
   _caraPieza(di, sx, sy, t) {
@@ -768,10 +797,11 @@ export class ConurbanoScene extends Scene {
       this._carasListas();
     } else for (const h of w.casas) { Casa.spawn({ x: h.x, y: h.y, col: h.col, r: h.r, k: h.k, l: h.l, fr: w.franjas[h.a], t: 'casas' + h.o + '_' + h.a + '_', e: META.escalaCasas || 1 });
       this._sombra(h); }
+    const tapadas = this._lamparasTapadas(w); this.lamparasTapadas = tapadas.size;
     for (const p of w.props) {
       if (p.sh && !(p.r > 0)) { const a = META.anclas[p.sh]; Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.sh, anchorX: a[0], anchorY: a[1], alpha: .45, layer: 'sombras' }); }
       if (p.r > 0) { let sk = -1; if (p.f === 'u_semaforo' && p.cr >= 0 && this._sem.length < (TR.nSem || 0)) { sk = this._sem.length; this._sem.push({ cid: p.cr, eje: p.ej, sk, f: -1 }); }
-        Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl, sk }); }
+        Prop.spawn({ x: p.x, y: p.y, f: p.f, r: p.r, fl: p.fl, sk, tp: tapadas.has(p) ? 1 : 0 }); }
       else { const a = META.anclas[p.f], e = (META.escalas && META.escalas[p.f]) || 1, mece = p.f.startsWith('plm_') || p.f.startsWith('yy_');   // plantas que se mecen (skew: la base queda fija)
         Decoration.spawn({ x: p.x, y: p.y, texture: 'props_' + p.f, anchorX: a[0], anchorY: a[1], scaleX: p.fl ? -e : e, scaleY: e,
           ...(mece ? { swaySkew: 1, swayAmplitude: .05 + rng() * .05, swayFrequency: .5 + rng() * .6 } : {}),
