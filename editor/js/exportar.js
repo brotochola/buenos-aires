@@ -10,26 +10,59 @@ const Exportar = (() => {
   const SF = R3.SF, K = R3.K, SYN = R3.SYN, CZ = R3.CZ;
   const espera = () => new Promise(r => setTimeout(r, 0));
   const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100;
-  // escala mínima a la que el juego dibuja un prop HD (ver la hoja de props)
-  const E_HD = .3;
-  // achica un canvas por r (< 1) promediando el área que cubre cada píxel nuevo, con el color premultiplicado por el alfa (así el
-  // fondo transparente no oscurece los bordes)
-  function achicarPromedio(src, r) {
-    const w = src.width, h = src.height, W2 = Math.max(1, Math.round(w * r)), H2 = Math.max(1, Math.round(h * r)), rx = W2 / w, ry = H2 / h;
+  // escala de los props HD en el juego: un texel mide 0,45 px de mundo, o sea 2,2 texeles por píxel con zoom 1 y 1,8 píxeles por texel con zoom 4.
+  // El atlas no tiene mipmaps: la placa toma 4 texeles por píxel y a 0,3 (3,3 por píxel con zoom 1) se veía granulado; a 0,6 o más se borronea al
+  // acercar. Medido contra el dibujo: con zoom 1 van parejos de 0,4 a 0,6, 0,45 el mejor (0,5 cae justo en 2:1 y da peor), y al acercar gana el más chico
+  const E_HD = .45;
+  // achica un canvas por r (< 1) y le deja m texeles transparentes alrededor: cada texel nuevo es un promedio pesado de los originales, en
+  // luz lineal (en sRGB el contorno oscuro de Gemini se come el color de al lado) y con el color premultiplicado por el alfa (así el fondo
+  // transparente no ensucia los bordes). La escala es exactamente r: el dibujo no se estira para caer justo en un número entero de texeles.
+  // Pesos de Mitchell-Netravali (B = C = 1/3): a diferencia de un promedio de área, no deja escalones cuando r no es 1/n.
+  // Promediar cuesta dos cosas, que se devuelven al final: el alfa, porque una hoja fina queda medio transparente (un texel cubierto
+  // ALFA_LLENO o más va opaco, y por debajo baja suave); y la saturación, un 12 % en las plantas, con la misma cuenta y el mismo knob que las casas
+  const LIN = Float32Array.from({ length: 256 }, (_, i) => { const c = i / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+  const sRGB = (v) => 255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055);
+  const ALFA_LLENO = .3, mitchell = (x) => { const a = Math.abs(x); return a < 1 ? (21 * a * a * a - 36 * a * a + 16) / 18 : a < 2 ? (-7 * a * a * a + 36 * a * a - 60 * a + 32) / 18 : 0; };
+  function achicarLineal(src, r, m, sat) {
+    const w = src.width, h = src.height, W2 = Math.ceil(w * r) + 2 * m, H2 = Math.ceil(h * r) + 2 * m;
     const d = src.getContext("2d").getImageData(0, 0, w, h).data, P = new Float32Array(w * h * 4);
-    for (let i = 0; i < w * h; i++) { const a = d[i * 4 + 3] / 255; P[i * 4] = d[i * 4] * a; P[i * 4 + 1] = d[i * 4 + 1] * a; P[i * 4 + 2] = d[i * 4 + 2] * a; P[i * 4 + 3] = a; }
-    // pesos de una dimensión: cuánto del texel i cae en el píxel nuevo j
-    const pesos = (n, n2, k) => { const L = []; for (let j = 0; j < n2; j++) { const a = j / k, b = (j + 1) / k, l = [];
-      for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b)); i++) { const o = Math.min(b, i + 1) - Math.max(a, i); if (o > 0) l.push(i, o * k); } L.push(l); } return L; };
-    const PX = pesos(w, W2, rx), PY = pesos(h, H2, ry), T = new Float32Array(W2 * h * 4), O = new Float32Array(W2 * H2 * 4);
+    for (let i = 0; i < w * h; i++) { const a = d[i * 4 + 3] / 255; P[i * 4] = LIN[d[i * 4]] * a; P[i * 4 + 1] = LIN[d[i * 4 + 1]] * a; P[i * 4 + 2] = LIN[d[i * 4 + 2]] * a; P[i * 4 + 3] = a; }
+    // pesos de una dimensión: [texel, peso, texel, peso…] de cada texel nuevo. Lo que cae fuera del canvas cuenta como transparente
+    const SUB = 8, pesos = (n, n2) => { const L = []; for (let j = 0; j < n2; j++) { const c = (j - m + .5) / r, a = Math.floor(c - 2 / r), b = Math.ceil(c + 2 / r), l = []; let t = 0;
+      for (let i = a; i <= b; i++) { let v = 0; for (let q = 0; q < SUB; q++) v += mitchell((i + (q + .5) / SUB - c) * r); t += v; if (v && i >= 0 && i < n) l.push(i, v); }
+      for (let q = 1; q < l.length; q += 2) l[q] /= t; L.push(l); } return L; };
+    const PX = pesos(w, W2), PY = pesos(h, H2), T = new Float32Array(W2 * h * 4), O = new Float32Array(W2 * H2 * 4);
     for (let y = 0; y < h; y++) for (let j = 0; j < W2; j++) { const l = PX[j], o = (y * W2 + j) * 4;
       for (let q = 0; q < l.length; q += 2) { const s = (y * w + l[q]) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) T[o + c] += P[s + c] * p; } }
     for (let j = 0; j < H2; j++) { const l = PY[j]; for (let x = 0; x < W2; x++) { const o = (j * W2 + x) * 4;
       for (let q = 0; q < l.length; q += 2) { const s = (l[q] * W2 + x) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) O[o + c] += T[s + c] * p; } } }
     const c2 = document.createElement("canvas"); c2.width = W2; c2.height = H2; const g = c2.getContext("2d"), im = g.createImageData(W2, H2);
-    for (let i = 0; i < W2 * H2; i++) { const a = Math.min(1, O[i * 4 + 3]);
-      if (a > 0) { for (let c = 0; c < 3; c++) im.data[i * 4 + c] = Math.round(Math.min(255, O[i * 4 + c] / O[i * 4 + 3])); im.data[i * 4 + 3] = Math.round(a * 255); } }
+    // los pesos negativos pueden dar un alfa o un color fuera de rango: se recortan
+    for (let i = 0; i < W2 * H2; i++) { const a = Math.min(1, O[i * 4 + 3]); if (a < 1 / 255) continue;
+      const k = [0, 1, 2].map(c => sRGB(Math.min(1, Math.max(0, O[i * 4 + c]) / a))), l = .299 * k[0] + .587 * k[1] + .114 * k[2], t = Math.min(1, a / ALFA_LLENO);
+      for (let c = 0; c < 3; c++) im.data[i * 4 + c] = Math.round(l + (k[c] - l) * sat); im.data[i * 4 + 3] = Math.round(t * t * (3 - 2 * t) * 255); }
     g.putImageData(im, 0, 0); return c2; }
+
+  // las hojas de plantas y yuyos tienen fondo cian: entre dos tallos finos y al borde de lo claro (penachos, yuyos secos) queda cian mezclado con
+  // el dibujo, que no llega a ser fondo para achicar.py y en el juego se ve como un borde turquesa. De afuera para adentro: el pixel turquesa que
+  // toca lo transparente toma el color de sus vecinos limpios y pierde el alfa de lo que tiene de cian. Lo turquesa de adentro (el brillo de una
+  // flor) no toca nada transparente y queda como está
+  const turquesa = (r, g, b) => g - r > 12 && b - r > 8 && Math.abs(g - b) < 36 && .299 * r + .587 * g + .114 * b > 105, CIAN = [0, 255, 255];
+  function sinCian(cv) {
+    const w = cv.width, h = cv.height, g = cv.getContext("2d"), im = g.getImageData(0, 0, w, h); let d = im.data;
+    for (let pasada = 0; pasada < 3; pasada++) { const o = new Uint8ClampedArray(d);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (d[i + 3] < 8 || !turquesa(d[i], d[i + 1], d[i + 2])) continue;
+        let toca = false; for (let v = y - 1; v <= y + 1; v++) for (let u = x - 1; u <= x + 1; u++) if (u < 0 || v < 0 || u >= w || v >= h || d[(v * w + u) * 4 + 3] < 80) toca = true;
+        if (!toca) continue;
+        let s = 0; const c = [0, 0, 0];
+        for (let v = Math.max(0, y - 2); v <= Math.min(h - 1, y + 2); v++) for (let u = Math.max(0, x - 2); u <= Math.min(w - 1, x + 2); u++) { const k = (v * w + u) * 4, a = d[k + 3] / 255;
+          if (a < .3 || turquesa(d[k], d[k + 1], d[k + 2])) continue; const p = a / (1 + (u - x) ** 2 + (v - y) ** 2); s += p; for (let q = 0; q < 3; q++) c[q] += d[k + q] * p; }
+        if (!s) continue;
+        // qué parte del camino entre el color limpio y el cian hizo este pixel
+        let n = 0, t = 0; for (let q = 0; q < 3; q++) { c[q] /= s; const l = CIAN[q] - c[q]; t += (d[i + q] - c[q]) * l; n += l * l; }
+        for (let q = 0; q < 3; q++) o[i + q] = c[q]; o[i + 3] = d[i + 3] * (1 - Math.min(1, Math.max(0, t / n))); }
+      d = o; }
+    im.data.set(d); g.putImageData(im, 0, 0); return cv; }
 
   async function exportar(B, atlas, F, progreso = () => {}, opts = {}) {
     const t0 = performance.now(), W = B.W, MW = W.MW, MH = W.MH, C = CFG.v;
@@ -279,19 +312,20 @@ const Exportar = (() => {
       return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null, ...(e.cruce && e.cruce._cid >= 0 ? { cr: e.cruce._cid, ej: e.eje } : {}) }; });
     const anclas = {}, escalas = {}; let semAlto = 0;
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
-      // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
+      // los props HD (f.hd) salen de su hoja, no del atlas del editor, y el juego los dibuja a f.hd.e (escalas)
       const S = (n) => F[n].hd || F[n];
-      // contorno como el de las casas y los árboles (no el de los personajes y los autos, que es más grueso y oscuro): por
-      // fuera, de ~0,6 px de mundo a la escala del juego (f.e, o 1), del color del relleno llevado a su oscuro como el borde de
-      // las caras (R3.LIGHT.outline). Las sombras y lo que va pegado al piso, sin.
-      const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline);
-      for (const n of usados) { let f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+      // los de Gemini (f.e) ya vienen con su contorno dibujado: no se les agrega otro, sólo se achican hasta E_HD y llevan un margen
+      // transparente (el borde suave del dibujo no se corta contra el del cuadro). Los demás llevan el contorno de las casas y los árboles
+      // (no el de los personajes y los autos, que es más grueso y oscuro): por fuera, de ~0,6 px de mundo, del color del relleno llevado a su
+      // oscuro como el borde de las caras (R3.LIGHT.outline). Las sombras, sin.
+      const SIN_CONTORNO = /^sh_/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline), MARGEN = 2;
+      for (const n of usados) { let f = S(n), c = document.createElement("canvas"), t; c.width = f.w; c.height = f.h;
         c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
-        // los que Gemini dibujó muy grandes (las plantas nuevas: ~100 px/m, que el juego mostraba a 0,18) se achican con promedio
-        // hasta E_HD: sin mipmaps, la placa tomaba 1 de cada 3 a 5 texeles con zoom 1 a 2,5 y se veían granulados, con el
-        // contorno oscuro salteado (chamuscados). A 0,3 un texel mide 1,2 px de pantalla con zoom 4, el máximo
-        if (f.e && f.e < E_HD * .9) { const r = f.e / E_HD; c = achicarPromedio(c, r); f = { ...f, w: c.width, h: c.height, ox: f.ox * r, oy: f.oy * r, e: E_HD }; }
-        const t = SIN_CONTORNO.test(n) ? 0 : Math.max(1, Math.round(.6 / (f.e || 1))); cuadro[n] = { cv: t ? Contorno.canvas(c, t, null, SUAVE) : c, t, f }; }
+        if (f.e) { t = MARGEN; if (/^(pl|plm|yy)_/.test(n)) sinCian(c);
+          if (f.e < E_HD) { const r = f.e / E_HD; c = achicarLineal(c, r, t, R3.LIGHT.sat); f = { ...f, w: f.w * r, h: f.h * r, ox: f.ox * r, oy: f.oy * r, e: E_HD }; }
+          else { const c2 = document.createElement("canvas"); c2.width = f.w + 2 * t; c2.height = f.h + 2 * t; c2.getContext("2d").drawImage(c, t, t); c = c2; } }
+        else { t = SIN_CONTORNO.test(n) ? 0 : 1; if (t) c = Contorno.canvas(c, t, null, SUAVE); }
+        cuadro[n] = { cv: c, t, f }; }
       const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
       for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};

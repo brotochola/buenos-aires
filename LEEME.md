@@ -163,7 +163,12 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
 5. `python3 herramientas/armar_hd.py` arma dos hojas:
    - `editor/recursos/hd_props.png/js`: los props, cada uno con su escala `e`;
    - `editor/recursos/fachada.png/js`: las piezas de fachada `fd_*`.
-6. El editor usa los props HD en lugar de los v4 del mismo nombre y R3 pega las piezas de fachada en las paredes, sin suavizar. El exportador manda los props HD con su resolución y `META.escalas` le dice al juego a qué escala mostrarlos. Los que quedarían a menos de 0,3 (las plantas nuevas venían a ~100 px/m y se mostraban a 0,18: sin mipmaps se veían granuladas y con el contorno salteado) se achican antes con promedio hasta 0,3.
+6. El editor usa los props HD en lugar de los v4 del mismo nombre y R3 pega las piezas de fachada en las paredes, sin suavizar. El exportador (sección de props de `editor/js/exportar.js`) arma `img/props.png` y `META.escalas` le dice al juego a qué escala mostrar cada cuadro. Con los props HD hace esto:
+   - **Sin contorno agregado.** Gemini ya los dibuja con el suyo. Antes se pintaba otro por fuera (2 texeles, oscuro, con el alfa en duro) y eso los dejaba chamuscados: las plantas tenían un 41 % más de área que el dibujo, casi toda de borde oscuro. Los pocos props que no son de Gemini (`cartel`, `pileta`, `pizarra_*`) lo siguen llevando.
+   - **Los achica hasta 0,45** (`E_HD`): un texel mide 0,45 px de mundo, con 2,2 texeles por píxel con zoom 1 y 1,8 píxeles por texel con zoom 4. El promedio es en luz lineal (en sRGB el contorno oscuro de Gemini se come el color de al lado), premultiplicado por el alfa y con pesos de Mitchell. Después devuelve lo que el promedio le saca al dibujo: el cuerpo de lo fino (un texel cubierto un 30 % o más va opaco, `ALFA_LLENO`; si no, una hoja queda medio transparente) y la saturación (un 12 % en las plantas: se recupera con el knob `sat`, la misma cuenta que las casas).
+   - **Saca el turquesa** de plantas y yuyos: las hojas con fondo cian dejan cian mezclado entre tallos finos y al borde de lo claro. El pixel turquesa que toca lo transparente toma el color de sus vecinos limpios.
+   - **Por qué 0,45 y no mipmaps.** El atlas no tiene mipmaps: la placa toma 4 texeles por píxel, así que a 0,3 (3,3 por píxel con zoom 1) se veían granulados, y a 0,6 o más se borronean al acercar. Medido contra el dibujo, con zoom 1 van parejos de 0,4 a 0,6, y al acercar gana el más chico. Los mipmaps (`renderer.autoGenerateMipmaps`, `?mip=1`) se ven mejor muy alejado, pero son de todo el atlas: con zoom 1 las caras de las casas muestran costuras (cada cara son piezas, y el margen transparente entre cuadros, `atlasPadding` 2, ya entra en el primer nivel), ladrillos y tejas se borronean, y rejas y cables casi desaparecen. Además suman un tercio de memoria de placa.
+7. Para rehacer un barrio después de tocar el exportador: `node herramientas/reexportar.js <barrio|carabobo|parquechas>`, con el juego servido en `http://127.0.0.1:8010` (o `--url …`). Lee la semilla y los knobs del `meta.json` del barrio, abre el editor con ellos en Chromium sin ventana, exporta, descomprime sobre la carpeta, hornea el atlas, corre `barrios.js` y dice qué archivos cambiaron y cuánto tardó (un barrio entero, menos de 2 minutos). Sale igual byte a byte salvo lo que haya cambiado en el código (`fecha` aparte). `--sal <carpeta>` escribe en otro lado y no toca el barrio, para ver qué cambiaría; `--sin-atlas` no hornea. Usa el Playwright de WeedJS si el juego no tiene uno a mano (`herramientas/playwright.js`; otra carpeta con `WEED_REPO`).
 
 ## Límites conocidos
 
@@ -171,9 +176,9 @@ Estilo: pixel art duro con contorno de color (el más oscuro de cada material, n
   ponen donde la casa, la plaza o la calle está girada 50° ± 6° (módulo 90°), que es como se ve esa caja en la vista del juego. En
   los demás lugares no van. Nada se pone delante de una puerta o un portón (las puertas salen del dibujo de cada casa). No hay
   animales.
-- Contorno: las casas, los árboles y los props llevan el mismo borde fino, del color de la cosa oscurecido (las caras lisas y los
-  techos de material, con una tira de 1 px); los personajes y los autos, el suyo, más marcado. Los personajes LPC van un 6 % más
-  angostos.
+- Contorno: las casas y los árboles llevan el mismo borde fino, del color de la cosa oscurecido (las caras lisas y los techos de
+  material, con una tira de 1 px); los props de Gemini, el que trae el dibujo; los personajes y los autos, el suyo, más marcado. Los
+  personajes LPC van un 6 % más angostos.
 
 - El catálogo de casas se reparte entre lotes para entrar en el atlas único de WeedJS. Por eso algunas casas son un poco más angostas que su lote y quedan pasillos laterales.
 - Ese atlas (hasta 8192×4096 píxeles) lleva casas, gente, árboles, props y autos. Con WeedJS ff32c939 o posterior no hay tope de cuadros (antes, con más de 8192, no se dibujaba ningún sprite: N-111). Si un barrio no entra en los píxeles, el juego no carga («Could not fit … into atlas»): bajá la «variedad» de casas.
