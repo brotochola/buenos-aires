@@ -3,19 +3,20 @@
 // rumbo y en modo kit (Houses.setKit): sus caras quedan en coordenadas de la casa y sus detalles chicos como accesorios.
 // Lo que va al atlas, sin rumbo y sin repetir:
 //   - las caras con dibujo propio (fachadas, medianeras, carteles…): planas, con su material, la oclusión del piso, la
-//     saturación y un borde oscuro (el contorno), sin la luz del sol, en piezas de hasta 128 px de mundo;
+//     saturación y un borde oscuro (el contorno), sin la luz, en piezas de hasta 128 px de mundo;
 //   - las baldosas de material (techos): una por material, compartida por todas las casas, en piezas de hasta 6 m;
 //   - los accesorios (tanque, aire, antena, maceta): un sprite de R3 cada uno, compartido (los que tienen frente, por
 //     octavo de vuelta);
 //   - las caras de color liso no van: se dibujan con la textura blanca del motor (_white) teñida.
 // Para cada rumbo en que se usa un diseño (una "variante"): qué se ve; para cada pieza su lugar, escala y skew (la cara
-// plana proyectada en la vista oblicua es un paralelogramo: escala + skewX + skewY la dibujan exacta), el tinte (la luz
-// de R3 para hacia dónde mira la cara en ese rumbo), el orden de pintor dentro de la casa (innerZ) y la y de orden (la
-// base de su pared o de la casa en su columna, subida lo justo para no quedar detrás de una pieza de la casa que tapa).
+// plana proyectada en la vista oblicua es un paralelogramo: escala + skewX + skewY la dibujan exacta), el tinte, hacia
+// dónde mira y la altura de su centro (con eso WeedJS la ilumina como una superficie: lighting.faces), el orden de pintor
+// dentro de la casa (innerZ) y la y de orden (la base de su pared o de la casa en su columna, subida lo justo para no quedar
+// detrás de una pieza de la casa que tapa).
 const Caras = (() => {
   const { SF, K, SYN, CZ } = R3;
   const VIEW = R3.norm([-K, 1, -SYN / CZ]);
-  const G = 1.25;   // la luz más fuerte (cara al sol, ~1,24): la textura va por G y el tinte de cada cara es L/G ≤ 1
+  const G = 1.25;   // la textura va por G y el tinte de cada cara es L/G ≤ 1
   const len = (v) => Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
   const rot = (c, s, v) => [c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]];
   const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sc3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
@@ -23,9 +24,9 @@ const Caras = (() => {
   const J = (v) => [SF * (v[0] + K * v[1]), -SF * (v[2] * CZ + v[1] * SYN)];
   const hexDe = (c) => (Math.max(0, Math.min(255, Math.round(c[0]))) << 16) | (Math.max(0, Math.min(255, Math.round(c[1]))) << 8) | Math.max(0, Math.min(255, Math.round(c[2])));
 
-  // ---------- la luz de R3 sin sombra proyectada (r3d.js render)
-  function luz(n) { const S = R3.SUN, L = R3.LIGHT, ndl = Math.max(0, R3.dot(n, S)), hz = .5 + .5 * n[2];
-    return [0, 1, 2].map(j => L.amb * (R3.SKY[j] * hz + R3.BOUNCE[j] * (1 - hz)) + L.sun * ndl * R3.SUNC[j]); }
+  // ---------- la luz de cada cara la pone WeedJS, según dónde están el sol y los faroles (lighting.faces). Acá sólo va la de
+  // una superficie plana al sol, igual para todas, la de un techo en R3 (r3d.js render); WeedJS lleva esa superficie a 1
+  const L = [.83, .83, .83];
   // color de R3 tras la saturación (sobre el color ya iluminado)
   function saturar(r, g, b) { const s = R3.LIGHT.sat, l = .3 * r + .59 * g + .11 * b; return [l + (r - l) * s, l + (g - l) * s, l + (b - l) * s]; }
 
@@ -165,7 +166,7 @@ const Caras = (() => {
         if (R3.dot(n3, VIEW) >= -1e-4) { if (!F0.both) continue; n3 = [-n3[0], -n3[1], -n3[2]]; }
         const F = { O: rot(c, s, F0.O), E1: rot(c, s, F0.E1), E2: rot(c, s, F0.E2), tri: F0.tri, n: n3 };
         const A = J(F.E1), B = J(F.E2); if (Math.hypot(A[0], A[1]) < .5 || Math.hypot(B[0], B[1]) < .5 || Math.abs(A[0] * B[1] - A[1] * B[0]) < 1) continue;   // de canto
-        st.caras++; const L = luz(n3), sub = [];
+        st.caras++; const sub = [];
         if (!F0.tex && !F0.tri) {
           // color liso: la textura blanca del motor, teñida con el color iluminado
           st.lisas++; const col = saturar(F0.col[0] * L[0], F0.col[1] * L[1], F0.col[2] * L[2]);
@@ -245,7 +246,7 @@ const Caras = (() => {
       for (const t of tiles) if (t.borde) t.clave += .02;   // el borde, encima de su cara (misma y de orden y mismo innerZ)
       const r2 = (v) => Math.round(v * 100) / 100, r4 = (v) => Math.round(v * 1e4) / 1e4;
       // las piezas de caras llevan además hacia dónde mira su cara (la normal, ya girada como la casa) y la altura de su centro (m):
-      // con eso el juego sabe cuánto la alumbra cada farol (ConurbanoScene.carasFaroles)
+      // el juego se las da a WeedJS (Decoration.spawn: faceNormalX, faceNormalY, faceNormalZ, faceHeight)
       variantes[e.id] = tiles.map(t => { const v = [t.cuadro, r2(t.p[0]), r2(t.p[1]), r4(t.sx), r4(t.sy), r4(t.kx), r4(t.ky), t.tn, r2(t.clave - t.p[1]), t.iz];
         if (t.n) v.push(r2(t.n[0]), r2(t.n[1]), r2(t.n[2]), r2(t.z)); return v; });
       // el pie de la casa (de donde cuelgan el colisionador y la sombra): el punto más al frente de las cajas apoyadas
