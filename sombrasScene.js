@@ -5,9 +5,9 @@
 import { BARRIOS } from './barrios.js';
 import { AUTOS, CHATARRA } from './img/autos/autos.js';
 import { APOYO } from './img/autos/apoyo.js';
-import { cajaAuto, CAJA_T, cajaAlturas, altoAuto } from './sombraAuto.js';
+import { altoAuto, AUTO_S } from './sombraAuto.js';
 
-const { Scene, GameObject, RigidBody, Collider, SpriteRenderer, MeshRenderer, ShadowCaster, SpriteSheetRegistry, Camera, Mouse, Keyboard, Sun, Decoration, LAYER_KIND, enums } = WEED;
+const { Scene, GameObject, RigidBody, Collider, SpriteRenderer, ShadowCaster, VolumeShadowCaster, SpriteSheetRegistry, Camera, Mouse, Keyboard, Sun, Decoration, LAYER_KIND, enums } = WEED;
 const { ShapeType } = enums;
 // los parámetros de la página, iguales en todos los hilos (WEED.params: en un worker, location es la del worker)
 const Q = WEED.params || new URLSearchParams('');
@@ -19,7 +19,6 @@ const u = (p) => new URL(p, import.meta.url).href;
 const AUTOS_MED = Object.fromEntries(Object.entries({ ...AUTOS, ...CHATARRA }).map(([m, d]) => [m.split('_')[0], [d.largo, d.ancho]]));
 const PISO_SHADER = Q.get('piso') === 'shader';
 const VIEJO = Q.get('autos') === 'viejo';   // ?autos=viejo: la sombra de antes (ShadowCaster del sprite)
-const _sb = new Float32Array(16);
 export const MODELOS = ['hatch_rojo', 'pickup_blanco', 'colectivo_azul', 'camion_rojo', 'policia', 'sedan_blanco'];
 export const RUMBOS = 16;                       // rumbos de pantalla por fila (cada 22,5°)
 const WW = 2400, WH = 1600, PASO = 130, FILA = 120, X0 = 140, Y0 = 220;
@@ -37,7 +36,7 @@ function angleKeys(sheet) {
 
 export class CocheP extends GameObject {
   static isStatic = true;
-  static components = [RigidBody, Collider, SpriteRenderer, MeshRenderer, ShadowCaster];
+  static components = [RigidBody, Collider, SpriteRenderer, ShadowCaster, VolumeShadowCaster];
   onSpawned(c = {}) {
     this.rigidBody.static = 1;
     this.collider.shapeType = ShapeType.Circle; this.collider.radius = 4; this.collider.visualRange = 160;
@@ -50,12 +49,12 @@ export class CocheP extends GameObject {
     const ap = APOYO[c.hoja]; this.spriteRenderer.anchorY = (ap && ap[k.n]) || .5;
     this.shadowCaster.heightMultiplier = VIEJO ? .55 : 0;
     this._hoja = c.hoja; this._rot = c.rot;
-    // la sombra como en el juego: la caja del auto (huella del modelo, a 9 px por metro, y techo achicado a su altura) en la capa
-    // sunProjected; la placa la corre con el sol
-    if (!VIEJO) { this.setLayer('sombrasCasas'); this.meshRenderer.tint = 0x000000; this.meshRenderer.alpha = 1;
+    // la sombra como en el juego: la caja del auto (huella del modelo, a 9 px por metro, y techo achicado a su altura); la placa
+    // la gira con el auto y la corre con el sol
+    if (!VIEJO) {
       const d = AUTOS_MED[this._hoja.split('_')[0]] || [4.4, 1.8], [h, k] = altoAuto(this._hoja);
-      this.meshRenderer.setMesh(cajaAuto(_sb, Math.cos(this._rot), Math.sin(this._rot), d[0] * 9, d[1] * 9, k), CAJA_T);
-      this.meshRenderer.setHeights(cajaAlturas(h)); }
+      this.volumeShadowCaster.setBox(d[0] * 18, d[1] * 18, h, { topScale: k, floorScaleY: AUTO_S });
+    }
   }
 }
 export class GenteP extends GameObject {
@@ -84,7 +83,7 @@ export class ArbolP extends GameObject {
 export class SombrasScene extends Scene {
   static config = {
     worldWidth: WW, worldHeight: WH, seed: 3,
-    renderer: { backend: 'webgl', ySort: true, maxMeshVerts: 4000, maxMeshIndices: 4000 },
+    renderer: { backend: 'webgl', ySort: true },
     physics: { gravity: { x: 0, y: 0 } },
     decoration: { maxDecorations: 4000, maxAttachedDecorationsPerEntity: 64 },
     lighting: {
@@ -95,7 +94,7 @@ export class SombrasScene extends Scene {
     },
     // ?piso=shader: el piso como el del barrio (capa worldRect con shader), para ver si las sombras del sol caen sobre él
     layers: { ...(PISO_SHADER ? { piso: { zIndex: .5, shader: { fragment: { webgl: 'pruebas/sombras/piso.frag' }, worldRect: { width: WW, height: WH },
-      textures: [{ name: 'nada', format: 'r8unorm', size: { width: 4, height: 4 } }], uniforms: { uK: { value: 1, type: 'f32' } } } } } : {}), sombrasCasas: { kind: LAYER_KIND.MESH, zIndex: 1.5, sunProjected: true }, fondo: { zIndex: .5, ySorting: false, maxItems: 4000 }, sombras: { zIndex: 1.6, ySorting: false, maxItems: 2000 }, rotulos: { zIndex: 6, ySorting: false, maxItems: 400 } },
+      textures: [{ name: 'nada', format: 'r8unorm', size: { width: 4, height: 4 } }], uniforms: { uK: { value: 1, type: 'f32' } } } } } : {}), fondo: { zIndex: .5, ySorting: false, maxItems: 4000 }, sombras: { zIndex: 1.6, ySorting: false, maxItems: 2000 }, rotulos: { zIndex: 6, ySorting: false, maxItems: 400 } },
   };
   static assets = { spritesheets: {
     arboles: { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles.png' },

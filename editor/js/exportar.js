@@ -86,7 +86,7 @@ const Exportar = (() => {
       const out = []; for (const p of Q) out.push(...p); return out; };
     // y de esos, se van sacando de a uno los que menos cambian la sombra, mientras ninguna de las 73 que se miran (sol a pique
     // y 24 rumbos con 3 largos) pierda más del 1 % de su área: los tanques, las cumbreras bajas, los parapetos y los aleros
-    // casi no la mueven y el volumen (sombraAuto.js, volumenSombra) sale con un tercio menos de vértices y triángulos.
+    // casi no la mueven y el volumen (VolumeShadowCaster.setHull, en Casa de conurbanoScene.js) sale con un tercio menos de vértices y triángulos.
     // Sacar puntos sólo achica la sombra: nunca sale más grande que la casa
     const SOL = [[0, 0]]; for (let a = 0; a < 24; a++) for (const L of [3, 10, 31]) SOL.push([Math.cos(a / 24 * 2 * Math.PI) * L, Math.sin(a / 24 * 2 * Math.PI) * L]);
     const areaPol = (H) => { let s = 0; for (let i = 0; i < H.length; i++) { const p = H[i], q = H[(i + 1) % H.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; };
