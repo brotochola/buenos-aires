@@ -3,33 +3,67 @@
 //   meta.json        tamaños, proyección, hojas, cuántas franjas/piezas (para dimensionar los pools)
 //   mundo.json       casas, props, árboles, autos, cables (en px de mundo de WeedJS) + catálogos de franjas y árboles
 //   piso.bin         datos del shader del piso (celdas, tabla de calles, riqueza, ruido)
-//   ff_*.json        flowfields estáticos de WeedJS: peatones (varios destinos), vuelta manzana (= veredas), calles
+//   ff_*.json|bin    flowfields estáticos de WeedJS: peatones (varios destinos), vuelta manzana (= veredas), calles; .bin con la
+//                    perilla ffBinario (el formato binario de WeedJS, ver ffBin)
 //   img/*.png|json   hojas de sprites tipo TexturePacker: casas (piezas de franjas), árboles (piezas), props
 // No arma el bigAtlas: eso lo hace el juego al cargar (o se hornea para el build final, con las demás entidades).
 const Exportar = (() => {
   const SF = R3.SF, K = R3.K, SYN = R3.SYN, CZ = R3.CZ;
   const espera = () => new Promise(r => setTimeout(r, 0));
   const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100;
-  // escala mínima a la que el juego dibuja un prop HD (ver la hoja de props)
-  const E_HD = .3;
-  // achica un canvas por r (< 1) promediando el área que cubre cada píxel nuevo, con el color premultiplicado por el alfa (así el
-  // fondo transparente no oscurece los bordes)
-  function achicarPromedio(src, r) {
-    const w = src.width, h = src.height, W2 = Math.max(1, Math.round(w * r)), H2 = Math.max(1, Math.round(h * r)), rx = W2 / w, ry = H2 / h;
+  // escala de los props HD en el juego: un texel mide 0,45 px de mundo, o sea 2,2 texeles por píxel con zoom 1 y 1,8 píxeles por texel con zoom 4.
+  // El atlas no tiene mipmaps: la placa toma 4 texeles por píxel y a 0,3 (3,3 por píxel con zoom 1) se veía granulado; a 0,6 o más se borronea al
+  // acercar. Medido contra el dibujo: con zoom 1 van parejos de 0,4 a 0,6, 0,45 el mejor (0,5 cae justo en 2:1 y da peor), y al acercar gana el más chico
+  const E_HD = .45;
+  // achica un canvas por r (< 1) y le deja m texeles transparentes alrededor: cada texel nuevo es un promedio pesado de los originales, en
+  // luz lineal (en sRGB el contorno oscuro de Gemini se come el color de al lado) y con el color premultiplicado por el alfa (así el fondo
+  // transparente no ensucia los bordes). La escala es exactamente r: el dibujo no se estira para caer justo en un número entero de texeles.
+  // Pesos de Mitchell-Netravali (B = C = 1/3): a diferencia de un promedio de área, no deja escalones cuando r no es 1/n.
+  // Promediar cuesta dos cosas, que se devuelven al final: el alfa, porque una hoja fina queda medio transparente (un texel cubierto
+  // ALFA_LLENO o más va opaco, y por debajo baja suave); y la saturación, un 12 % en las plantas, con la misma cuenta y el mismo knob que las casas
+  const LIN = Float32Array.from({ length: 256 }, (_, i) => { const c = i / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+  const sRGB = (v) => 255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055);
+  const ALFA_LLENO = .3, mitchell = (x) => { const a = Math.abs(x); return a < 1 ? (21 * a * a * a - 36 * a * a + 16) / 18 : a < 2 ? (-7 * a * a * a + 36 * a * a - 60 * a + 32) / 18 : 0; };
+  function achicarLineal(src, r, m, sat) {
+    const w = src.width, h = src.height, W2 = Math.ceil(w * r) + 2 * m, H2 = Math.ceil(h * r) + 2 * m;
     const d = src.getContext("2d").getImageData(0, 0, w, h).data, P = new Float32Array(w * h * 4);
-    for (let i = 0; i < w * h; i++) { const a = d[i * 4 + 3] / 255; P[i * 4] = d[i * 4] * a; P[i * 4 + 1] = d[i * 4 + 1] * a; P[i * 4 + 2] = d[i * 4 + 2] * a; P[i * 4 + 3] = a; }
-    // pesos de una dimensión: cuánto del texel i cae en el píxel nuevo j
-    const pesos = (n, n2, k) => { const L = []; for (let j = 0; j < n2; j++) { const a = j / k, b = (j + 1) / k, l = [];
-      for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b)); i++) { const o = Math.min(b, i + 1) - Math.max(a, i); if (o > 0) l.push(i, o * k); } L.push(l); } return L; };
-    const PX = pesos(w, W2, rx), PY = pesos(h, H2, ry), T = new Float32Array(W2 * h * 4), O = new Float32Array(W2 * H2 * 4);
+    for (let i = 0; i < w * h; i++) { const a = d[i * 4 + 3] / 255; P[i * 4] = LIN[d[i * 4]] * a; P[i * 4 + 1] = LIN[d[i * 4 + 1]] * a; P[i * 4 + 2] = LIN[d[i * 4 + 2]] * a; P[i * 4 + 3] = a; }
+    // pesos de una dimensión: [texel, peso, texel, peso…] de cada texel nuevo. Lo que cae fuera del canvas cuenta como transparente
+    const SUB = 8, pesos = (n, n2) => { const L = []; for (let j = 0; j < n2; j++) { const c = (j - m + .5) / r, a = Math.floor(c - 2 / r), b = Math.ceil(c + 2 / r), l = []; let t = 0;
+      for (let i = a; i <= b; i++) { let v = 0; for (let q = 0; q < SUB; q++) v += mitchell((i + (q + .5) / SUB - c) * r); t += v; if (v && i >= 0 && i < n) l.push(i, v); }
+      for (let q = 1; q < l.length; q += 2) l[q] /= t; L.push(l); } return L; };
+    const PX = pesos(w, W2), PY = pesos(h, H2), T = new Float32Array(W2 * h * 4), O = new Float32Array(W2 * H2 * 4);
     for (let y = 0; y < h; y++) for (let j = 0; j < W2; j++) { const l = PX[j], o = (y * W2 + j) * 4;
       for (let q = 0; q < l.length; q += 2) { const s = (y * w + l[q]) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) T[o + c] += P[s + c] * p; } }
     for (let j = 0; j < H2; j++) { const l = PY[j]; for (let x = 0; x < W2; x++) { const o = (j * W2 + x) * 4;
       for (let q = 0; q < l.length; q += 2) { const s = (l[q] * W2 + x) * 4, p = l[q + 1]; for (let c = 0; c < 4; c++) O[o + c] += T[s + c] * p; } } }
     const c2 = document.createElement("canvas"); c2.width = W2; c2.height = H2; const g = c2.getContext("2d"), im = g.createImageData(W2, H2);
-    for (let i = 0; i < W2 * H2; i++) { const a = Math.min(1, O[i * 4 + 3]);
-      if (a > 0) { for (let c = 0; c < 3; c++) im.data[i * 4 + c] = Math.round(Math.min(255, O[i * 4 + c] / O[i * 4 + 3])); im.data[i * 4 + 3] = Math.round(a * 255); } }
+    // los pesos negativos pueden dar un alfa o un color fuera de rango: se recortan
+    for (let i = 0; i < W2 * H2; i++) { const a = Math.min(1, O[i * 4 + 3]); if (a < 1 / 255) continue;
+      const k = [0, 1, 2].map(c => sRGB(Math.min(1, Math.max(0, O[i * 4 + c]) / a))), l = .299 * k[0] + .587 * k[1] + .114 * k[2], t = Math.min(1, a / ALFA_LLENO);
+      for (let c = 0; c < 3; c++) im.data[i * 4 + c] = Math.round(l + (k[c] - l) * sat); im.data[i * 4 + 3] = Math.round(t * t * (3 - 2 * t) * 255); }
     g.putImageData(im, 0, 0); return c2; }
+
+  // las hojas de plantas y yuyos tienen fondo cian: entre dos tallos finos y al borde de lo claro (penachos, yuyos secos) queda cian mezclado con
+  // el dibujo, que no llega a ser fondo para achicar.py y en el juego se ve como un borde turquesa. De afuera para adentro: el pixel turquesa que
+  // toca lo transparente toma el color de sus vecinos limpios y pierde el alfa de lo que tiene de cian. Lo turquesa de adentro (el brillo de una
+  // flor) no toca nada transparente y queda como está
+  const turquesa = (r, g, b) => g - r > 12 && b - r > 8 && Math.abs(g - b) < 36 && .299 * r + .587 * g + .114 * b > 105, CIAN = [0, 255, 255];
+  function sinCian(cv) {
+    const w = cv.width, h = cv.height, g = cv.getContext("2d"), im = g.getImageData(0, 0, w, h); let d = im.data;
+    for (let pasada = 0; pasada < 3; pasada++) { const o = new Uint8ClampedArray(d);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (d[i + 3] < 8 || !turquesa(d[i], d[i + 1], d[i + 2])) continue;
+        let toca = false; for (let v = y - 1; v <= y + 1; v++) for (let u = x - 1; u <= x + 1; u++) if (u < 0 || v < 0 || u >= w || v >= h || d[(v * w + u) * 4 + 3] < 80) toca = true;
+        if (!toca) continue;
+        let s = 0; const c = [0, 0, 0];
+        for (let v = Math.max(0, y - 2); v <= Math.min(h - 1, y + 2); v++) for (let u = Math.max(0, x - 2); u <= Math.min(w - 1, x + 2); u++) { const k = (v * w + u) * 4, a = d[k + 3] / 255;
+          if (a < .3 || turquesa(d[k], d[k + 1], d[k + 2])) continue; const p = a / (1 + (u - x) ** 2 + (v - y) ** 2); s += p; for (let q = 0; q < 3; q++) c[q] += d[k + q] * p; }
+        if (!s) continue;
+        // qué parte del camino entre el color limpio y el cian hizo este pixel
+        let n = 0, t = 0; for (let q = 0; q < 3; q++) { c[q] /= s; const l = CIAN[q] - c[q]; t += (d[i + q] - c[q]) * l; n += l * l; }
+        for (let q = 0; q < 3; q++) o[i + q] = c[q]; o[i + 3] = d[i + 3] * (1 - Math.min(1, Math.max(0, t / n))); }
+      d = o; }
+    im.data.set(d); g.putImageData(im, 0, 0); return cv; }
 
   async function exportar(B, atlas, F, progreso = () => {}, opts = {}) {
     const t0 = performance.now(), W = B.W, MW = W.MW, MH = W.MH, C = CFG.v;
@@ -53,7 +87,7 @@ const Exportar = (() => {
       const out = []; for (const p of Q) out.push(...p); return out; };
     // y de esos, se van sacando de a uno los que menos cambian la sombra, mientras ninguna de las 73 que se miran (sol a pique
     // y 24 rumbos con 3 largos) pierda más del 1 % de su área: los tanques, las cumbreras bajas, los parapetos y los aleros
-    // casi no la mueven y el volumen (sombraAuto.js, volumenSombra) sale con un tercio menos de vértices y triángulos.
+    // casi no la mueven y el volumen (VolumeShadowCaster.setHull, en Casa de conurbanoScene.js) sale con un tercio menos de vértices y triángulos.
     // Sacar puntos sólo achica la sombra: nunca sale más grande que la casa
     const SOL = [[0, 0]]; for (let a = 0; a < 24; a++) for (const L of [3, 10, 31]) SOL.push([Math.cos(a / 24 * 2 * Math.PI) * L, Math.sin(a / 24 * 2 * Math.PI) * L]);
     const areaPol = (H) => { let s = 0; for (let i = 0; i < H.length; i++) { const p = H[i], q = H[(i + 1) % H.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; };
@@ -212,9 +246,10 @@ const Exportar = (() => {
     // un tipo con cal ("_c") sólo agrega su tronco: las ramas son las del tipo base (mismo esqueleto)
     const tiposUsados = [...new Set(B.arboles.map(a => a.t))], arbolTipos = {}, base = (t) => t.replace(/_c$/, "");
     const aHornear = [...new Set(tiposUsados.flatMap(t => [t, base(t)]))];
-    // la silueta del árbol entero, chica (al 0,3 del dibujo: la sombra se dibuja a 1/4 de resolución): el juego la pone de sprite
-    // invisible del árbol para que proyecte sombra con el sol y los faroles (las decoraciones no proyectan)
-    const SIL = .3, silueta = (t) => { const R = Arboles.render(t), w = Math.max(1, Math.round(R.w * SIL)), h = Math.max(1, Math.round(R.h * SIL)), c = document.createElement("canvas");
+    // la silueta del árbol entero, chica (al 0,25 del dibujo: la sombra se dibuja a 1/4 de resolución; los árboles altos ya
+    // llenan el atlas): el juego la pone de sprite invisible del árbol para que proyecte sombra con el sol y los faroles (las
+    // decoraciones no proyectan)
+    const SIL = .25, silueta = (t) => { const R = Arboles.render(t), w = Math.max(1, Math.round(R.w * SIL)), h = Math.max(1, Math.round(R.h * SIL)), c = document.createElement("canvas");
       c.width = w; c.height = h; const g = c.getContext("2d"); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(R.canvas, 0, 0, w, h);
       return { canvas: c, w, h, i: "sil", ax: R.ox * SIL / w, ay: R.oy * SIL / h }; };
     { const items = []; for (const t of aHornear) Arboles.render(t).piezas.forEach((p, k) => { if (t === base(t) || p.i === 0) items.push({ t, p, k }); });
@@ -279,19 +314,20 @@ const Exportar = (() => {
       return { f, x: r1(x), y: r1(y), fl: fl ? 1 : 0, r: r1(e.cr * 13.5), sh: e.sh && F[e.sh] ? e.sh : null, ...(e.cruce && e.cruce._cid >= 0 ? { cr: e.cruce._cid, ej: e.eje } : {}) }; });
     const anclas = {}, escalas = {}; let semAlto = 0;
     { const usados = new Set(); for (const p of props) { usados.add(p.f); if (p.sh) usados.add(p.sh); } ["sh_person", "sh_car_h", "sh_tree"].forEach(n => F[n] && usados.add(n));
-      // los props HD (f.hd) van con su resolución original (30 px/m) y el juego los dibuja a f.hd.e (escalas)
+      // los props HD (f.hd) salen de su hoja, no del atlas del editor, y el juego los dibuja a f.hd.e (escalas)
       const S = (n) => F[n].hd || F[n];
-      // contorno como el de las casas y los árboles (no el de los personajes y los autos, que es más grueso y oscuro): por
-      // fuera, de ~0,6 px de mundo a la escala del juego (f.e, o 1), del color del relleno llevado a su oscuro como el borde de
-      // las caras (R3.LIGHT.outline). Las sombras y lo que va pegado al piso, sin.
-      const SIN_CONTORNO = /^(sh_|gd_|yy_grieta|yy_musgo|yy_trebol)/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline);
-      for (const n of usados) { let f = S(n), c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+      // los de Gemini (f.e) ya vienen con su contorno dibujado: no se les agrega otro, sólo se achican hasta E_HD y llevan un margen
+      // transparente (el borde suave del dibujo no se corta contra el del cuadro). Los demás llevan el contorno de las casas y los árboles
+      // (no el de los personajes y los autos, que es más grueso y oscuro): por fuera, de ~0,6 px de mundo, del color del relleno llevado a su
+      // oscuro como el borde de las caras (R3.LIGHT.outline). Las sombras, sin.
+      const SIN_CONTORNO = /^sh_/, cuadro = {}, SUAVE = Math.min(1, .7 * R3.LIGHT.outline), MARGEN = 2;
+      for (const n of usados) { let f = S(n), c = document.createElement("canvas"), t; c.width = f.w; c.height = f.h;
         c.getContext("2d").drawImage(f.img || atlas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
-        // los que Gemini dibujó muy grandes (las plantas nuevas: ~100 px/m, que el juego mostraba a 0,18) se achican con promedio
-        // hasta E_HD: sin mipmaps, la placa tomaba 1 de cada 3 a 5 texeles con zoom 1 a 2,5 y se veían granulados, con el
-        // contorno oscuro salteado (chamuscados). A 0,3 un texel mide 1,2 px de pantalla con zoom 4, el máximo
-        if (f.e && f.e < E_HD * .9) { const r = f.e / E_HD; c = achicarPromedio(c, r); f = { ...f, w: c.width, h: c.height, ox: f.ox * r, oy: f.oy * r, e: E_HD }; }
-        const t = SIN_CONTORNO.test(n) ? 0 : Math.max(1, Math.round(.6 / (f.e || 1))); cuadro[n] = { cv: t ? Contorno.canvas(c, t, null, SUAVE) : c, t, f }; }
+        if (f.e) { t = MARGEN; if (/^(pl|plm|yy)_/.test(n)) sinCian(c);
+          if (f.e < E_HD) { const r = f.e / E_HD; c = achicarLineal(c, r, t, R3.LIGHT.sat); f = { ...f, w: f.w * r, h: f.h * r, ox: f.ox * r, oy: f.oy * r, e: E_HD }; }
+          else { const c2 = document.createElement("canvas"); c2.width = f.w + 2 * t; c2.height = f.h + 2 * t; c2.getContext("2d").drawImage(c, t, t); c = c2; } }
+        else { t = SIN_CONTORNO.test(n) ? 0 : 1; if (t) c = Contorno.canvas(c, t, null, SUAVE); }
+        cuadro[n] = { cv: c, t, f }; }
       const ns = [...usados].sort((a, b) => cuadro[b].cv.height - cuadro[a].cv.height); let x = 0, y = 0, rowH = 0; const pos = {};
       for (const n of ns) { const c = cuadro[n].cv; if (x + c.width > 2048) { x = 0; y += rowH + 2; rowH = 0; } pos[n] = [x, y]; x += c.width + 2; rowH = Math.max(rowH, c.height); }
       const cv = document.createElement("canvas"); cv.width = 2048; cv.height = Math.max(4, y + rowH); const g = cv.getContext("2d"), frames = {};
@@ -318,6 +354,19 @@ const Exportar = (() => {
     const toScr = (dx, dy) => { const sx = dx + K * dy, sy = -SYN * dy, l = Math.hypot(sx, sy) || 1; return [r2(sx / l), r2(sy / l)]; };
     const ffJson = (name, fn) => { const data = []; for (let j = 0; j < FH; j++) { const row = []; for (let i = 0; i < FW; i++) row.push(fn(...unPW((i + .5) * CELL, (j + .5) * CELL))); data.push(row); }
       return json({ name, metadata: { widthCells: FW, heightCells: FH, widthPx: FW * CELL, heightPx: FH * CELL, cellSizePx: CELL }, data }); };
+    // el formato binario de WeedJS (versión 1, little-endian): 24 bytes de encabezado sin comprimir y después las celdas
+    //   0 "WEFF" · 4 u8 versión (1) · 5 u8 compresión (0 ninguna, 1 gzip) · 6 u16 0 · 8 u32 ancho en celdas · 12 u32 alto · 16 f64 lado de la celda (px)
+    //   24 las celdas fila por fila desde arriba, x e y en Int8 (-127..127 = -1..1; 0, 0 = sin dirección), con gzip si la compresión es 1.
+    // Es el Int8Array que WeedJS usa tal cual (el navegador lo descomprime con DecompressionStream). Cada componente se redondea como
+    // WeedJS redondea los del JSON (Math.round(v · 127)), así que el .bin y el .json del mismo barrio le dan los mismos vectores
+    const q127 = (v) => Math.round(Math.max(-1, Math.min(1, v)) * 127);
+    const gzip = async (d) => { const cs = new CompressionStream("gzip"), w = cs.writable.getWriter(); w.write(d); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); };
+    const ffBin = async (fn) => { const cel = new Int8Array(FW * FH * 2);
+      for (let j = 0; j < FH; j++) for (let i = 0; i < FW; i++) { const d = fn(...unPW((i + .5) * CELL, (j + .5) * CELL)); if (d) { const o = (j * FW + i) * 2; cel[o] = q127(d[0]); cel[o + 1] = q127(d[1]); } }
+      const crudo = new Uint8Array(cel.buffer), z = typeof CompressionStream !== "undefined" ? await gzip(crudo) : crudo, h = new DataView(new ArrayBuffer(24));
+      h.setUint32(0, 0x46464557, true); h.setUint8(4, 1); h.setUint8(5, z === crudo ? 0 : 1); h.setUint32(8, FW, true); h.setUint32(12, FH, true); h.setFloat64(16, CELL, true);
+      const out = new Uint8Array(24 + z.length); out.set(new Uint8Array(h.buffer)); out.set(z, 24); return out; };
+    const FF_EXT = C.ffBinario ? ".bin" : ".json", ff = async (name, fn) => ["ff_" + name + FF_EXT, C.ffBinario ? await ffBin(fn) : ffJson(name, fn)];
     // peatones: la vereda es lo más barato, pero la calle se puede cruzar por cualquier lado (sale un poco más caro)
     const COST = { vereda: 10, pasillo: 11, calle: 26, tierra: 18, cantero: 14 }, cost = new Uint8Array(GW * GH), vereda = new Uint8Array(GW * GH);
     for (const s of W.segs) { if (s.sw <= 0) continue; const R = s.hw + s.sw;
@@ -335,14 +384,14 @@ const Exportar = (() => {
     const fg = FlowGrid(GW, GH, cost, COST.calle), nDest = Math.max(3, Math.min(10, Math.round(C.destinos || 6)));
     const targets = fg.pickTargets(nDest, R3.rng(B.SEED ^ 0x2545F491), (c) => c === COST.vereda);
     for (let f = 0; f < targets.length; f++) { progreso("flowfield de peatones " + (f + 1) + "/" + targets.length, .7 + f / targets.length * .12); await espera(); fg.compute(f);
-      archivos.push(["ff_peaton" + f + ".json", ffJson("peaton" + f, (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !cost[yi * GW + xi]) return null;
-        const q = fg.dir(f, x, y); return !q || q.arrived ? null : toScr(q.x, q.y); })]); fg.fields[f] = null; }
+      archivos.push(await ff("peaton" + f, (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !cost[yi * GW + xi]) return null;
+        const q = fg.dir(f, x, y); return !q || q.arrived ? null : toScr(q.x, q.y); })); fg.fields[f] = null; }
     // vuelta manzana: en cada vereda, a lo largo de la cuadra con la manzana a la derecha (es también la máscara de veredas)
     const cl = { k: 0, s: null, d: 0, t: 0, ds: 0 };
-    archivos.push(["ff_veredas.json", ffJson("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
-      W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); })]);
+    archivos.push(await ff("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
+      W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); }));
     // autos: a lo largo de su carril (mano derecha), tirando hacia el centro del carril
-    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null;
+    archivos.push(await ff("calles", (x, y) => { if (!W.dentro(x, y)) return null;
       // rotonda: se da la vuelta en sentido antihorario (mano derecha), tirando al carril de adentro; la salida la elige cada auto
       for (const q of ROT) { const dx = x - q[0], dy = y - q[1], d = Math.hypot(dx, dy); if (d >= q[3]) continue; if (d < q[2]) return null;
         const pull = Math.max(-.6, Math.min(.6, (q[2] + 2.6 - d) * .35)); return toScr(-dy / d + dx / d * pull, dx / d + dy / d * pull); }
@@ -352,7 +401,7 @@ const Exportar = (() => {
       // calle cortada por el paredón: los últimos 14 m antes de las vallas, el carril que va hacia afuera dobla al de vuelta (giro en U)
       { let corta = false; for (let d = 3; d <= 14; d += 2.75) if (!W.dentro(x + s.dir[0] * fwd * d, y + s.dir[1] * fwd * d)) { corta = true; break; }
         if (corta) { const g = cl.ds < 0 ? 1 : -1; return toScr(s.n[0] * g + s.dir[0] * fwd * .25, s.n[1] * g + s.dir[1] * fwd * .25); } }
-      return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); })]);
+      return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); }));
     // ---------- 7. piso (shader de WeedJS)
     progreso("piso", .86); await espera();
     const GC = .5, CW = Math.ceil(MW / GC), CHh = Math.ceil(MH / GC), cellA = new Uint8Array(CW * CHh * 4), cellB = new Uint8Array(CW * CHh * 4);
@@ -400,7 +449,7 @@ const Exportar = (() => {
     const nFranjas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
-      hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nSombraPts, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
+      hojasCasas: hojas.length, peatones: targets.length, ...(C.ffBinario ? { ffExt: FF_EXT } : {}), nCasas: casas.length, nSombraPts, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
       ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}),
       // rotondas: centro en px de pantalla (x, y) y en m (mx, my), radios de la isla y de la calzada (m) y las salidas: rumbo de cada
@@ -423,17 +472,17 @@ const Exportar = (() => {
   return { exportar };
 })();
 
-// zip sin compresión (los PNG ya vienen comprimidos); CRC-32 estándar
+// zip sin compresión (los PNG y los flowfields binarios ya vienen comprimidos); CRC-32 estándar
 const Zip = (() => {
   const T = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
   const crc = (d) => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
-  // deflate con CompressionStream del navegador (los PNG se guardan tal cual)
+  // deflate con CompressionStream del navegador (los PNG y los ff_*.bin se guardan tal cual)
   async function deflate(data) { const cs = new CompressionStream("deflate-raw"), w = cs.writable.getWriter(); w.write(data); w.close();
     return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
   async function armar(files) {
     const enc = new TextEncoder(), parts = [], central = []; let off = 0;
     for (const [name, data] of files) {
-      const nm = enc.encode(name), c = crc(data), comprimir = !/\.png$/.test(name) && typeof CompressionStream !== "undefined";
+      const nm = enc.encode(name), c = crc(data), comprimir = !/(\.png|\/ff_[^/]*\.bin)$/.test(name) && typeof CompressionStream !== "undefined";
       const body = comprimir ? await deflate(data) : data, method = comprimir ? 8 : 0, h = new DataView(new ArrayBuffer(30));
       h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(8, method, true); h.setUint16(12, 0x21, true); h.setUint32(14, c, true); h.setUint32(18, body.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
       parts.push(new Uint8Array(h.buffer), nm, body);

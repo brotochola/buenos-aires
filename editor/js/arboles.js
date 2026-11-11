@@ -6,6 +6,12 @@ const Arboles = (() => {
   // Se dibujan a 1/0,6 de la densidad del barrio y se muestran al 0,6, igual que los personajes LPC del juego:
   // así hojas y personas tienen el mismo tamaño de píxel y el mismo filtrado.
   const ESCALA = .6, K = R3.K, SYN = R3.SYN, CZ = R3.CZ, SF = R3.SF / ESCALA;
+  // otoño: CALVOS de los racimos ya quedaron pelados (sólo la rama) y a los demás les queda HOJAS de sus hojas; en total
+  // les queda ~1/4: se ven las ramas y a través de la copa
+  const CALVOS = .4, HOJAS = .4;
+  // los árboles de vereda de Buenos Aires pasan los techos: la altura de cada especie, por ALTURA (la copa, más abierta), y
+  // RAMAS_MAS ramas principales más que las de su especie (sin hojas, se ve el esqueleto)
+  const ALTURA = 1.5, RAMAS_MAS = 1;
   // especies: colores de hoja (claro, medio, oscuro), forma y tamaño. "rico" = qué tanto aparecen en zonas ricas (0..1)
   const ESPECIES = {
     fresno:    { hojas: [[150, 196, 82], [92, 150, 58], [44, 92, 40]], alto: [4.0, 5.6], copa: 1.15, ramas: [3, 4], abre: .62, hoja: 1, rico: .5 },
@@ -39,7 +45,7 @@ const Arboles = (() => {
   // ---- esqueleto: tronco + ramas (recursivo, como un L-system con ángulos y largos que decaen)
   function esqueleto(tipo) {
     const [esp, v] = tipo.split("_"), E = ESPECIES[esp], r = R3.rng(0x7a3e + v * 977 + esp.length * 131 + esp.charCodeAt(0) * 17);
-    const H = r.uni(E.alto[0], E.alto[1]), troncoH = H * r.uni(.32, .42), segs = [], racimos = [];
+    const H = r.uni(E.alto[0], E.alto[1]) * ALTURA, troncoH = H * r.uni(.32, .42), segs = [], racimos = [];
     const rot = (d, ax, a) => { // Rodrigues
       const c = Math.cos(a), s = Math.sin(a), k = ax, dot = k[0] * d[0] + k[1] * d[1] + k[2] * d[2];
       return [d[0] * c + (k[1] * d[2] - k[2] * d[1]) * s + k[0] * dot * (1 - c), d[1] * c + (k[2] * d[0] - k[0] * d[2]) * s + k[1] * dot * (1 - c), d[2] * c + (k[0] * d[1] - k[1] * d[0]) * s + k[2] * dot * (1 - c)]; };
@@ -48,7 +54,7 @@ const Arboles = (() => {
     // tronco en 3 tramos con algo de curva
     let p = [0, 0, 0], d = norm([r.uni(-.08, .08), r.uni(-.08, .08), 1]), rad = .16 + H * .012;
     for (let i = 0; i < 3; i++) { const L = troncoH / 3, q = [p[0] + d[0] * L, p[1] + d[1] * L, p[2] + d[2] * L]; segs.push({ a: p, b: q, r0: rad, r1: rad * .92, rama: 0 }); p = q; rad *= .92; d = norm([d[0] + r.uni(-.1, .1), d[1] + r.uni(-.1, .1), d[2]]); }
-    const n = r.int(E.ramas[0], E.ramas[1]), yaw0 = r() * Math.PI * 2;
+    const n = r.int(E.ramas[0], E.ramas[1]) + RAMAS_MAS, yaw0 = r() * Math.PI * 2;
     function rama(a, dir, L, rr, prof, id) {
       const b = [a[0] + dir[0] * L, a[1] + dir[1] * L, a[2] + dir[2] * L]; segs.push({ a, b, r0: rr, r1: rr * .7, rama: id });
       if (prof >= 3 || L < .7) { racimos.push({ c: b, R: (.85 + r() * .5) * E.copa, rama: id }); return; }
@@ -67,7 +73,8 @@ const Arboles = (() => {
       const base = segs[2].a.map((x, k) => x + (segs[2].b[k] - x) * r.uni(.3, 1));
       rama(base, dir, (H - troncoH) * r.uni(.42, .55), rad * .72, 0, i + 1);
     }
-    racimos.push({ c: [p[0], p[1], p[2] + (H - troncoH) * .55], R: 1.2 * E.copa, rama: 1 + r.int(0, n - 1) });   // la cima
+    // la cima, sobre el tronco (desde y grosor: la guía que la une a él, que se ve cuando la cima pierde las hojas)
+    racimos.push({ c: [p[0], p[1], p[2] + (H - troncoH) * .55], R: 1.2 * E.copa, rama: 1 + r.int(0, n - 1), cima: true, desde: p, grosor: rad * .55 });
     return { E, H, segs, racimos, n, r };
   }
 
@@ -100,19 +107,25 @@ const Arboles = (() => {
     // elementos: tramos de rama y racimos, cada uno con su rama (0 = tronco) y su profundidad
     const el = [];
     for (const sg of segs) { const m = [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2, (sg.a[2] + sg.b[2]) / 2]; el.push({ t: 0, sg, rama: sg.rama, d: prof(...m) }); }
+    // la cima flota sobre el tronco: con pocas hojas se vería suelta, así que una guía la une a él
+    for (const c of racimos) if (c.cima) { const a = c.desde, b = c.c;
+      el.push({ t: 0, sg: { a, b, r0: c.grosor, r1: c.grosor * .6, rama: c.rama }, rama: c.rama, d: prof((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2) }); }
+    // un azar aparte para el otoño (el mismo para <tipo> y <tipo>_c), así el esqueleto y las hojas que quedan son los de la copa llena
+    const [, vv] = tipo.split("_"), cae = R3.rng(0x0702 + vv * 977 + esp.length * 131 + esp.charCodeAt(0) * 17);
     // menos racimos y más chicos que el follaje "lleno": deja huecos entre ellos
     // follaje: cada racimo es una nube de "rosetas" (5 a 7 hojas en punta que salen de un centro), como en los árboles
     // dibujados del barrio. Las de arriba a la izquierda, más claras; las de abajo y de adentro, más oscuras.
     const LW = (() => { const v = [-.55, -.38, .74], l = Math.hypot(...v); return v.map(x => x / l); })(), Htop = Math.max(...racimos.map(c => c.c[2])) || 1;
+    // otoño: a cada racimo se le sortea si ya quedó pelado, y a cada roseta si ya se cayó
     for (const c of racimos) { if (r() < .16) continue;
-      const Rm = c.R * .62, N = Math.round(Rm * Rm * 34 * E.hoja);
+      const Rm = c.R * .62, N = Math.round(Rm * Rm * 34 * E.hoja), deja = cae() < CALVOS ? 0 : HOJAS;
       for (let k = 0; k < N; k++) {
         let u = r() * 2 - 1, th = r() * Math.PI * 2; const sq = Math.sqrt(1 - u * u), n3 = [sq * Math.cos(th), sq * Math.sin(th), u];
         if (n3[1] > .55 && r() < .6) continue;                                     // las de atrás casi no se ven: menos trabajo
         const rr = Rm * (.55 + r() * .45), p3 = [c.c[0] + n3[0] * rr, c.c[1] + n3[1] * rr, c.c[2] + n3[2] * rr * .85];
         const lit = n3[0] * LW[0] + n3[1] * LW[1] + n3[2] * LW[2], ao = (1 - Math.min(1, p3[2] / Htop)) * .9 + (rr < Rm * .7 ? .5 : 0);
         const tono = Math.max(1, Math.min(4, Math.round(3.3 + lit * 1.5 - ao * .8 + (r() - .5) * .6)));
-        el.push({ t: 1, p: p3, tono, rama: c.rama, d: prof(...p3), n: 5 + r.int(0, 2), rot: r() * Math.PI * 2, L: (3.6 + r() * 1.6) * SF / 30, brillo: lit > .55 && r() < .6 });
+        el.push({ t: 1, p: p3, tono, rama: c.rama, d: prof(...p3), n: 5 + r.int(0, 2), rot: r() * Math.PI * 2, L: (3.6 + r() * 1.6) * SF / 30, brillo: lit > .55 && r() < .6, cayo: cae() >= deja });
       } }
     el.sort((p, q) => q.d - p.d);
     // caja total
@@ -154,6 +167,8 @@ const Arboles = (() => {
             if (rad > 2.5 && ((Math.round(side * rad * .9 + 7) & 3) === 0) && ((px * 3 + py * 5) & 3)) c = BARK[4];   // surcos
             put(buf, px, py, c); }); }
       } else {           // roseta: centro oscuro y hojas en punta (contorno, cuerpo, punta clara del lado de la luz)
+        // una que se cayó gasta el azar de sus hojas (el ángulo y el largo de cada una) sin pintar: las demás no cambian
+        if (e.cayo) { for (let k = 0; k < 2 * e.n; k++) r(); continue; }
         const [cx, cy] = PX(...e.p), X = cx - x0, Y = cy - y0, T = e.tono;
         disc(buf, X, Y, e.L * .32, (px, py) => put(buf, px, py, pal[Math.max(0, T - 2)]));
         const hojas = []; for (let k = 0; k < e.n; k++) { const a = e.rot + k / e.n * Math.PI * 2 + (r() - .5) * .5; hojas.push(a); }

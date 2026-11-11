@@ -2,9 +2,9 @@
 // Los personajes LPC y los autos traen un anillo de 1 px oscuro alrededor de la silueta, con alfa duro. Acá el anillo es del
 // color del relleno, oscurecido un poco (no negro): así se ve el verde de un árbol, el marrón de un tronco, el ladrillo.
 // El juego los muestra a 0,6 y a 1, o sea que en pantalla miden de 0,6 a 1 px de mundo.
-// Las casas (R3), los árboles y los props de Gemini se muestran a otras escalas (0,6; 0,18 a 0,36), así que un contorno de
-// 1 px de textura se pierde. Acá se pinta por fuera de la silueta con el grosor que hace falta en la textura para que en
-// pantalla mida lo mismo: t = ceil(1 / escala a la que se muestra) (2 en casas y árboles, 3 a 6 en los props de Gemini).
+// Las casas (R3) y los árboles se muestran a 0,6, así que un contorno de 1 px de textura se pierde. Acá se pinta por fuera de la
+// silueta con el grosor que hace falta en la textura para que en pantalla mida lo mismo: t = ceil(1 / escala a la que se muestra)
+// (2 en casas y árboles). Los props de Gemini no pasan por acá: traen el contorno dibujado, y un segundo los quemaba (ver exportar.js).
 const Contorno = (() => {
   const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]], N8 = N4.concat([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
   const lum = (r, g, b) => .299 * r + .587 * g + .114 * b;
@@ -14,6 +14,9 @@ const Contorno = (() => {
     return [c(r), c(g), c(b)]; }
   // grosor en px de textura para algo que el juego muestra a `escala`
   const grosor = (escala) => Math.max(1, Math.ceil(1 / escala - 1e-6));
+  // cuánto del oscuro lleva el borde de las caras de las casas, según la perilla "contorno": en su valor de siempre (0,82), el
+  // oscuro entero, como el de los árboles; más baja, más suave
+  const fuerza = (contorno) => Math.max(0, Math.min(1, contorno / .82));
   // d: RGBA de w×h (se modifica). Pinta un anillo de t px por fuera de lo opaco (alfa ≥ 128): los pasos impares en cruz y
   // los pares en las 8 direcciones (queda un octógono, no un cuadrado). Lo opaco queda con alfa 255 (borde duro).
   // evitar(x, y), opcional: true donde no va contorno (la base de una rama, que sale de otra).
@@ -47,5 +50,5 @@ const Contorno = (() => {
     const id = g.getImageData(0, 0, w, h); aplicar(id.data, w, h, t, evitar && ((x, y) => evitar(x - t, y - t)), suave); g.putImageData(id, 0, 0);
     return out;
   }
-  return { aplicar, canvas, grosor, oscuro };
+  return { aplicar, canvas, grosor, oscuro, fuerza };
 })();

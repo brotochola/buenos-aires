@@ -3,19 +3,24 @@
 // rumbo y en modo kit (Houses.setKit): sus caras quedan en coordenadas de la casa y sus detalles chicos como accesorios.
 // Lo que va al atlas, sin rumbo y sin repetir:
 //   - las caras con dibujo propio (fachadas, medianeras, carteles…): planas, con su material, la oclusión del piso, la
-//     saturación y un borde oscuro (el contorno), sin la luz del sol, en piezas de hasta 128 px de mundo;
+//     saturación y un borde oscuro (el contorno), sin la luz, en piezas de hasta 128 px de mundo;
 //   - las baldosas de material (techos): una por material, compartida por todas las casas, en piezas de hasta 6 m;
 //   - los accesorios (tanque, aire, antena, maceta): un sprite de R3 cada uno, compartido (los que tienen frente, por
 //     octavo de vuelta);
 //   - las caras de color liso no van: se dibujan con la textura blanca del motor (_white) teñida.
 // Para cada rumbo en que se usa un diseño (una "variante"): qué se ve; para cada pieza su lugar, escala y skew (la cara
-// plana proyectada en la vista oblicua es un paralelogramo: escala + skewX + skewY la dibujan exacta), el tinte (la luz
-// de R3 para hacia dónde mira la cara en ese rumbo), el orden de pintor dentro de la casa (innerZ) y la y de orden (la
-// base de su pared o de la casa en su columna, subida lo justo para no quedar detrás de una pieza de la casa que tapa).
+// plana proyectada en la vista oblicua es un paralelogramo: escala + skewX + skewY la dibujan exacta), el tinte, hacia
+// dónde mira y la altura de su centro (con eso WeedJS la ilumina como una superficie: lighting.faces), el orden de pintor
+// dentro de la casa (innerZ) y la y de orden (la base de su pared o de la casa en su columna, subida lo justo para no quedar
+// detrás de una pieza de la casa que tapa).
 const Caras = (() => {
   const { SF, K, SYN, CZ } = R3;
   const VIEW = R3.norm([-K, 1, -SYN / CZ]);
-  const G = 1.25;   // la luz más fuerte (cara al sol, ~1,24): la textura va por G y el tinte de cada cara es L/G ≤ 1
+  const G = 1.25;   // la textura va por G y el tinte de cada cara es L/G ≤ 1
+  // el contorno de cada cara: GROSOR px de textura por dentro de cada borde (2 a 30 px/m: 1,2 px de mundo, lo que suman el borde
+  // de una hoja y el anillo de un árbol, y el anillo de un accesorio), en las caras lisas desde BORDE_MIN de lado (10 px de
+  // textura: le quedan 6 de color)
+  const GROSOR = 2, BORDE_MIN = .35;
   const len = (v) => Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
   const rot = (c, s, v) => [c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]];
   const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sc3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
@@ -23,9 +28,9 @@ const Caras = (() => {
   const J = (v) => [SF * (v[0] + K * v[1]), -SF * (v[2] * CZ + v[1] * SYN)];
   const hexDe = (c) => (Math.max(0, Math.min(255, Math.round(c[0]))) << 16) | (Math.max(0, Math.min(255, Math.round(c[1]))) << 8) | Math.max(0, Math.min(255, Math.round(c[2])));
 
-  // ---------- la luz de R3 sin sombra proyectada (r3d.js render)
-  function luz(n) { const S = R3.SUN, L = R3.LIGHT, ndl = Math.max(0, R3.dot(n, S)), hz = .5 + .5 * n[2];
-    return [0, 1, 2].map(j => L.amb * (R3.SKY[j] * hz + R3.BOUNCE[j] * (1 - hz)) + L.sun * ndl * R3.SUNC[j]); }
+  // ---------- la luz de cada cara la pone WeedJS, según dónde están el sol y los faroles (lighting.faces). Acá sólo va la de
+  // una superficie plana al sol, igual para todas, la de un techo en R3 (r3d.js render); WeedJS lleva esa superficie a 1
+  const L = [.83, .83, .83];
   // color de R3 tras la saturación (sobre el color ya iluminado)
   function saturar(r, g, b) { const s = R3.LIGHT.sat, l = .3 * r + .59 * g + .11 * b; return [l + (r - l) * s, l + (g - l) * s, l + (b - l) * s]; }
 
@@ -44,11 +49,13 @@ const Caras = (() => {
     }
     if (!f.sinContorno) contorno({ w, h, d }); return { w, h, d };
   }
-  // el borde de lo opaco oscurecido como las aristas de R3
-  function contorno(T) { const { w, h, d } = T, tA = Math.min(1, .7 * R3.LIGHT.outline); if (tA <= 0) return;
+  // el borde de lo opaco, GROSOR px hacia adentro, llevado al oscuro de su color, como el de los árboles (Contorno.fuerza)
+  function contorno(T) { const { w, h, d } = T, tA = Contorno.fuerza(R3.LIGHT.outline); if (tA <= 0) return;
     const borde = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = y * w + x; if (!d[k * 4 + 3]) continue;
       if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || !d[(k - 1) * 4 + 3] || !d[(k + 1) * 4 + 3] || !d[(k - w) * 4 + 3] || !d[(k + w) * 4 + 3]) borde[k] = 1; }
+    for (let s = 2; s <= GROSOR; s++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = y * w + x; if (!d[k * 4 + 3] || borde[k]) continue;
+      if ((x > 0 && borde[k - 1] === s - 1) || (x < w - 1 && borde[k + 1] === s - 1) || (y > 0 && borde[k - w] === s - 1) || (y < h - 1 && borde[k + w] === s - 1)) borde[k] = s; }
     for (let k = 0; k < w * h; k++) if (borde[k]) { const i = k * 4, c = Contorno.oscuro(d[i], d[i + 1], d[i + 2]);
       for (let j = 0; j < 3; j++) d[i + j] = d[i + j] * (1 - tA) + c[j] * tA; } }
   // un recorte de la baldosa de un material (wq × hq m, desde la esquina), saturado y por G; sin contorno (se repite)
@@ -165,7 +172,7 @@ const Caras = (() => {
         if (R3.dot(n3, VIEW) >= -1e-4) { if (!F0.both) continue; n3 = [-n3[0], -n3[1], -n3[2]]; }
         const F = { O: rot(c, s, F0.O), E1: rot(c, s, F0.E1), E2: rot(c, s, F0.E2), tri: F0.tri, n: n3 };
         const A = J(F.E1), B = J(F.E2); if (Math.hypot(A[0], A[1]) < .5 || Math.hypot(B[0], B[1]) < .5 || Math.abs(A[0] * B[1] - A[1] * B[0]) < 1) continue;   // de canto
-        st.caras++; const L = luz(n3), sub = [];
+        st.caras++; const sub = [];
         if (!F0.tex && !F0.tri) {
           // color liso: la textura blanca del motor, teñida con el color iluminado
           st.lisas++; const col = saturar(F0.col[0] * L[0], F0.col[1] * L[1], F0.col[2] * L[2]);
@@ -182,15 +189,16 @@ const Caras = (() => {
           st.propias++; let T = D.tex.get(fi); if (!T) { T = textura(F0); D.tex.set(fi, T); }
           sub.push({ T, O: F.O, E1: F.E1, E2: F.E2, tinte: hexDe(L.map(v => v / G * 255)), girable: !F.tri, clave: fi });
         }
-        // el contorno de las caras de color liso grandes y de los techos de material (las de dibujo propio lo traen en su textura):
-        // una tira de 1 px de textura por dentro de cada borde, del color de la cara llevado a su oscuro (como contorno()), con la
-        // textura blanca del motor
+        // el contorno de las caras de color liso y de los techos de material (las de dibujo propio lo traen en su textura): una
+        // tira de GROSOR px de textura por dentro de cada borde, del color de la cara llevado a su oscuro (como contorno()), con
+        // la textura blanca del motor. Cada parte de la casa lleva el suyo, como cada hoja de un árbol: también las caras chicas
+        // (tapas de tapial, postes, aleros) desde BORDE_MIN de lado
         { const lisa = !F0.tex && !F0.tri, mat = F0.tex && F0.tex.mat && hashD(F0.tex.d) === F0.tex.limpia;
-          if ((lisa && len(F0.E1) > .6 && len(F0.E2) > .6) || mat) {
+          if (((lisa && len(F0.E1) > BORDE_MIN && len(F0.E2) > BORDE_MIN) || mat) && Contorno.fuerza(R3.LIGHT.outline) > 0) {
             let base; if (lisa) base = saturar(F0.col[0] * L[0], F0.col[1] * L[1], F0.col[2] * L[2]);
             else { const m = F0.tex.mat; if (!m.prom) { const d = m.tex.d; let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; } m.prom = [r / n, g / n, b / n]; }
               const sp = saturar(m.prom[0], m.prom[1], m.prom[2]); base = [sp[0] * L[0], sp[1] * L[1], sp[2] * L[2]]; }
-            const os = Contorno.oscuro(base[0], base[1], base[2]), tA = Math.min(1, .7 * R3.LIGHT.outline), tn = hexDe(base.map((v, j) => v + (os[j] - v) * tA)), th = 1 / R3.TD;
+            const os = Contorno.oscuro(base[0], base[1], base[2]), tA = Contorno.fuerza(R3.LIGHT.outline), tn = hexDe(base.map((v, j) => v + (os[j] - v) * tA)), th = GROSOR / R3.TD;
             const e1 = len(F.E1), e2 = len(F.E2), i1 = sc3(F.E1, th / e1), i2 = sc3(F.E2, th / e2), lejos1 = add(F.O, F.E1), lejos2 = add(F.O, F.E2);
             for (const [O, E1, E2] of [[F.O, F.E1, i2], [sub3(lejos2, i2), F.E1, i2], [F.O, i1, F.E2], [sub3(lejos1, i1), i1, F.E2]]) {
               // la orientación que deja escala y skew sanos (la textura blanca es igual de cualquier lado)
@@ -245,7 +253,7 @@ const Caras = (() => {
       for (const t of tiles) if (t.borde) t.clave += .02;   // el borde, encima de su cara (misma y de orden y mismo innerZ)
       const r2 = (v) => Math.round(v * 100) / 100, r4 = (v) => Math.round(v * 1e4) / 1e4;
       // las piezas de caras llevan además hacia dónde mira su cara (la normal, ya girada como la casa) y la altura de su centro (m):
-      // con eso el juego sabe cuánto la alumbra cada farol (ConurbanoScene.carasFaroles)
+      // el juego se las da a WeedJS (Decoration.spawn: faceNormalX, faceNormalY, faceNormalZ, faceHeight)
       variantes[e.id] = tiles.map(t => { const v = [t.cuadro, r2(t.p[0]), r2(t.p[1]), r4(t.sx), r4(t.sy), r4(t.kx), r4(t.ky), t.tn, r2(t.clave - t.p[1]), t.iz];
         if (t.n) v.push(r2(t.n[0]), r2(t.n[1]), r2(t.n[2]), r2(t.z)); return v; });
       // el pie de la casa (de donde cuelgan el colisionador y la sombra): el punto más al frente de las cajas apoyadas
