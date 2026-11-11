@@ -579,7 +579,8 @@ SHEETS.arboles = { json: BARRIO + 'img/arboles.json', png: BARRIO + 'img/arboles
 for (let i = 0; i < NLPC; i++) SHEETS['lpc' + i] = { json: 'img/lpc/civil1.json', png: 'img/lpc/c' + i + '.png', excludeAnimations: LPC_EXCLUDE };
 for (const [m, a] of Object.entries(AUTOS)) for (const c of a.colores || ['']) { const h = c ? m + '_' + c : m; SHEETS['auto_' + h] = { json: 'img/autos/' + h + '.json', png: 'img/autos/' + h + '.png' }; }
 for (const h in CHATARRA) SHEETS['auto_' + h] = { json: 'img/autos/' + h + '.json', png: 'img/autos/' + h + '.png' };
-const FLOW = { calles: BARRIO + 'ff_calles.json' }; PED_FIELDS.forEach(n => FLOW[n] = BARRIO + 'ff_' + n + '.json');
+// Los flowfields van en .bin (el formato binario de WeedJS) cuando el editor lo dice en META.ffExt; si no, en .json.
+const FF = META.ffExt || '.json', FLOW = { calles: BARRIO + 'ff_calles' + FF }; PED_FIELDS.forEach(n => FLOW[n] = BARRIO + 'ff_' + n + FF);
 const f32 = (v) => ({ value: v, type: 'f32' });
 const PACK = typeof globalThis.location?.search === 'string' && new URLSearchParams(globalThis.location.search).has('empaquetar');
 
