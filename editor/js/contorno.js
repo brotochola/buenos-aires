@@ -14,6 +14,9 @@ const Contorno = (() => {
     return [c(r), c(g), c(b)]; }
   // grosor en px de textura para algo que el juego muestra a `escala`
   const grosor = (escala) => Math.max(1, Math.ceil(1 / escala - 1e-6));
+  // cuánto del oscuro lleva el borde de las caras de las casas, según la perilla "contorno": en su valor de siempre (0,82), el
+  // oscuro entero, como el de los árboles; más baja, más suave
+  const fuerza = (contorno) => Math.max(0, Math.min(1, contorno / .82));
   // d: RGBA de w×h (se modifica). Pinta un anillo de t px por fuera de lo opaco (alfa ≥ 128): los pasos impares en cruz y
   // los pares en las 8 direcciones (queda un octógono, no un cuadrado). Lo opaco queda con alfa 255 (borde duro).
   // evitar(x, y), opcional: true donde no va contorno (la base de una rama, que sale de otra).
@@ -47,5 +50,5 @@ const Contorno = (() => {
     const id = g.getImageData(0, 0, w, h); aplicar(id.data, w, h, t, evitar && ((x, y) => evitar(x - t, y - t)), suave); g.putImageData(id, 0, 0);
     return out;
   }
-  return { aplicar, canvas, grosor, oscuro };
+  return { aplicar, canvas, grosor, oscuro, fuerza };
 })();

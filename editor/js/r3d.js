@@ -277,10 +277,11 @@ const R3 = (() => {
       for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) { let r = 0, g = 0, b = 0, a = 0, ar = 0;
         for (let yy = 0; yy < SS; yy++) for (let xx = 0; xx < SS; xx++) { const kk = (y * SS + yy) * W + x * SS + xx, i = kk * 4, al = out[i + 3] / 255; r += out[i] * al; g += out[i + 1] * al; b += out[i + 2] * al; a += al; ar |= arista[kk]; }
         const o = (y * w2 + x) * 4; oscurecer[y * w2 + x] = ar; if (a > 0) { img.data[o] = r / a; img.data[o + 1] = g / a; img.data[o + 2] = b / a; img.data[o + 3] = a / (SS * SS) * 255; } }
-      // ---- contornos, como los de los personajes LPC y los autos (contorno.js): las aristas, oscurecidas a medias, y la silueta,
-      // un anillo duro de TC px por fuera (TC = DET: el juego muestra las casas a 1/DET, así mide 1 px de mundo)
+      // ---- contornos, como los de los árboles, los personajes LPC y los autos (contorno.js): las aristas, llevadas al oscuro de
+      // su color (Contorno.fuerza), y la silueta, un anillo duro de TC px por fuera (TC = DET: el juego muestra las casas a 1/DET,
+      // así mide 1 px de mundo)
       if (opt.outline !== false && LIGHT.outline > 0) {
-        const tA = Math.min(1, .7 * LIGHT.outline), d = img.data;
+        const tA = Contorno.fuerza(LIGHT.outline), d = img.data;
         for (let k = 0; k < w2 * h2; k++) if (oscurecer[k] && d[k * 4 + 3]) { const i = k * 4, c = Contorno.oscuro(d[i], d[i + 1], d[i + 2]);
           for (let j = 0; j < 3; j++) d[i + j] = d[i + j] * (1 - tA) + c[j] * tA; }
         Contorno.aplicar(d, w2, h2, TC);

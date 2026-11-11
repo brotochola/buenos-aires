@@ -138,7 +138,9 @@ const Gfx = (() => {
             if (cn.a > 0.002) { float dn = (texture2D(tDep, q).r - d) * uDS; if (dn < -0.25 && dn > -3.0) occ += 1.0; } }
           vec3 col = c.rgb;
           if (occ > 0.0) { float f = 1.0 - min(0.32 * uAO, occ * 0.055 * uAO); col *= vec3(f, f, f * 1.02); }
-          if (edge > 0.0) { float t = edge > 1.5 ? uOutline : uOutline * 0.6; col = mix(col, vec3(46.0, 32.0, 26.0) / 255.0, t); }
+          // el borde, el oscuro del propio color (Contorno.oscuro), como el de los árboles y el de las caras que exporta caras.js
+          if (edge > 0.0) { float m = (col.r + col.g + col.b) / 3.0; vec3 os = clamp((vec3(m) + (col - vec3(m)) * 1.25) * 0.52, 0.0, 1.0);
+            col = mix(col, os, clamp(uOutline / 0.82, 0.0, 1.0)); }
           gl_FragColor = vec4(col, 1.0); gl_FragDepth = d;
         }` });
     const m = new THREE.Mesh(g, compMat); m.frustumCulled = false; SC.comp.add(m);
