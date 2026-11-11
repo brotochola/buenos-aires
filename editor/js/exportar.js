@@ -245,9 +245,10 @@ const Exportar = (() => {
     // un tipo con cal ("_c") sólo agrega su tronco: las ramas son las del tipo base (mismo esqueleto)
     const tiposUsados = [...new Set(B.arboles.map(a => a.t))], arbolTipos = {}, base = (t) => t.replace(/_c$/, "");
     const aHornear = [...new Set(tiposUsados.flatMap(t => [t, base(t)]))];
-    // la silueta del árbol entero, chica (al 0,3 del dibujo: la sombra se dibuja a 1/4 de resolución): el juego la pone de sprite
-    // invisible del árbol para que proyecte sombra con el sol y los faroles (las decoraciones no proyectan)
-    const SIL = .3, silueta = (t) => { const R = Arboles.render(t), w = Math.max(1, Math.round(R.w * SIL)), h = Math.max(1, Math.round(R.h * SIL)), c = document.createElement("canvas");
+    // la silueta del árbol entero, chica (al 0,25 del dibujo: la sombra se dibuja a 1/4 de resolución; los árboles altos ya
+    // llenan el atlas): el juego la pone de sprite invisible del árbol para que proyecte sombra con el sol y los faroles (las
+    // decoraciones no proyectan)
+    const SIL = .25, silueta = (t) => { const R = Arboles.render(t), w = Math.max(1, Math.round(R.w * SIL)), h = Math.max(1, Math.round(R.h * SIL)), c = document.createElement("canvas");
       c.width = w; c.height = h; const g = c.getContext("2d"); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(R.canvas, 0, 0, w, h);
       return { canvas: c, w, h, i: "sil", ax: R.ox * SIL / w, ay: R.oy * SIL / h }; };
     { const items = []; for (const t of aHornear) Arboles.render(t).piezas.forEach((p, k) => { if (t === base(t) || p.i === 0) items.push({ t, p, k }); });
