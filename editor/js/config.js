@@ -70,6 +70,7 @@ const CFG = (() => {
     ["Auto", "masa", "Masa", 600, 4000, 50, 1200, "kg", "live", ""],
     ["Auto", "rozamiento", "Rozamiento de rodadura", 0, 2, .05, .25, "1/s", "live", ""],
     ["Auto", "camara", "Suavidad de la cámara", .02, 1, .02, .12, "", "live", ""],
+    ["Exportar", "ffBinario", "Flowfields en binario", 0, 1, 1, 0, "", "live", "1: ff_*.bin, el formato binario de WeedJS (x, y en un byte cada uno por celda, con gzip): ~13 KB en vez de ~375 KB, y el juego no los tiene que parsear. Hace falta un WeedJS que los lea. 0: ff_*.json, como siempre."],
   ];
   const v = {}, meta = {};
   for (const [g, k, label, min, max, step, val, unit, fx, help] of SCHEMA) { v[k] = val; meta[k] = { g, k, label, min, max, step, def: val, unit, fx, help }; }

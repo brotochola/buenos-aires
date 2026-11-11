@@ -68,7 +68,7 @@ WeedJS usa `SharedArrayBuffer`, así que la página tiene que estar "aislada" (e
    - `meta.js`/`meta.json`: tamaños y cantidades;
    - `mundo.json`: casas, árboles, props, autos y cables;
    - `piso.bin`;
-   - flowfields `ff_*.json`: peatones, veredas (vuelta manzana) y calles;
+   - flowfields `ff_*.json`: peatones, veredas (vuelta manzana) y calles. Con el knob «Flowfields en binario» salen `ff_*.bin`, el formato binario de WeedJS (con gzip, ~13 KB cada uno en vez de ~375 KB), y `meta.js` lo dice en `ffExt`. El juego todavía pide los `.json`: los `.bin` sirven cuando su WeedJS los lea;
    - hojas de sprites en `img/`.
 3. Reemplazás la carpeta `barrio/` del juego por esa.
 4. Opcional, para que el celu cargue rápido: con `python3 servir.py` corriendo, `node herramientas/hornear_atlas.js` hornea `barrio/atlas/` y lo marca en `meta.js`.

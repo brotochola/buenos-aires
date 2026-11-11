@@ -5,11 +5,14 @@
 //   --sin-atlas                   no hornea el atlas: deja el barrio con META.atlas apagado (el juego lo arma al cargar)
 //   --sal <carpeta>               escribe el barrio exportado ahí y no toca el del juego; sirve para ver qué cambiaría
 //   --con-ventana                 muestra el navegador
+//   --knob <clave>=<valor>        cambia un knob antes de exportar (se puede repetir); queda guardado en el meta.json nuevo.
+//                                 Por ejemplo --knob ffBinario=1 para los flowfields en binario
 // La semilla y los knobs salen del meta.json del barrio, que los guarda al exportar: se abre el editor con esos mismos valores, así que
 // sale el mismo barrio salvo lo que haya cambiado en el código del editor. Al final dice qué archivos cambiaron y cuánto tardó.
 const fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
 const { playwright } = require('./playwright.js'), { hornear } = require('./hornear_atlas.js');
 const args = process.argv.slice(2), arg = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 && i + 1 < args.length ? args[i + 1] : d; }, hay = (k) => args.includes('--' + k);
+const KNOBS = args.flatMap((a, i) => a === '--knob' && i + 1 < args.length ? [args[i + 1]] : []);
 const DIR = args[0], R = path.join(__dirname, '..'), URL0 = arg('url', 'http://127.0.0.1:8010').replace(/\/$/, ''), SAL = arg('sal', null);
 const seg = (t0) => ((Date.now() - t0) / 1000).toFixed(0) + ' s';
 
@@ -31,13 +34,15 @@ function sinFecha(nombre, b) {
 }
 
 (async () => {
-  if (!['barrio', 'carabobo', 'parquechas'].includes(DIR)) { console.log('uso: node herramientas/reexportar.js <barrio|carabobo|parquechas> [--url …] [--sin-atlas] [--sal carpeta] [--con-ventana]'); process.exit(1); }
+  if (!['barrio', 'carabobo', 'parquechas'].includes(DIR)) { console.log('uso: node herramientas/reexportar.js <barrio|carabobo|parquechas> [--url …] [--sin-atlas] [--sal carpeta] [--con-ventana] [--knob clave=valor]'); process.exit(1); }
   try { await fetch(URL0 + '/editor/index.html'); } catch (e) { throw new Error('no hay nada servido en ' + URL0 + ': levantá el juego o pasá --url'); }
   const B = path.join(R, DIR), meta = JSON.parse(fs.readFileSync(path.join(B, 'meta.json'), 'utf8')), t0 = Date.now();
   if (!meta.seed || !meta.knobs) throw new Error(DIR + '/meta.json no trae la semilla o los knobs');
+  for (const kv of KNOBS) { const [k, v] = kv.split('='); if (!k || v === undefined || v === '' || !isFinite(+v)) throw new Error('--knob ' + kv + ': va clave=número');
+    console.log(`knob ${k}: ${meta.knobs[k]} → ${+v}`); meta.knobs[k] = +v; }
   // el Chromium de Playwright, sin placa, y no el Chrome instalado: con ese se exportaron los barrios y sale igual byte a byte. Con Chrome
   // cambian arboles.png y props.png (miles de píxeles de borde, casi todos por poco)
-  const b = await playwright().chromium.launch({ headless: !hay('con-ventana'), args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+  const b = await playwright().chromium.launch({ headless: !hay('con-ventana'), args: ['--mute-audio', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
   const ctx = await b.newContext({ viewport: { width: 1280, height: 760 } }), p = await ctx.newPage();
   const errores = []; p.on('pageerror', e => errores.push(String(e))); p.on('console', m => { if (m.type() === 'error') errores.push(m.text()); });
   await ctx.addInitScript((k) => localStorage.setItem('editor_barrios_cfg', k), JSON.stringify(meta.knobs));
@@ -68,8 +73,10 @@ function sinFecha(nombre, b) {
     else { const v = fs.readFileSync(viejo); (huella(sinFecha(rel, v)) === huella(sinFecha(rel, data)) ? iguales : cambiaron).push(`${rel} (${v.length} → ${data.length})`); }
     fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data);
   }
-  // una hoja que ya no hace falta (menos hojas de caras que antes) no puede quedar colgada
-  const hechos = new Set(archivos.map(([n]) => n.replace(/^[^/]+\//, ''))), sobran = fs.readdirSync(path.join(B, 'img')).map(n => 'img/' + n).filter(n => !hechos.has(n));
+  // una hoja que ya no hace falta (menos hojas de caras que antes) no puede quedar colgada, ni un flowfield (menos destinos, o los
+  // .json después de exportar .bin)
+  const hechos = new Set(archivos.map(([n]) => n.replace(/^[^/]+\//, '')));
+  const sobran = [...fs.readdirSync(path.join(B, 'img')).map(n => 'img/' + n), ...fs.readdirSync(B).filter(n => /^ff_/.test(n))].filter(n => !hechos.has(n));
   if (!SAL) for (const n of sobran) fs.unlinkSync(path.join(B, n));
   console.log(`iguales (${iguales.length}): ${iguales.map(s => s.split(' ')[0]).join(', ')}`);
   console.log(`cambiaron (${cambiaron.length}):\n  ${cambiaron.join('\n  ')}`);

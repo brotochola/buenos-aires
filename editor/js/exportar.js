@@ -3,7 +3,8 @@
 //   meta.json        tamaños, proyección, hojas, cuántas franjas/piezas (para dimensionar los pools)
 //   mundo.json       casas, props, árboles, autos, cables (en px de mundo de WeedJS) + catálogos de franjas y árboles
 //   piso.bin         datos del shader del piso (celdas, tabla de calles, riqueza, ruido)
-//   ff_*.json        flowfields estáticos de WeedJS: peatones (varios destinos), vuelta manzana (= veredas), calles
+//   ff_*.json|bin    flowfields estáticos de WeedJS: peatones (varios destinos), vuelta manzana (= veredas), calles; .bin con la
+//                    perilla ffBinario (el formato binario de WeedJS, ver ffBin)
 //   img/*.png|json   hojas de sprites tipo TexturePacker: casas (piezas de franjas), árboles (piezas), props
 // No arma el bigAtlas: eso lo hace el juego al cargar (o se hornea para el build final, con las demás entidades).
 const Exportar = (() => {
@@ -353,6 +354,19 @@ const Exportar = (() => {
     const toScr = (dx, dy) => { const sx = dx + K * dy, sy = -SYN * dy, l = Math.hypot(sx, sy) || 1; return [r2(sx / l), r2(sy / l)]; };
     const ffJson = (name, fn) => { const data = []; for (let j = 0; j < FH; j++) { const row = []; for (let i = 0; i < FW; i++) row.push(fn(...unPW((i + .5) * CELL, (j + .5) * CELL))); data.push(row); }
       return json({ name, metadata: { widthCells: FW, heightCells: FH, widthPx: FW * CELL, heightPx: FH * CELL, cellSizePx: CELL }, data }); };
+    // el formato binario de WeedJS (versión 1, little-endian): 24 bytes de encabezado sin comprimir y después las celdas
+    //   0 "WEFF" · 4 u8 versión (1) · 5 u8 compresión (0 ninguna, 1 gzip) · 6 u16 0 · 8 u32 ancho en celdas · 12 u32 alto · 16 f64 lado de la celda (px)
+    //   24 las celdas fila por fila desde arriba, x e y en Int8 (-127..127 = -1..1; 0, 0 = sin dirección), con gzip si la compresión es 1.
+    // Es el Int8Array que WeedJS usa tal cual (el navegador lo descomprime con DecompressionStream). Cada componente se redondea como
+    // WeedJS redondea los del JSON (Math.round(v · 127)), así que el .bin y el .json del mismo barrio le dan los mismos vectores
+    const q127 = (v) => Math.round(Math.max(-1, Math.min(1, v)) * 127);
+    const gzip = async (d) => { const cs = new CompressionStream("gzip"), w = cs.writable.getWriter(); w.write(d); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); };
+    const ffBin = async (fn) => { const cel = new Int8Array(FW * FH * 2);
+      for (let j = 0; j < FH; j++) for (let i = 0; i < FW; i++) { const d = fn(...unPW((i + .5) * CELL, (j + .5) * CELL)); if (d) { const o = (j * FW + i) * 2; cel[o] = q127(d[0]); cel[o + 1] = q127(d[1]); } }
+      const crudo = new Uint8Array(cel.buffer), z = typeof CompressionStream !== "undefined" ? await gzip(crudo) : crudo, h = new DataView(new ArrayBuffer(24));
+      h.setUint32(0, 0x46464557, true); h.setUint8(4, 1); h.setUint8(5, z === crudo ? 0 : 1); h.setUint32(8, FW, true); h.setUint32(12, FH, true); h.setFloat64(16, CELL, true);
+      const out = new Uint8Array(24 + z.length); out.set(new Uint8Array(h.buffer)); out.set(z, 24); return out; };
+    const FF_EXT = C.ffBinario ? ".bin" : ".json", ff = async (name, fn) => ["ff_" + name + FF_EXT, C.ffBinario ? await ffBin(fn) : ffJson(name, fn)];
     // peatones: la vereda es lo más barato, pero la calle se puede cruzar por cualquier lado (sale un poco más caro)
     const COST = { vereda: 10, pasillo: 11, calle: 26, tierra: 18, cantero: 14 }, cost = new Uint8Array(GW * GH), vereda = new Uint8Array(GW * GH);
     for (const s of W.segs) { if (s.sw <= 0) continue; const R = s.hw + s.sw;
@@ -370,14 +384,14 @@ const Exportar = (() => {
     const fg = FlowGrid(GW, GH, cost, COST.calle), nDest = Math.max(3, Math.min(10, Math.round(C.destinos || 6)));
     const targets = fg.pickTargets(nDest, R3.rng(B.SEED ^ 0x2545F491), (c) => c === COST.vereda);
     for (let f = 0; f < targets.length; f++) { progreso("flowfield de peatones " + (f + 1) + "/" + targets.length, .7 + f / targets.length * .12); await espera(); fg.compute(f);
-      archivos.push(["ff_peaton" + f + ".json", ffJson("peaton" + f, (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !cost[yi * GW + xi]) return null;
-        const q = fg.dir(f, x, y); return !q || q.arrived ? null : toScr(q.x, q.y); })]); fg.fields[f] = null; }
+      archivos.push(await ff("peaton" + f, (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !cost[yi * GW + xi]) return null;
+        const q = fg.dir(f, x, y); return !q || q.arrived ? null : toScr(q.x, q.y); })); fg.fields[f] = null; }
     // vuelta manzana: en cada vereda, a lo largo de la cuadra con la manzana a la derecha (es también la máscara de veredas)
     const cl = { k: 0, s: null, d: 0, t: 0, ds: 0 };
-    archivos.push(["ff_veredas.json", ffJson("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
-      W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); })]);
+    archivos.push(await ff("veredas", (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= GW || yi >= GH || !vereda[yi * GW + xi]) return null;
+      W.classifyInto(x, y, cl); if (!cl.s) return null; const sg = cl.ds >= 0 ? -1 : 1; return toScr(cl.s.dir[0] * sg, cl.s.dir[1] * sg); }));
     // autos: a lo largo de su carril (mano derecha), tirando hacia el centro del carril
-    archivos.push(["ff_calles.json", ffJson("calles", (x, y) => { if (!W.dentro(x, y)) return null;
+    archivos.push(await ff("calles", (x, y) => { if (!W.dentro(x, y)) return null;
       // rotonda: se da la vuelta en sentido antihorario (mano derecha), tirando al carril de adentro; la salida la elige cada auto
       for (const q of ROT) { const dx = x - q[0], dy = y - q[1], d = Math.hypot(dx, dy); if (d >= q[3]) continue; if (d < q[2]) return null;
         const pull = Math.max(-.6, Math.min(.6, (q[2] + 2.6 - d) * .35)); return toScr(-dy / d + dx / d * pull, dx / d + dy / d * pull); }
@@ -387,7 +401,7 @@ const Exportar = (() => {
       // calle cortada por el paredón: los últimos 14 m antes de las vallas, el carril que va hacia afuera dobla al de vuelta (giro en U)
       { let corta = false; for (let d = 3; d <= 14; d += 2.75) if (!W.dentro(x + s.dir[0] * fwd * d, y + s.dir[1] * fwd * d)) { corta = true; break; }
         if (corta) { const g = cl.ds < 0 ? 1 : -1; return toScr(s.n[0] * g + s.dir[0] * fwd * .25, s.n[1] * g + s.dir[1] * fwd * .25); } }
-      return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); })]);
+      return toScr(s.dir[0] * fwd + s.n[0] * pull, s.dir[1] * fwd + s.n[1] * pull); }));
     // ---------- 7. piso (shader de WeedJS)
     progreso("piso", .86); await espera();
     const GC = .5, CW = Math.ceil(MW / GC), CHh = Math.ceil(MH / GC), cellA = new Uint8Array(CW * CHh * 4), cellB = new Uint8Array(CW * CHh * 4);
@@ -435,7 +449,7 @@ const Exportar = (() => {
     const nFranjas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].length, 0), nPiezas = SKEW ? 0 : casas.reduce((a, h) => a + franjas[h.a].reduce((x, s) => x + s[2].length, 0), 0);
     const meta = { formato: 1, escalaCasas: Math.round(1 / DET * 1e5) / 1e5, editor: "editor de barrios · Conurbano", fecha: new Date().toISOString(), seed: B.SEED, knobs: { ...C },
       MW, MH, MG: W.MG || 0, WW, WH, SF, K, SYN, CZ, GC, CW, CH: CHh, WG: WGc, HG: HGc, PW: PWc, PH: PHc, NS, CELL, PXM: 13.5, pisoPartes: offs,
-      hojasCasas: hojas.length, peatones: targets.length, nCasas: casas.length, nSombraPts, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
+      hojasCasas: hojas.length, peatones: targets.length, ...(C.ffBinario ? { ffExt: FF_EXT } : {}), nCasas: casas.length, nSombraPts, nFranjas, nPiezas, skew: SKEW ? 1 : 0, hojasCaras, nTiles, nArboles: arboles.length,
       nPiezasArboles: arboles.reduce((a, t) => a + arbolTipos[t.t].piezas.length, 0), nProps: props.length, nAutos: autos.length, nCables: cables.length, nLineas: lineas.length, anclas, escalas,
       ...(W.inicio ? { inicio: PW(W.inicio[0], W.inicio[1]).map(v => Math.round(v)), lugar: W.real } : {}),
       // rotondas: centro en px de pantalla (x, y) y en m (mx, my), radios de la isla y de la calzada (m) y las salidas: rumbo de cada
@@ -458,17 +472,17 @@ const Exportar = (() => {
   return { exportar };
 })();
 
-// zip sin compresión (los PNG ya vienen comprimidos); CRC-32 estándar
+// zip sin compresión (los PNG y los flowfields binarios ya vienen comprimidos); CRC-32 estándar
 const Zip = (() => {
   const T = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
   const crc = (d) => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
-  // deflate con CompressionStream del navegador (los PNG se guardan tal cual)
+  // deflate con CompressionStream del navegador (los PNG y los ff_*.bin se guardan tal cual)
   async function deflate(data) { const cs = new CompressionStream("deflate-raw"), w = cs.writable.getWriter(); w.write(data); w.close();
     return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
   async function armar(files) {
     const enc = new TextEncoder(), parts = [], central = []; let off = 0;
     for (const [name, data] of files) {
-      const nm = enc.encode(name), c = crc(data), comprimir = !/\.png$/.test(name) && typeof CompressionStream !== "undefined";
+      const nm = enc.encode(name), c = crc(data), comprimir = !/(\.png|\/ff_[^/]*\.bin)$/.test(name) && typeof CompressionStream !== "undefined";
       const body = comprimir ? await deflate(data) : data, method = comprimir ? 8 : 0, h = new DataView(new ArrayBuffer(30));
       h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(8, method, true); h.setUint16(12, 0x21, true); h.setUint32(14, c, true); h.setUint32(18, body.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
       parts.push(new Uint8Array(h.buffer), nm, body);
