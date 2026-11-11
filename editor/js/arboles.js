@@ -6,6 +6,8 @@ const Arboles = (() => {
   // Se dibujan a 1/0,6 de la densidad del barrio y se muestran al 0,6, igual que los personajes LPC del juego:
   // así hojas y personas tienen el mismo tamaño de píxel y el mismo filtrado.
   const ESCALA = .6, K = R3.K, SYN = R3.SYN, CZ = R3.CZ, SF = R3.SF / ESCALA;
+  // otoño: la parte de las hojas que les queda a los árboles (ya se les cayó la mitad: se ven las ramas y a través de la copa)
+  const QUEDAN = .5;
   // especies: colores de hoja (claro, medio, oscuro), forma y tamaño. "rico" = qué tanto aparecen en zonas ricas (0..1)
   const ESPECIES = {
     fresno:    { hojas: [[150, 196, 82], [92, 150, 58], [44, 92, 40]], alto: [4.0, 5.6], copa: 1.15, ramas: [3, 4], abre: .62, hoja: 1, rico: .5 },
@@ -104,6 +106,9 @@ const Arboles = (() => {
     // follaje: cada racimo es una nube de "rosetas" (5 a 7 hojas en punta que salen de un centro), como en los árboles
     // dibujados del barrio. Las de arriba a la izquierda, más claras; las de abajo y de adentro, más oscuras.
     const LW = (() => { const v = [-.55, -.38, .74], l = Math.hypot(...v); return v.map(x => x / l); })(), Htop = Math.max(...racimos.map(c => c.c[2])) || 1;
+    // otoño: a cada roseta se le sortea si ya se cayó, con un azar aparte (el mismo para <tipo> y <tipo>_c), así el árbol y cada
+    // hoja que le queda son los de la copa llena
+    const [, vv] = tipo.split("_"), cae = R3.rng(0x0702 + vv * 977 + esp.length * 131 + esp.charCodeAt(0) * 17);
     for (const c of racimos) { if (r() < .16) continue;
       const Rm = c.R * .62, N = Math.round(Rm * Rm * 34 * E.hoja);
       for (let k = 0; k < N; k++) {
@@ -112,7 +117,7 @@ const Arboles = (() => {
         const rr = Rm * (.55 + r() * .45), p3 = [c.c[0] + n3[0] * rr, c.c[1] + n3[1] * rr, c.c[2] + n3[2] * rr * .85];
         const lit = n3[0] * LW[0] + n3[1] * LW[1] + n3[2] * LW[2], ao = (1 - Math.min(1, p3[2] / Htop)) * .9 + (rr < Rm * .7 ? .5 : 0);
         const tono = Math.max(1, Math.min(4, Math.round(3.3 + lit * 1.5 - ao * .8 + (r() - .5) * .6)));
-        el.push({ t: 1, p: p3, tono, rama: c.rama, d: prof(...p3), n: 5 + r.int(0, 2), rot: r() * Math.PI * 2, L: (3.6 + r() * 1.6) * SF / 30, brillo: lit > .55 && r() < .6 });
+        el.push({ t: 1, p: p3, tono, rama: c.rama, d: prof(...p3), n: 5 + r.int(0, 2), rot: r() * Math.PI * 2, L: (3.6 + r() * 1.6) * SF / 30, brillo: lit > .55 && r() < .6, cayo: cae() >= QUEDAN });
       } }
     el.sort((p, q) => q.d - p.d);
     // caja total
@@ -154,6 +159,8 @@ const Arboles = (() => {
             if (rad > 2.5 && ((Math.round(side * rad * .9 + 7) & 3) === 0) && ((px * 3 + py * 5) & 3)) c = BARK[4];   // surcos
             put(buf, px, py, c); }); }
       } else {           // roseta: centro oscuro y hojas en punta (contorno, cuerpo, punta clara del lado de la luz)
+        // una que se cayó gasta el azar de sus hojas (el ángulo y el largo de cada una) sin pintar: las demás no cambian
+        if (e.cayo) { for (let k = 0; k < 2 * e.n; k++) r(); continue; }
         const [cx, cy] = PX(...e.p), X = cx - x0, Y = cy - y0, T = e.tono;
         disc(buf, X, Y, e.L * .32, (px, py) => put(buf, px, py, pal[Math.max(0, T - 2)]));
         const hojas = []; for (let k = 0; k < e.n; k++) { const a = e.rot + k / e.n * Math.PI * 2 + (r() - .5) * .5; hojas.push(a); }
